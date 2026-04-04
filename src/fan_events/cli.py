@@ -97,7 +97,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Generate synthetic fan events as UTF-8 NDJSON (v1 rolling or v2 calendar).",
         formatter_class=ColoredHelpFormatter,
     )
-    sub = p.add_subparsers(dest="command", required=True)
+    sub = p.add_subparsers(dest="command", required=True, parser_class=ColoredArgumentParser)
     gen = sub.add_parser(
         SUBCOMMAND,
         help="Generate NDJSON to a file (v1 rolling or v2 calendar).",
