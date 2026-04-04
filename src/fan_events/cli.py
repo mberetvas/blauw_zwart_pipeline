@@ -21,6 +21,7 @@ from fan_events.domain import (
     TICKET_SCAN,
 )
 from fan_events.ndjson_io import records_to_ndjson_v1, records_to_ndjson_v2, write_atomic_text
+from fan_events.term_style import ColoredArgumentParser, ColoredHelpFormatter
 from fan_events.v1_batch import FIXED_NOW_UTC, generate_batch
 from fan_events.v2_calendar import (
     CalendarError,
@@ -91,14 +92,16 @@ def _explicit_v1_rolling_flags_in_tokens(tokens: list[str]) -> bool:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(
+    p = ColoredArgumentParser(
         prog="fan_events",
         description="Generate synthetic fan events as UTF-8 NDJSON (v1 rolling or v2 calendar).",
+        formatter_class=ColoredHelpFormatter,
     )
     sub = p.add_subparsers(dest="command", required=True)
     gen = sub.add_parser(
         SUBCOMMAND,
         help="Generate NDJSON to a file (v1 rolling or v2 calendar).",
+        formatter_class=ColoredHelpFormatter,
     )
     gen.add_argument(
         "-o",
