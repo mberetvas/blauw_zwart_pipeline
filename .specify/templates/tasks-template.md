@@ -11,8 +11,12 @@ description: "Task list template for feature implementation"
 **Tests**: **dbt tests are mandatory** for new or changed warehouse models per
 `.specify/memory/constitution.md` (`not_null`, `unique` where appropriate, plus at least one business-rule
 test where relevant). **Python** changes require **pytest** coverage with TDD preferred; run tests with
-`uv run pytest` from the repository root. Manage deps with UV (`uv add`, `uv add --dev`) so `pyproject.toml`
-and `uv.lock` stay in sync. Other test types (contract, integration) follow the feature specification.
+`uv run pytest` from the repository root. For **NDJSON** or line-delimited synthetic outputs, include
+tests that assert **contract shape**, **ordering**, and **encoding**, plus **byte-identical** golden
+comparisons when the spec requires deterministic runs (e.g. fixed seed). Manage deps with UV (`uv add`,
+`uv add --dev`) so `pyproject.toml` and `uv.lock` stay in sync; generator runtime SHOULD stay stdlib-only
+unless the spec adds a justified dependency. Other test types (contract, integration) follow the feature
+specification.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
