@@ -23,8 +23,8 @@ warehouse models land in a follow-up feature; not part of these tasks. Validate 
 
 **Purpose**: Repository hygiene and script entrypoint shell
 
-- [ ] T001 [P] Add `out/` to `.gitignore` at repository root so default NDJSON output stays untracked
-- [ ] T002 Create `scripts/generate_fan_events.py` with module docstring linking to `specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md` and `if __name__ == "__main__"` guard (stub `main()`)
+- [x] T001 [P] Add `out/` to `.gitignore` at repository root so default NDJSON output stays untracked
+- [x] T002 Create `scripts/generate_fan_events.py` with module docstring linking to `specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md` and `if __name__ == "__main__"` guard (stub `main()`)
 
 ---
 
@@ -34,9 +34,9 @@ warehouse models land in a follow-up feature; not part of these tasks. Validate 
 
 **⚠️ CRITICAL**: Complete before user-story implementation
 
-- [ ] T003 Implement `argparse` in `scripts/generate_fan_events.py` with `--output`/`-o`, `--count`/`-n`, `--days`, optional `--seed`, `--events` with choices `both|ticket_scan|merch_purchase` and defaults matching `specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md`
-- [ ] T004 Implement `dumps_canonical(obj: dict) -> str` using `json.dumps(..., sort_keys=True, separators=(",", ":"), ensure_ascii=False)` in `scripts/generate_fan_events.py`
-- [ ] T005 Implement UTF-8 `write_atomic_text(path: pathlib.Path, content: str) -> None` using a temp file in the target directory plus `os.replace`, and `ensure_parent_dir(path: pathlib.Path) -> None` with `Path.mkdir(parents=True, exist_ok=True)` in `scripts/generate_fan_events.py`
+- [x] T003 Implement `argparse` in `scripts/generate_fan_events.py` with `--output`/`-o`, `--count`/`-n`, `--days`, optional `--seed`, `--events` with choices `both|ticket_scan|merch_purchase` and defaults matching `specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md`
+- [x] T004 Implement `dumps_canonical(obj: dict) -> str` using `json.dumps(..., sort_keys=True, separators=(",", ":"), ensure_ascii=False)` in `scripts/generate_fan_events.py`
+- [x] T005 Implement UTF-8 `write_atomic_text(path: pathlib.Path, content: str) -> None` using a temp file in the target directory plus `os.replace`, and `ensure_parent_dir(path: pathlib.Path) -> None` with `Path.mkdir(parents=True, exist_ok=True)` in `scripts/generate_fan_events.py`
 
 **Checkpoint**: Utilities ready — implement record shapes and orchestration
 
@@ -50,8 +50,8 @@ warehouse models land in a follow-up feature; not part of these tasks. Validate 
 
 ### Implementation for User Story 1
 
-- [ ] T006 [US1] Implement `make_ticket_scan(fan_id: str, location: str, timestamp: str) -> dict` and `make_merch_purchase(fan_id: str, item: str, amount: float, timestamp: str) -> dict` with **only** the keys defined in `specs/001-synthetic-fan-events/data-model.md` in `scripts/generate_fan_events.py`
-- [ ] T007 [US1] Implement `validate_record(rec: dict) -> None` that raises on any contract violation (unknown `event`, missing keys, forbidden cross-type keys, `amount <= 0`) per `specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md` in `scripts/generate_fan_events.py`
+- [x] T006 [US1] Implement `make_ticket_scan(fan_id: str, location: str, timestamp: str) -> dict` and `make_merch_purchase(fan_id: str, item: str, amount: float, timestamp: str) -> dict` with **only** the keys defined in `specs/001-synthetic-fan-events/data-model.md` in `scripts/generate_fan_events.py`
+- [x] T007 [US1] Implement `validate_record(rec: dict) -> None` that raises on any contract violation (unknown `event`, missing keys, forbidden cross-type keys, `amount <= 0`) per `specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md` in `scripts/generate_fan_events.py`
 
 **Checkpoint**: Validators and builders usable without full generator loop
 
@@ -65,9 +65,9 @@ warehouse models land in a follow-up feature; not part of these tasks. Validate 
 
 ### Implementation for User Story 2
 
-- [ ] T008 [US2] Implement `_event_rank(event: str) -> int` with `ticket_scan` before `merch_purchase` (not Unicode order) per `specs/001-synthetic-fan-events/research.md` in `scripts/generate_fan_events.py`
-- [ ] T009 [US2] Implement `sort_key(rec: dict) -> tuple` for global ordering: timestamp, `_event_rank`, fan_id, then `location` for scans or `(item, amount)` for purchases per `specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md` in `scripts/generate_fan_events.py`
-- [ ] T010 [US2] Instantiate `random.Random(args.seed)` when `--seed` provided, else `random.Random()`; thread this RNG through all sampling in `scripts/generate_fan_events.py`
+- [x] T008 [US2] Implement `_event_rank(event: str) -> int` with `ticket_scan` before `merch_purchase` (not Unicode order) per `specs/001-synthetic-fan-events/research.md` in `scripts/generate_fan_events.py`
+- [x] T009 [US2] Implement `sort_key(rec: dict) -> tuple` for global ordering: timestamp, `_event_rank`, fan_id, then `location` for scans or `(item, amount)` for purchases per `specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md` in `scripts/generate_fan_events.py`
+- [x] T010 [US2] Instantiate `random.Random(args.seed)` when `--seed` provided, else `random.Random()`; thread this RNG through all sampling in `scripts/generate_fan_events.py`
 
 **Checkpoint**: Sorting and RNG match reproducibility acceptance criteria
 
@@ -81,9 +81,9 @@ warehouse models land in a follow-up feature; not part of these tasks. Validate 
 
 ### Implementation for User Story 3
 
-- [ ] T011 [US3] Implement `generate_batch(rng: random.Random, *, count: int, days: int, events_mode: str, now_utc: datetime.datetime) -> list[dict]` that draws UTC ISO timestamps with `Z` within `[now_utc - days, now_utc]`, synthetic `fan_*` ids, demo vocab for `location`/`item`, cent-safe positive `amount`, and when `events_mode == "both"` and `count >= 2` emits **at least one** `ticket_scan` and **one** `merch_purchase` in `scripts/generate_fan_events.py`
-- [ ] T012 [US3] Implement `records_to_ndjson(records: list[dict]) -> str`: `validate_record` each, `sorted(..., key=sort_key)`, one `dumps_canonical` per record, join with `\n` using LF only; if `records` is non-empty, append a **final `\n`** after the last line per `specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md` (empty list → return `""`) in `scripts/generate_fan_events.py`
-- [ ] T013 [US3] Implement `main()` in `scripts/generate_fan_events.py`: parse args, resolve default output path `out/fan_events.ndjson`, `ensure_parent_dir`, `generate_batch` → `records_to_ndjson` → `write_atomic_text`; on any error print to stderr and exit with code `1` without leaving a complete durable file at the target path
+- [x] T011 [US3] Implement `generate_batch(rng: random.Random, *, count: int, days: int, events_mode: str, now_utc: datetime.datetime) -> list[dict]` that draws UTC ISO timestamps with `Z` within `[now_utc - days, now_utc]`, synthetic `fan_*` ids, demo vocab for `location`/`item`, cent-safe positive `amount`, and when `events_mode == "both"` and `count >= 2` emits **at least one** `ticket_scan` and **one** `merch_purchase` in `scripts/generate_fan_events.py`
+- [x] T012 [US3] Implement `records_to_ndjson(records: list[dict]) -> str`: `validate_record` each, `sorted(..., key=sort_key)`, one `dumps_canonical` per record, join with `\n` using LF only; if `records` is non-empty, append a **final `\n`** after the last line per `specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md` (empty list → return `""`) in `scripts/generate_fan_events.py`
+- [x] T013 [US3] Implement `main()` in `scripts/generate_fan_events.py`: parse args, resolve default output path `out/fan_events.ndjson`, `ensure_parent_dir`, `generate_batch` → `records_to_ndjson` → `write_atomic_text`; on any error print to stderr and exit with code `1` without leaving a complete durable file at the target path
 
 **Checkpoint**: End-to-end CLI matches spec FR-001–FR-009 and quickstart
 
@@ -93,8 +93,8 @@ warehouse models land in a follow-up feature; not part of these tasks. Validate 
 
 **Purpose**: Docs stay aligned with the script
 
-- [ ] T014 [P] Update `specs/001-synthetic-fan-events/quickstart.md` so every command example matches final flag names and defaults in `scripts/generate_fan_events.py`
-- [ ] T015 [P] Extend `README.md` with a short “Synthetic events” line pointing to `scripts/generate_fan_events.py` and `specs/001-synthetic-fan-events/quickstart.md`
+- [x] T014 [P] Update `specs/001-synthetic-fan-events/quickstart.md` so every command example matches final flag names and defaults in `scripts/generate_fan_events.py`
+- [x] T015 [P] Extend `README.md` with a short “Synthetic events” line pointing to `scripts/generate_fan_events.py` and `specs/001-synthetic-fan-events/quickstart.md`
 
 ---
 
