@@ -1,11 +1,12 @@
 <!--
 Sync Impact Report
-Version: (template placeholders) → 1.0.0
-Principles: Replaced all template placeholders with five named principles (no renames).
-Added sections: Project scope & non-goals; Quality gates & workflow expectations.
-Removed sections: None (template comments removed; structure preserved).
+Version: 1.0.0 → 1.1.0
+Principles: Added VI. Test-driven Python changes and UV toolchain (no renames to I–V).
+Added sections: None (workflow detail folded into Principle VI and Quality gates).
+Removed sections: None.
 Templates: .specify/templates/plan-template.md ✅ | spec-template.md ✅ | tasks-template.md ✅
-Commands: .specify/templates/commands/*.md — path not present in repo; .cursor/commands/*.md — no CLAUDE-only refs; no change required.
+Commands: .cursor/commands/*.md — no CLAUDE-only refs; no change required.
+Runtime: README.md ✅ (synthetic events command aligned with UV).
 Deferred: None.
 -->
 
@@ -52,6 +53,22 @@ Deferred: None.
 - **Rationale**: The project is demo-quality, not a production platform; depth and correctness in the
   warehouse beat feature sprawl.
 
+### VI. Test-driven Python changes and UV toolchain
+
+- Python work MUST target `requires-python` in `pyproject.toml` (currently >=3.12). Runtime packages
+  belong in `[project] dependencies`; dev-only tools (e.g. pytest) MUST be added with `uv add --dev`.
+- When adding or changing Python behavior, contributors MUST prefer **test-driven development**:
+  write or extend a **failing** pytest test that encodes the desired behavior, implement the smallest
+  change that makes it pass, then refactor if needed.
+- Dependency and environment operations MUST use **UV**: `uv add` / `uv remove` (and `uv add --dev`
+  for dev tools); run the suite with `uv run pytest` from the repository root (paths MUST match the
+  project layout, e.g. `tests/`); run scripts with `uv run python <path/to/script.py> …` (or
+  `uv run <tool>` when configured as a project script). Contributors MUST NOT use `pip install` or
+  bare `python` for project work unless UV is unavailable and the user explicitly allows it.
+- Any dependency change MUST be reflected in `pyproject.toml` **and** `uv.lock` via UV only.
+- **Rationale**: Lockfile-backed reproducibility, minimal runtime footprint, and tests as the contract
+  for generator and application Python code.
+
 ## Project scope & non-goals
 
 This project is a **demo-quality** end-to-end fan event pipeline (Blue-Black Fan-360), not a production
@@ -67,8 +84,12 @@ reviewers can apply the correct bar.
   required; raw-only shortcuts require an explicit, justified exception in the plan’s Complexity
   Tracking table.
 - CI MUST run `dbt test` (or the project’s equivalent documented command) on the main integration
-  path; merging changes that break agreed tests is a constitution violation unless the amendment
-  process updates the bar.
+  path once that path exists; merging changes that break agreed tests is a constitution violation
+  unless the amendment process updates the bar.
+- Features that add or change **Python** behavior MUST include new or updated **pytest** coverage;
+  verification before merge MUST include **`uv run pytest`** passing at repository root unless
+  Complexity Tracking documents a justified exception.
+- Python dependency changes MUST land only through UV so `pyproject.toml` and `uv.lock` stay in sync.
 
 ## Governance
 
@@ -81,7 +102,8 @@ reviewers can apply the correct bar.
   materially expanded governance/section; PATCH — wording, typos, clarifications without normative
   change.
 - **Compliance**: Reviewers MUST verify plans and specs reference warehouse models for analytics,
-  preserve raw immutability, include or extend dbt tests for changed models, and respect demo-first
-  trade-offs. Use `.specify/memory/constitution.md` as the authoritative checklist.
+  preserve raw immutability, include or extend dbt tests for changed models, respect demo-first
+  trade-offs, and—for Python changes—enforce TDD-oriented pytest coverage and UV-based workflows.
+  Use `.specify/memory/constitution.md` as the authoritative checklist.
 
-**Version**: 1.0.0 | **Ratified**: 2026-04-04 | **Last Amended**: 2026-04-04
+**Version**: 1.1.0 | **Ratified**: 2026-04-04 | **Last Amended**: 2026-04-04

@@ -1,3 +1,6 @@
+# Synthetic fan events generator default output (NDJSON)
+out/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

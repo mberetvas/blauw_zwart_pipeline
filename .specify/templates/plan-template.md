@@ -45,6 +45,10 @@ Per `.specify/memory/constitution.md` (Blue-Black Fan-360, demo-quality pipeline
 - **Demo-first**: Plan prioritizes vertical slice, README/architecture diagram, dbt tests in CI, and
   one strong agent Q&A over extra features; trade-offs favor **shipped** over polish and **dbt tests**
   over new features unless explicitly justified in Complexity Tracking.
+- **Python / TDD / UV**: Plans that touch Python code name test additions or updates (pytest) and prefer
+  red–green–refactor; local and CI commands use **UV** (`uv run pytest` from repo root, `uv run python
+  …` for scripts). Dependencies are managed with `uv add` / `uv add --dev` / `uv remove` only; no
+  `pip install` or bare `python` for project work unless UV is unavailable and explicitly allowed.
 
 ## Project Structure
 
