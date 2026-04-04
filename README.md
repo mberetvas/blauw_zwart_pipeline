@@ -1,4 +1,4 @@
-# Blue-Black Fan-360
+# Blauw zwart - Mock-up data creator
 
 Synthetic fan events are produced by the `fan_events` package (`src/fan_events/`). The CLI is the `fan_events` command (subcommand `generate_events`). Run commands from the **repository root** after `uv sync`. You can also use `uv run python -m fan_events generate_events …` if you prefer the module form.
 
