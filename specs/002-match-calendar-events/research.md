@@ -15,6 +15,8 @@
 | Rationale | Standard library in Python 3.12; matches spec clarification (Brussels → UTC). |
 | Alternatives considered | Fixed UTC offset only: fails DST transitions. **pytz**: extra dependency; rejected under FR-PY-003. |
 
+**Implementation note (2026-04-04):** The **`tzdata`** PyPI package is listed as a **runtime** dependency in `pyproject.toml` so IANA zones resolve on **Windows** (stdlib `zoneinfo` uses the tzdata package when the OS has no zoneinfo database). This is the supported approach in PEP 615; no `pytz` dependency.
+
 ## DST / ambiguous local times
 
 | Decision | Document in **data-model**: if `kickoff_local` is **missing** or **ambiguous** in the zone, the generator **fails** with a clear message (no silent fold). |

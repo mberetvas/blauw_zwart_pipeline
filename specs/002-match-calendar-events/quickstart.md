@@ -7,7 +7,8 @@
 ## Prerequisites
 
 - Python **3.12+** (see `pyproject.toml`)
-- [UV](https://github.com/astral-sh/uv) for locked dev env (`uv run pytest`, `uv run python …`)
+- [UV](https://github.com/astral-sh/uv) for locked env (`uv sync`, `uv run pytest`, `uv run python …`)
+- Runtime dependency **`tzdata`** (via `pyproject.toml`) so `zoneinfo` can resolve IANA zones such as **`Europe/Brussels`** on all platforms (including Windows).
 
 ## Capacity & timezone assumptions
 
@@ -17,26 +18,50 @@
 
 ## Example calendar
 
-See [`fixtures/calendar_example.json`](fixtures/calendar_example.json).
+- [`fixtures/calendar_example.json`](fixtures/calendar_example.json) — full example rows  
+- [`../../tests/fixtures/calendar_two_tiny.json`](../../tests/fixtures/calendar_two_tiny.json) — small fixture used in tests (fast iteration)
 
-## Generate one season segment (after implementation)
+## End-to-end: small calendar → one season NDJSON file
 
-From the repository root (commands illustrative until implementation lands):
+From the **repository root** after `uv sync`:
 
 ```bash
-uv run python scripts/generate_fan_events.py --calendar specs/002-match-calendar-events/fixtures/calendar_example.json --from-date 2026-08-01 --to-date 2027-06-30 --output out/season.ndjson --seed 42
+uv run python scripts/generate_fan_events.py \
+  --calendar tests/fixtures/calendar_two_tiny.json \
+  --from-date 2026-01-01 \
+  --to-date 2027-12-31 \
+  --seed 42 \
+  --output out/season.ndjson
 ```
 
-- **`--calendar`**: enables **v2** calendar mode (NDJSON per `fan-events-ndjson-v2.md`).
-- **`--days` / `--count`**: **not** used in calendar mode (rolling **v1** mode only).
+This produces **`fan-events-ndjson-v2`** output (every line includes **`match_id`**). **`--days`** and **`--count`** are **only** for rolling **v1** mode and must not be combined with **`--calendar`**.
+
+- **`--calendar`**: enables **v2** calendar mode.
+- **`--from-date` / `--to-date`**: inclusive filter on **kickoff UTC** calendar dates (`YYYY-MM-DD`).
+- **`--seed`**: optional; same seed + same inputs ⇒ byte-identical output (recommended for demos and CI).
+
+Optional tuning (defaults match `fan_events.domain`):
+
+- `--scan-fraction` — scales **`ticket_scan`** event count vs effective capacity.
+- `--merch-factor` — scales **`merch_purchase`** event count vs effective capacity.
+- `--events` — `both` | `ticket_scan` | `merch_purchase`.
+
+## Rolling-window generator (v1)
+
+```bash
+uv run python scripts/generate_fan_events.py --seed 1 -n 200 --days 90 -o out/fan_events.ndjson
+```
+
+Output follows **`fan-events-ndjson-v1`** (no **`match_id`**).
 
 ## Validate
 
+From the repository root:
+
 ```bash
 uv run pytest
+uv run ruff check .
 ```
-
-Contract tests should assert NDJSON shape, **global sort order**, UTF-8 encoding, and **byte-identical** output for fixed seed + fixture.
 
 ## Related
 

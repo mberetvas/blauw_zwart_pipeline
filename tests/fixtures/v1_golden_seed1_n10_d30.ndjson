@@ -1,0 +1,10 @@
+{"amount":134.0,"event":"merch_purchase","fan_id":"fan_00011","item":"Beanie 1891 Fisherman zwart","timestamp":"2026-03-03T17:00:25Z"}
+{"event":"ticket_scan","fan_id":"fan_00005","location":"VIP Ingang West","timestamp":"2026-03-05T16:31:29Z"}
+{"event":"ticket_scan","fan_id":"fan_00013","location":"Jan Breydel Zuid B","timestamp":"2026-03-07T04:21:15Z"}
+{"amount":553.28,"event":"merch_purchase","fan_id":"fan_00001","item":"Sjaal Club Brugge - Arsenal","timestamp":"2026-03-13T09:17:22Z"}
+{"amount":2.77,"event":"merch_purchase","fan_id":"fan_00015","item":"Pet Logo Gestreept","timestamp":"2026-03-13T17:31:38Z"}
+{"event":"ticket_scan","fan_id":"fan_00008","location":"Fan Zone East","timestamp":"2026-03-16T16:37:12Z"}
+{"amount":649.88,"event":"merch_purchase","fan_id":"fan_00018","item":"Pet basic black","timestamp":"2026-03-19T09:46:12Z"}
+{"event":"ticket_scan","fan_id":"fan_00018","location":"Jan Breydel Noord A","timestamp":"2026-03-21T03:08:06Z"}
+{"amount":334.33,"event":"merch_purchase","fan_id":"fan_00004","item":"Sjaal Club Brugge","timestamp":"2026-03-24T10:41:42Z"}
+{"event":"ticket_scan","fan_id":"fan_00013","location":"Fan Zone East","timestamp":"2026-04-01T02:42:59Z"}

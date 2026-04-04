@@ -83,7 +83,7 @@ Exact names MAY adjust if `quickstart.md` stays in sync.
 | `--calendar` | Path to calendar JSON (see `data-model.md`) |
 | `--from-date` / `--to-date` | Inclusive kickoff UTC date filter |
 | `--output` / `-o` | Output NDJSON path |
-| `--seed` | RNG seed (**required** for byte-identical runs) |
+| `--seed` | RNG seed (same seed + same inputs ⇒ byte-identical output; omit for non-deterministic run) |
 
 Rolling-mode flags (`--days`, `--count`) **MUST NOT** be combined with `--calendar` (mutually exclusive).
 

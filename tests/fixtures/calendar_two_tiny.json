@@ -1,0 +1,20 @@
+{
+  "matches": [
+    {
+      "match_id": "m-tiny-home",
+      "kickoff_local": "2026-08-15T18:30:00",
+      "timezone": "Europe/Brussels",
+      "attendance": 12,
+      "home_away": "home",
+      "venue_label": "Jan Breydel Stadium"
+    },
+    {
+      "match_id": "m-tiny-away",
+      "kickoff_local": "2026-08-22T20:45:00",
+      "timezone": "Europe/Brussels",
+      "attendance": 10,
+      "home_away": "away",
+      "venue_label": "Away Arena"
+    }
+  ]
+}

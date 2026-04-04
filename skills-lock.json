@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "crafting-effective-readmes": {
+      "source": "smithery.ai",
+      "sourceType": "well-known",
+      "computedHash": "04ac68538bef2935b579fb16f5ff2d5f3f46c2289cddd21f376c031f57eaa6aa"
+    },
     "developing-with-streamlit": {
       "source": "smithery.ai",
       "sourceType": "well-known",

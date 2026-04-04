@@ -1,0 +1,28 @@
+{
+  "matches": [
+    {
+      "match_id": "three-a",
+      "kickoff_local": "2026-09-01T15:00:00",
+      "timezone": "Europe/Brussels",
+      "attendance": 100,
+      "home_away": "home",
+      "venue_label": "Jan Breydel Stadium"
+    },
+    {
+      "match_id": "three-b",
+      "kickoff_local": "2026-09-10T18:30:00",
+      "timezone": "Europe/Brussels",
+      "attendance": 80,
+      "home_away": "home",
+      "venue_label": "Jan Breydel Stadium"
+    },
+    {
+      "match_id": "three-c",
+      "kickoff_local": "2026-10-01T20:45:00",
+      "timezone": "Europe/Brussels",
+      "attendance": 50,
+      "home_away": "away",
+      "venue_label": "Opponent Park"
+    }
+  ]
+}
