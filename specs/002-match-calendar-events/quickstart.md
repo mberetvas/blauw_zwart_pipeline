@@ -26,7 +26,7 @@
 From the **repository root** after `uv sync`:
 
 ```bash
-uv run python scripts/generate_fan_events.py \
+uv run fan_events generate_events \
   --calendar tests/fixtures/calendar_two_tiny.json \
   --from-date 2026-01-01 \
   --to-date 2027-12-31 \
@@ -49,7 +49,7 @@ Optional tuning (defaults match `fan_events.domain`):
 ## Rolling-window generator (v1)
 
 ```bash
-uv run python scripts/generate_fan_events.py --seed 1 -n 200 --days 90 -o out/fan_events.ndjson
+uv run fan_events generate_events --seed 1 -n 200 --days 90 -o out/fan_events.ndjson
 ```
 
 Output follows **`fan-events-ndjson-v1`** (no **`match_id`**).

@@ -1,5 +1,6 @@
 """Golden output for v1 rolling mode (byte-stable with --seed)."""
 
+import os
 import random
 import subprocess
 import sys
@@ -28,10 +29,14 @@ def test_v1_generate_matches_golden() -> None:
 def test_cli_v1_subprocess_matches_golden(tmp_path: Path) -> None:
     out = tmp_path / "out.ndjson"
     repo = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(repo / "src")
     subprocess.run(
         [
             sys.executable,
-            str(repo / "scripts" / "generate_fan_events.py"),
+            "-m",
+            "fan_events",
+            "generate_events",
             "--seed",
             "1",
             "-n",
@@ -42,6 +47,7 @@ def test_cli_v1_subprocess_matches_golden(tmp_path: Path) -> None:
             str(out),
         ],
         cwd=repo,
+        env=env,
         check=True,
     )
     assert out.read_text(encoding="utf-8") == _V1_GOLDEN

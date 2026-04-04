@@ -14,7 +14,12 @@ import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from fan_events.domain import MERCH_PURCHASE, TICKET_SCAN
+from fan_events.domain import (
+    DEFAULT_MERCH_FACTOR,
+    DEFAULT_SCAN_FRACTION,
+    MERCH_PURCHASE,
+    TICKET_SCAN,
+)
 from fan_events.ndjson_io import records_to_ndjson_v1, records_to_ndjson_v2, write_atomic_text
 from fan_events.v1_batch import FIXED_NOW_UTC, generate_batch
 from fan_events.v2_calendar import (
@@ -28,30 +33,87 @@ from fan_events.v2_calendar import (
 DEFAULT_OUTPUT = "out/fan_events.ndjson"
 DEFAULT_COUNT = 200
 DEFAULT_DAYS = 90
+SUBCOMMAND = "generate_events"
 
 
 def _parse_iso_date(s: str) -> date:
     return date.fromisoformat(s)
 
 
+def _tokens_for_flag_checks(argv: list[str] | None) -> list[str]:
+    """Tokens after optional subcommand name (for mutual-exclusion checks vs --calendar)."""
+    tokens = list(argv) if argv is not None else sys.argv[1:]
+    if tokens and tokens[0] == SUBCOMMAND:
+        return tokens[1:]
+    return tokens
+
+
+# Options that consume the next argv token as their value (same set argparse uses).
+_OPTS_WITH_FOLLOWING_VALUE = frozenset({
+    "-o",
+    "--output",
+    "--seed",
+    "--calendar",
+    "--from-date",
+    "--to-date",
+    "--scan-fraction",
+    "--merch-factor",
+    "--events",
+})
+
+
+def _explicit_v1_rolling_flags_in_tokens(tokens: list[str]) -> bool:
+    """
+    True if -n / --count / --days appear as rolling-window options.
+
+    Values of other flags (e.g. ``--calendar -n`` where ``-n`` is a path) are skipped
+    so they are not mistaken for rolling flags.
+    """
+    i = 0
+    n_tok = len(tokens)
+    while i < n_tok:
+        t = tokens[i]
+        if t.startswith("--") and "=" in t:
+            name, _, _ = t.partition("=")
+            if name in ("--count", "--days"):
+                return True
+            i += 1
+            continue
+        if len(t) > 2 and t.startswith("-n") and t[2:].isdigit():
+            return True
+        if t in ("-n", "--count", "--days"):
+            return True
+        if t in _OPTS_WITH_FOLLOWING_VALUE:
+            i += 2
+            continue
+        i += 1
+    return False
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
+        prog="fan_events",
         description="Generate synthetic fan events as UTF-8 NDJSON (v1 rolling or v2 calendar).",
     )
-    p.add_argument(
+    sub = p.add_subparsers(dest="command", required=True)
+    gen = sub.add_parser(
+        SUBCOMMAND,
+        help="Generate NDJSON to a file (v1 rolling or v2 calendar).",
+    )
+    gen.add_argument(
         "-o",
         "--output",
         default=DEFAULT_OUTPUT,
         help=f"Output NDJSON path (default: {DEFAULT_OUTPUT})",
     )
-    p.add_argument(
+    gen.add_argument(
         "--seed",
         type=int,
         default=None,
         help="RNG seed for byte-identical reproducibility (omit for non-deterministic run in v1)",
     )
 
-    rolling = p.add_argument_group("Rolling window (fan-events-ndjson-v1)")
+    rolling = gen.add_argument_group("Rolling window (fan-events-ndjson-v1)")
     rolling.add_argument(
         "-n",
         "--count",
@@ -66,7 +128,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=f"UTC rolling window length ending at generation time (default: {DEFAULT_DAYS})",
     )
 
-    cal = p.add_argument_group("Calendar (fan-events-ndjson-v2)")
+    cal = gen.add_argument_group("Calendar (fan-events-ndjson-v2)")
     cal.add_argument(
         "--calendar",
         type=str,
@@ -104,22 +166,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Scale for merch_purchase event count vs capacity (default: from fan_events.domain)",
     )
 
-    p.add_argument(
+    gen.add_argument(
         "--events",
         choices=("both", TICKET_SCAN, MERCH_PURCHASE),
         default="both",
         help="Event types to emit (default: both)",
     )
-    raw = list(argv) if argv is not None else sys.argv[1:]
+    raw = _tokens_for_flag_checks(argv)
     ns = p.parse_args(argv)
 
     if ns.calendar:
-        for flag in ("-n", "--count", "--days"):
-            if flag in raw:
-                p.error(f"{flag} cannot be used with --calendar (v2 calendar mode)")
+        if _explicit_v1_rolling_flags_in_tokens(raw):
+            p.error(
+                "-n / --count / --days cannot be used with --calendar (v2 calendar mode)"
+            )
         if (ns.from_date is None) != (ns.to_date is None):
             p.error(
-                "--from-date and --to-date must be given together, or omit both to include all matches"
+                "--from-date and --to-date must be given together, "
+                "or omit both to include all matches"
             )
     else:
         if ns.from_date is not None or ns.to_date is not None:
@@ -152,8 +216,6 @@ def run_v1(args: argparse.Namespace) -> None:
 
 
 def run_v2(args: argparse.Namespace) -> None:
-    from fan_events.domain import DEFAULT_MERCH_FACTOR, DEFAULT_SCAN_FRACTION
-
     path = Path(args.calendar)
     doc = load_calendar_json(path)
     rows = validate_and_parse_matches(doc)
@@ -184,10 +246,10 @@ def main(argv: list[str] | None = None) -> None:
     except SystemExit:
         raise
     except CalendarError as e:
-        print(f"generate_fan_events: {e}", file=sys.stderr)
+        print(f"fan_events: {e}", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        print(f"generate_fan_events: {e}", file=sys.stderr)
+        print(f"fan_events: {e}", file=sys.stderr)
         sys.exit(1)
 
 

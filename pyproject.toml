@@ -9,6 +9,9 @@ requires-python = ">=3.12"
 # IANA time zone database for zoneinfo (required on Windows for Europe/Brussels etc.).
 dependencies = ["tzdata>=2024.1"]
 
+[project.scripts]
+fan_events = "fan_events.cli:main"
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
