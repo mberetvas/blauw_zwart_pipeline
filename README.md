@@ -1,3 +1,5 @@
+![Blauw zwart - Mock-up data creator](banner.jpg)
+
 # Blauw zwart - Mock-up data creator
 
 Synthetic fan events are produced by the `fan_events` package (`src/fan_events/`).
