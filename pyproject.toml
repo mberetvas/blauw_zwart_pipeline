@@ -1,17 +1,10 @@
 [project]
 name = "blauw-zwart-fan-sim-pipeline"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-authors = [
-    { name = "Maxime Beretvas", email = "maximeberetvas@outlook.com" }
-]
 requires-python = ">=3.12"
 dependencies = []
 
-[project.scripts]
-blauw-zwart-fan-sim-pipeline = "blauw_zwart_fan_sim_pipeline:main"
-
-[build-system]
-requires = ["uv_build>=0.9.25,<0.10.0"]
-build-backend = "uv_build"
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

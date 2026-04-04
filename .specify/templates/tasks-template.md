@@ -8,9 +8,11 @@ description: "Task list template for feature implementation"
 **Input**: Design documents from `/specs/[###-feature-name]/`
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: For this repository, **dbt tests are mandatory** for new or changed warehouse models per
+**Tests**: **dbt tests are mandatory** for new or changed warehouse models per
 `.specify/memory/constitution.md` (`not_null`, `unique` where appropriate, plus at least one business-rule
-test where relevant). Other test types (contract, integration, unit) follow the feature specification.
+test where relevant). **Python** changes require **pytest** coverage with TDD preferred; run tests with
+`uv run pytest` from the repository root. Manage deps with UV (`uv add`, `uv add --dev`) so `pyproject.toml`
+and `uv.lock` stay in sync. Other test types (contract, integration) follow the feature specification.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 

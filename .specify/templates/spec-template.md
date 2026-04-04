@@ -111,6 +111,16 @@ Per project constitution:
 - **FR-WH-003**: Changes to modelled data MUST include dbt tests (`not_null`, `unique` where
   appropriate, plus at least one business-rule test where relevant).
 
+### Python scripts and packaged code *(mandatory when feature touches generators, CLIs, or modules under `src/`, `scripts/`, or equivalent)*
+
+Per project constitution:
+
+- **FR-PY-001**: New or changed Python behavior MUST be covered by pytest tests; contributors MUST
+  prefer TDD (failing test first, smallest passing change, then refactor).
+- **FR-PY-002**: Dependencies and runs MUST go through **UV** (`uv add`, `uv add --dev`, `uv remove`;
+  `uv run pytest`; `uv run python <script>`). Lockfile (`uv.lock`) MUST stay aligned with
+  `pyproject.toml` via UV only.
+
 ## Success Criteria *(mandatory)*
 
 <!--
