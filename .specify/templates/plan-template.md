@@ -31,7 +31,8 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-Per `.specify/memory/constitution.md` (Blue-Black Fan-360, demo-quality pipeline):
+Per `.specify/memory/constitution.md` (blauw_zwart_fan_sim_pipeline — synthetic fan events, analytics
+and AI; demo-quality Fan-360 when warehouse path applies):
 
 - **Analytics source of truth**: Feature identifies dbt mart models (`fct_*`, `dim_*`) for any analytics
   or agent Q&A paths; no plan to embed business logic on raw JSON in app code without a Complexity
@@ -45,10 +46,23 @@ Per `.specify/memory/constitution.md` (Blue-Black Fan-360, demo-quality pipeline
 - **Demo-first**: Plan prioritizes vertical slice, README/architecture diagram, dbt tests in CI, and
   one strong agent Q&A over extra features; trade-offs favor **shipped** over polish and **dbt tests**
   over new features unless explicitly justified in Complexity Tracking.
-- **Python / TDD / UV**: Plans that touch Python code name test additions or updates (pytest) and prefer
-  red–green–refactor; local and CI commands use **UV** (`uv run pytest` from repo root, `uv run python
-  …` for scripts). Dependencies are managed with `uv add` / `uv add --dev` / `uv remove` only; no
-  `pip install` or bare `python` for project work unless UV is unavailable and explicitly allowed.
+- **Spec and contracts**: Plan ties implementation to `spec.md` and `contracts/` and names the contract
+  version; normative ordering, encoding, and failure behavior match the spec.
+- **Reproducibility**: Where the spec requires deterministic output (e.g. fixed seed), the plan states
+  how byte-identical runs are preserved and tested.
+- **NDJSON / interchange testing**: Plans for synthetic or line-delimited outputs describe pytest checks
+  for contract shape, line ordering, and encoding.
+- **Schema evolution**: Breaking NDJSON or event schema changes bump contract version (e.g. v2) and
+  include migration notes; no silent breaks for v1 consumers.
+- **Temporal rules**: UTC with `Z` in interchange formats; calendar-sourced times (e.g. Europe/Brussels
+  kickoffs) document conversion to UTC.
+- **Simplicity**: Small CLI, clear defaults; domain constants (capacities, venue facts) are named and
+  documented, not magic numbers.
+- **Python / TDD / UV / generator deps**: Plans that touch Python code name test additions or updates
+  (pytest) and prefer red–green–refactor; generator runtime SHOULD stay stdlib-only unless the spec adds
+  a justified dependency. Local and CI commands use **UV** (`uv run pytest` from repo root, `uv run
+  python …` for scripts). Dependencies are managed with `uv add` / `uv add --dev` / `uv remove` only;
+  no `pip install` or bare `python` for project work unless UV is unavailable and explicitly allowed.
 
 ## Project Structure
 

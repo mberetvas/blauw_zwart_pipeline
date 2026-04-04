@@ -8,6 +8,8 @@ alwaysApply: true
 Auto-generated from all feature plans. Last updated: 2026-04-04
 
 ## Active Technologies
+- Python 3.12+ (`pyproject.toml`) + **None** at runtime for generator (stdlib only per spec/constitution); dev: **pytest**, **ruff** (existing groups). (002-match-calendar-events)
+- Filesystem — calendar JSON in, single NDJSON out. (002-match-calendar-events)
 
 - Python 3.12+ (matches `pyproject.toml` `requires-python`) + **None** beyond the Python standard library for the generator script (001-synthetic-fan-events)
 
@@ -27,6 +29,7 @@ cd src; pytest; ruff check .
 Python 3.12+ (matches `pyproject.toml` `requires-python`): Follow standard conventions
 
 ## Recent Changes
+- 002-match-calendar-events: Added Python 3.12+ (`pyproject.toml`) + **None** at runtime for generator (stdlib only per spec/constitution); dev: **pytest**, **ruff** (existing groups).
 
 - 001-synthetic-fan-events: Added Python 3.12+ (matches `pyproject.toml` `requires-python`) + **None** beyond the Python standard library for the generator script
 

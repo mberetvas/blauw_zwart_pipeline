@@ -120,6 +120,28 @@ Per project constitution:
 - **FR-PY-002**: Dependencies and runs MUST go through **UV** (`uv add`, `uv add --dev`, `uv remove`;
   `uv run pytest`; `uv run python <script>`). Lockfile (`uv.lock`) MUST stay aligned with
   `pyproject.toml` via UV only.
+- **FR-PY-003**: Generator and CLI runtime SHOULD remain stdlib-only unless this spec documents a new
+  runtime dependency with justification; Python MUST meet `requires-python` in `pyproject.toml`.
+
+### Spec, contracts, and synthetic interchange *(mandatory when feature defines NDJSON, events, or machine-readable handoff files)*
+
+Per project constitution:
+
+- **FR-SC-001**: Normative behavior MUST live in this `spec.md` and `specs/<feature>/contracts/` (plus
+  linked artifacts); implementation MUST match the **contract version** cited in this feature.
+- **FR-SC-002**: Where deterministic output is required, the spec MUST state inputs (e.g. seed,
+  parameters) under which two successful runs produce **byte-identical** output (FR-005-style when
+  applicable).
+- **FR-SC-003**: Tests MUST validate outputs against the contract: record **shape**, **ordering** rules,
+  and **encoding** (e.g. UTF-8, newline handling) as specified.
+- **FR-SC-004**: Incompatible NDJSON or event schema changes MUST introduce a **versioned** contract
+  (e.g. v2) and **document migration**; v1 consumers MUST NOT be broken silently while v1 is
+  supported.
+- **FR-SC-005**: Serialized event timestamps MUST use **UTC** with **`Z`** unless this contract defines
+  another normative form; calendar-sourced times MUST document source timezone and conversion to UTC
+  (e.g. Europe/Brussels → UTC).
+- **FR-SC-006**: Domain constants (stadium capacity, venue identifiers) MUST be **named and documented**
+  in spec or contract, not only as literals in code.
 
 ## Success Criteria *(mandatory)*
 
