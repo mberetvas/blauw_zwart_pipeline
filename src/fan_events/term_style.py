@@ -15,6 +15,44 @@ _DIM = "\033[2m"
 _FG_CYAN = "\033[36m"
 _FG_RED = "\033[31m"
 
+# Club Brugge–inspired “BLAUW ZWART” banner (FIGlet-style; one RGB per line, top → bottom).
+_BLAUW_ZWART_LINES = (
+    "██████╗ ██╗      █████╗ ██╗   ██╗██╗    ██╗    ███████╗██╗    ██╗ █████╗ ██████╗ ████████╗",
+    "██╔══██╗██║     ██╔══██╗██║   ██║██║    ██║    ╚══███╔╝██║    ██║██╔══██╗██╔══██╗╚══██╔══╝",
+    "██████╔╝██║     ███████║██║   ██║██║ █╗ ██║      ███╔╝ ██║ █╗ ██║███████║██████╔╝   ██║   ",
+    "██╔══██╗██║     ██╔══██║██║   ██║██║███╗██║     ███╔╝  ██║███╗██║██╔══██║██╔══██╗   ██║   ",
+    "██████╔╝███████╗██║  ██║╚██████╔╝╚███╔███╔╝    ███████╗╚███╔███╔╝██║  ██║██║  ██║   ██║   ",
+    "╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝  ╚══╝╚══╝     ╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ",
+)
+
+_BLAUW_ZWART_RGB = (
+    (0, 113, 182),
+    (8, 98, 153),
+    (16, 84, 125),
+    (24, 69, 97),
+    (32, 54, 68),
+    (40, 40, 40),
+)
+
+# Blank lines before/after the art so help is not flush against the shell prompt or usage:.
+_BANNER_MARGIN = "\n\n"
+
+
+def blauw_zwart_banner(*, color: bool) -> str:
+    """
+    Multi-line “BLAUW ZWART” banner. With ``color=True``, apply 24-bit ANSI per line and reset.
+    With ``color=False``, plain Unicode lines only (no escape codes).
+    """
+    if not color:
+        body = "\n".join(_BLAUW_ZWART_LINES) + "\n"
+        return _BANNER_MARGIN + body + _BANNER_MARGIN
+    lines: list[str] = []
+    for line, rgb in zip(_BLAUW_ZWART_LINES, _BLAUW_ZWART_RGB, strict=True):
+        r, g, b = rgb
+        lines.append(f"\033[38;2;{r};{g};{b}m{line}")
+    body = "\n".join(lines) + _RESET + "\n"
+    return _BANNER_MARGIN + body + _BANNER_MARGIN
+
 
 def use_color(stream: TextIO | IO[str]) -> bool:
     # FORCE_COLOR first: when set (non-empty), force color on even if NO_COLOR is set.
@@ -69,11 +107,10 @@ class ColoredHelpFormatter(argparse.HelpFormatter):
         self._color = use_color(sys.stdout)
 
     def _set_color(self, color: bool) -> None:
-        """CPython 3.14+ calls this from ArgumentParser._get_formatter; we keep our own policy."""
-        if not color:
-            self._color = False
-        else:
-            self._color = use_color(sys.stdout)
+        """Init argparse 3.14+ _theme; apply TTY/NO_COLOR via use_color (not parser.color)."""
+        if hasattr(argparse.HelpFormatter, "_set_color"):
+            super()._set_color(color)
+        self._color = use_color(sys.stdout)
 
     def _format_usage(self, usage: str | None, actions, groups, prefix: str | None) -> str:
         block = super()._format_usage(usage, actions, groups, prefix)
@@ -108,6 +145,12 @@ class ColoredArgumentParser(argparse.ArgumentParser):
         if "color" in inspect.signature(argparse.ArgumentParser.__init__).parameters:
             kwargs["color"] = False
         super().__init__(*args, **kwargs)
+
+    def print_help(self, file: TextIO | None = None) -> None:
+        if file is None:
+            file = sys.stdout
+        self._print_message(blauw_zwart_banner(color=use_color(file)), file)
+        super().print_help(file)
 
     def error(self, message: str) -> None:
         self.print_usage(sys.stderr)
