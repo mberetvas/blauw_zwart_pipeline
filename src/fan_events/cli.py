@@ -209,11 +209,23 @@ def _validate_generate_retail(
         p.error("--max-duration must be > 0")
     if ns.epoch is not None:
         _parse_epoch_utc(ns.epoch)
+    if ns.fan_pool is not None and ns.fan_pool < 1:
+        p.error("--fan-pool must be >= 1")
+    if ns.arrival_mode == "poisson" and ns.poisson_rate <= 0:
+        p.error("--poisson-rate must be > 0")
+    if ns.arrival_mode == "fixed" and ns.fixed_gap_seconds <= 0:
+        p.error("--fixed-gap-seconds must be > 0")
     if ns.arrival_mode == "weighted_gap":
         if not ns.weighted_gaps or not ns.weighted_gap_weights:
             p.error("weighted_gap requires --weighted-gaps and --weighted-gap-weights")
         if len(ns.weighted_gaps) != len(ns.weighted_gap_weights):
             p.error("--weighted-gaps and --weighted-gap-weights must have the same length")
+        if any(gap < 0 for gap in ns.weighted_gaps):
+            p.error("--weighted-gaps values must be >= 0")
+        if any(weight < 0 for weight in ns.weighted_gap_weights):
+            p.error("--weighted-gap-weights values must be >= 0")
+        if sum(ns.weighted_gap_weights) <= 0:
+            p.error("--weighted-gap-weights must have a positive total weight")
 
     emit_min = ns.emit_wall_clock_min
     emit_max = ns.emit_wall_clock_max
