@@ -709,8 +709,6 @@ def run_v3(args: argparse.Namespace) -> None:
 def main(argv: list[str] | None = None) -> None:
     try:
         args = parse_args(argv)
-        if args.command in (SUBCOMMAND_EVENTS, SUBCOMMAND_RETAIL) and args.fans_out is None:
-            args.fans_out = _companion_fans_json_path(args.output)
         if args.command == SUBCOMMAND_RETAIL:
             run_v3(args)
         elif args.calendar:
