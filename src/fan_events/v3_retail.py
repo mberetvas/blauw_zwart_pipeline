@@ -58,8 +58,12 @@ def _next_interarrival_seconds(
     weighted_gap_weights: Sequence[float] | None,
 ) -> float:
     if arrival_mode == "poisson":
+        if poisson_rate <= 0:
+            raise ValueError("poisson_rate must be > 0 for poisson arrival_mode")
         return float(rng.expovariate(poisson_rate))
     if arrival_mode == "fixed":
+        if fixed_gap_seconds <= 0:
+            raise ValueError("fixed_gap_seconds must be > 0 for fixed arrival_mode")
         return float(fixed_gap_seconds)
     if arrival_mode == "weighted_gap":
         if weighted_gaps is None or weighted_gap_weights is None:
