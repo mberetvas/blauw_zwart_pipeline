@@ -10,12 +10,11 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from fan_events.data import ITEMS, LOCATIONS, synthetic_line_amount_eur
 from fan_events.domain import (
     DEFAULT_MERCH_FACTOR,
     DEFAULT_SCAN_FRACTION,
-    ITEMS,
     JAN_BREYDEL_MAX_CAPACITY,
-    LOCATIONS,
     MERCH_PURCHASE,
     TICKET_SCAN,
 )
@@ -159,11 +158,6 @@ def _ts_string_from_epoch(rng: random.Random, start_sec: int, end_sec: int) -> s
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _merch_amount(rng: random.Random) -> float:
-    cents = rng.randint(1, 99999)
-    return round(cents / 100.0, 2)
-
-
 def generate_v2_records(
     contexts: list[MatchContext],
     rng: random.Random,
@@ -213,7 +207,7 @@ def generate_v2_records(
             fan_id = pool[rng.randrange(0, len(pool))]
             ts = _ts_string_from_epoch(rng, start_sec, end_sec)
             item = rng.choice(ITEMS)
-            amt = _merch_amount(rng)
+            amt = synthetic_line_amount_eur(item, rng)
             rec: dict[str, Any] = {
                 "amount": amt,
                 "event": MERCH_PURCHASE,

@@ -6,7 +6,14 @@ import random
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fan_events.domain import ITEMS, LOCATIONS, MERCH_PURCHASE, TICKET_SCAN
+from fan_events.data import (
+    ITEMS,
+    LOCATIONS,
+    SYNTHETIC_LINE_AMOUNT_RANDINT_HIGH,
+    SYNTHETIC_LINE_AMOUNT_RANDINT_LOW,
+    line_amount_eur_from_jitter_int,
+)
+from fan_events.domain import MERCH_PURCHASE, TICKET_SCAN
 
 # When --seed is set, wall-clock "now" would change between runs and break byte identity (FR-005).
 FIXED_NOW_UTC = datetime(2026, 4, 1, 15, 0, 0, tzinfo=timezone.utc)
@@ -70,11 +77,14 @@ def generate_batch(
         )
 
     def one_merch() -> dict[str, Any]:
-        cents = rng.randint(1, 99999)
-        amount = round(cents / 100.0, 2)
+        # RNG order matches pre-refactor v1: jitter draw, then fan_id, item, timestamp.
+        u = rng.randint(SYNTHETIC_LINE_AMOUNT_RANDINT_LOW, SYNTHETIC_LINE_AMOUNT_RANDINT_HIGH)
+        fan = _fan_id(rng, fan_pool)
+        item = rng.choice(ITEMS)
+        amount = line_amount_eur_from_jitter_int(item, u)
         return make_merch_purchase(
-            _fan_id(rng, fan_pool),
-            rng.choice(ITEMS),
+            fan,
+            item,
             amount,
             _utc_ts_string(rng, start_ts, end_ts),
         )

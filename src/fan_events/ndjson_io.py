@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fan_events.domain import MERCH_PURCHASE, TICKET_SCAN
+from fan_events.data import ITEMS, SHOP_IDS
+from fan_events.domain import MERCH_PURCHASE, RETAIL_PURCHASE, TICKET_SCAN
 
 
 def dumps_canonical(obj: dict[str, Any]) -> str:
@@ -152,3 +154,72 @@ def records_to_ndjson_v2(records: list[dict[str, Any]]) -> str:
     lines = [dumps_canonical(r) for r in ordered]
     body = "\n".join(lines)
     return body + "\n"
+
+
+_ITEMS_SET = frozenset(ITEMS)
+_SHOP_SET = frozenset(SHOP_IDS)
+
+
+def _validate_timestamp_utc_z(ts: str) -> None:
+    if not isinstance(ts, str) or not ts.endswith("Z"):
+        raise ValueError("retail_purchase: timestamp must be a string ending with Z")
+    try:
+        datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except ValueError as e:
+        raise ValueError("retail_purchase: timestamp must be valid UTC ISO-8601 with Z") from e
+
+
+def validate_record_v3(rec: dict[str, Any]) -> None:
+    """fan-events-ndjson-v3.md: closed schema retail_purchase only."""
+    if not isinstance(rec, dict):
+        raise ValueError("record must be a dict")
+    allowed = {"amount", "event", "fan_id", "item", "shop", "timestamp"}
+    if set(rec.keys()) != allowed:
+        raise ValueError(f"retail_purchase must have exactly keys {sorted(allowed)}")
+    ev = rec.get("event")
+    if ev != RETAIL_PURCHASE:
+        raise ValueError(f"retail_purchase: event must be {RETAIL_PURCHASE!r}, got {ev!r}")
+    if not rec["fan_id"] or not isinstance(rec["fan_id"], str):
+        raise ValueError("retail_purchase: fan_id must be a non-empty string")
+    if not rec["item"] or not isinstance(rec["item"], str):
+        raise ValueError("retail_purchase: item must be a non-empty string")
+    if rec["item"] not in _ITEMS_SET:
+        raise ValueError("retail_purchase: item must be in ITEMS catalog")
+    shop = rec["shop"]
+    if not isinstance(shop, str) or shop not in _SHOP_SET:
+        raise ValueError("retail_purchase: shop must be one of SHOP_IDS")
+    amt = rec["amount"]
+    if not isinstance(amt, (int, float)) or isinstance(amt, bool):
+        raise ValueError("retail_purchase: amount must be a number")
+    if amt <= 0:
+        raise ValueError("retail_purchase: amount must be > 0")
+    _validate_timestamp_utc_z(rec["timestamp"])
+
+
+def sort_key_v3(rec: dict[str, Any]) -> tuple:
+    """Global batch sort per fan-events-ndjson-v3.md."""
+    return (
+        rec["timestamp"],
+        rec["event"],
+        rec["fan_id"],
+        rec["shop"],
+        rec["item"],
+        float(rec["amount"]),
+    )
+
+
+def records_to_ndjson_v3(records: list[dict[str, Any]]) -> str:
+    if not records:
+        return ""
+    for rec in records:
+        validate_record_v3(rec)
+    ordered = sorted(records, key=sort_key_v3)
+    lines = [dumps_canonical(r) for r in ordered]
+    body = "\n".join(lines)
+    return body + "\n"
+
+
+def format_line_v3(rec: dict[str, Any]) -> str:
+    """One NDJSON line (LF-terminated) for stream mode."""
+    validate_record_v3(rec)
+    return dumps_canonical(rec) + "\n"
