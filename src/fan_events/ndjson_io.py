@@ -9,13 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fan_events.domain import (
-    ITEMS,
-    MERCH_PURCHASE,
-    RETAIL_PURCHASE,
-    SHOP_IDS,
-    TICKET_SCAN,
-)
+from fan_events.data import ITEMS, SHOP_IDS
+from fan_events.domain import MERCH_PURCHASE, RETAIL_PURCHASE, TICKET_SCAN
 
 
 def dumps_canonical(obj: dict[str, Any]) -> str:
@@ -189,7 +184,7 @@ def validate_record_v3(rec: dict[str, Any]) -> None:
     if not rec["item"] or not isinstance(rec["item"], str):
         raise ValueError("retail_purchase: item must be a non-empty string")
     if rec["item"] not in _ITEMS_SET:
-        raise ValueError("retail_purchase: item must be in domain ITEMS catalog")
+        raise ValueError("retail_purchase: item must be in ITEMS catalog")
     shop = rec["shop"]
     if not isinstance(shop, str) or shop not in _SHOP_SET:
         raise ValueError("retail_purchase: shop must be one of SHOP_IDS")

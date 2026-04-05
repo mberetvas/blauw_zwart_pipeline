@@ -1,7 +1,8 @@
 """Match-independent retail (NDJSON v3) synthetic event generation.
 
 RNG draw order (for reproducibility): each event draws inter-arrival gap (mode-dependent),
-then shop (weighted choice), item (uniform), amount (cents), fan_id (pool).
+then shop (weighted choice), item (uniform), amount (catalog EUR + jitter, one randint),
+fan_id (pool).
 """
 
 from __future__ import annotations
@@ -11,12 +12,11 @@ from collections.abc import Iterator, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from fan_events.data import ITEMS, SHOP_IDS, synthetic_line_amount_eur
 from fan_events.domain import (
     DEFAULT_RETAIL_SIM_EPOCH_UTC,
     DEFAULT_SHOP_WEIGHTS,
-    ITEMS,
     RETAIL_PURCHASE,
-    SHOP_IDS,
     validate_shop_weights,
 )
 from fan_events.ndjson_io import format_line_v3, records_to_ndjson_v3
@@ -46,11 +46,6 @@ def _dt_to_utc_z(dt: datetime) -> str:
 
 def _fan_id(rng: random.Random, pool: int) -> str:
     return f"fan_{rng.randint(1, pool):05d}"
-
-
-def _one_amount_eur(rng: random.Random) -> float:
-    cents = rng.randint(1, 99999)
-    return round(cents / 100.0, 2)
 
 
 def _next_interarrival_seconds(
@@ -145,7 +140,7 @@ def iter_retail_records(
 
         shop = rng.choices(SHOP_IDS, weights=list(w), k=1)[0]
         item = rng.choice(ITEMS)
-        amount = _one_amount_eur(rng)
+        amount = synthetic_line_amount_eur(item, rng)
         fan = _fan_id(rng, pool)
         ts = _dt_to_utc_z(t)
         yield make_retail_purchase(

@@ -47,6 +47,11 @@ from fan_events.v3_retail import (
 
 DEFAULT_OUTPUT = "out/fan_events.ndjson"
 DEFAULT_RETAIL_OUTPUT = "out/retail.ndjson"
+
+
+def _companion_fans_json_path(ndjson_path: str) -> str:
+    """Sidecar fan master path: same location/stem as the NDJSON output, ``.json`` suffix."""
+    return str(Path(ndjson_path).with_suffix(".json"))
 DEFAULT_COUNT = 200
 DEFAULT_DAYS = 90
 # Aligned with fan_events.v3_retail.iter_retail_records (do not drift silently).
@@ -396,9 +401,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="PATH",
         help=(
-            "Optional companion JSON path: synthetic fan master keyed by fan_id "
+            "Companion JSON path: synthetic fan master keyed by fan_id "
             "(join events.fan_id → fans[fan_id]; not part of NDJSON contracts). "
-            "Default: omit — no sidecar"
+            f"Default when omitted: same path as -o/--output with a .json suffix "
+            f"(e.g. {_companion_fans_json_path(DEFAULT_OUTPUT)})"
         ),
     )
 
@@ -585,9 +591,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="PATH",
         help=(
-            "Optional companion JSON path: synthetic fan master keyed by fan_id "
+            "Companion JSON path: synthetic fan master keyed by fan_id "
             "(join events.fan_id → fans[fan_id]; not part of NDJSON contracts). "
-            "Default: omit — no sidecar"
+            f"Default when omitted: same path as -o/--output with a .json suffix "
+            f"(e.g. {_companion_fans_json_path(DEFAULT_RETAIL_OUTPUT)})"
         ),
     )
 
@@ -702,6 +709,8 @@ def run_v3(args: argparse.Namespace) -> None:
 def main(argv: list[str] | None = None) -> None:
     try:
         args = parse_args(argv)
+        if args.command in (SUBCOMMAND_EVENTS, SUBCOMMAND_RETAIL) and args.fans_out is None:
+            args.fans_out = _companion_fans_json_path(args.output)
         if args.command == SUBCOMMAND_RETAIL:
             run_v3(args)
         elif args.calendar:
