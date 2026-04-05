@@ -3,7 +3,7 @@
 # Blauw zwart - Mock-up data creator
 
 Synthetic fan events are produced by the `fan_events` package (`src/fan_events/`).
-The CLI is the `fan_events` command (subcommand `generate_events`). 
+The CLI is the `fan_events` command: subcommand **`generate_events`** (v1 rolling / v2 calendar) or **`generate_retail`** (v3 match-independent retail NDJSON — see [`specs/003-ndjson-v3-retail-sim/quickstart.md`](specs/003-ndjson-v3-retail-sim/quickstart.md)).
 Run commands from the **repository root** after `uv sync`. You can also use `uv run python -m fan_events generate_events …` if you prefer the module form.
 
 Or you can install the package using
@@ -17,10 +17,11 @@ After installation, the `fan_events` entry point is on your `PATH`. You can run 
 ## CLI overview
 
 
-| Mode             | When                | Output contract                             |
-| ---------------- | ------------------- | ------------------------------------------- |
-| **v1** (default) | No `--calendar`     | Rolling UTC window — no `match_id` on lines |
-| **v2**           | `--calendar <path>` | Match calendar — every line has `match_id`  |
+| Mode             | When                          | Output contract                                                |
+| ---------------- | ----------------------------- | -------------------------------------------------------------- |
+| **v1** (default) | `generate_events`, no `--calendar` | Rolling UTC window — no `match_id` on lines                |
+| **v2**           | `generate_events --calendar …` | Match calendar — every line has `match_id`                     |
+| **v3 retail**    | `generate_retail`             | `retail_purchase` only — see v3 contract in `specs/003-…`      |
 
 
 ```bash

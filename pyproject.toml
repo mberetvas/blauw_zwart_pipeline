@@ -23,7 +23,11 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+# Resolved from the repo root; run `uv run pytest` there (or pass `../tests` if invoking from `src/`).
 testpaths = ["tests"]
+markers = [
+    "slow: optional large-batch or long-running tests (e.g. SC-003 retail scale)",
+]
 
 [tool.ruff]
 line-length = 100

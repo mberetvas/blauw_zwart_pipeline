@@ -4,6 +4,7 @@ Synthetic fan events NDJSON generator (stdlib only).
 Normative contracts:
   specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md  (rolling mode)
   specs/002-match-calendar-events/contracts/fan-events-ndjson-v2.md  (--calendar mode)
+  specs/003-ndjson-v3-retail-sim/contracts/fan-events-ndjson-v3.md  (generate_retail)
 """
 
 from __future__ import annotations
@@ -30,11 +31,14 @@ from fan_events.v2_calendar import (
     load_calendar_json,
     validate_and_parse_matches,
 )
+from fan_events.v3_retail import generate_retail_ndjson, retail_stream_ndjson
 
 DEFAULT_OUTPUT = "out/fan_events.ndjson"
+DEFAULT_RETAIL_OUTPUT = "out/retail.ndjson"
 DEFAULT_COUNT = 200
 DEFAULT_DAYS = 90
-SUBCOMMAND = "generate_events"
+SUBCOMMAND_EVENTS = "generate_events"
+SUBCOMMAND_RETAIL = "generate_retail"
 
 
 def _parse_iso_date(s: str) -> date:
@@ -44,9 +48,92 @@ def _parse_iso_date(s: str) -> date:
 def _tokens_for_flag_checks(argv: list[str] | None) -> list[str]:
     """Tokens after optional subcommand name (for mutual-exclusion checks vs --calendar)."""
     tokens = list(argv) if argv is not None else sys.argv[1:]
-    if tokens and tokens[0] == SUBCOMMAND:
+    if tokens and tokens[0] == SUBCOMMAND_EVENTS:
         return tokens[1:]
     return tokens
+
+
+def _tokens_after_subcommand(argv: list[str] | None, subcommand: str) -> list[str]:
+    tokens = list(argv) if argv is not None else sys.argv[1:]
+    try:
+        i = tokens.index(subcommand)
+    except ValueError:
+        return []
+    return tokens[i + 1 :]
+
+
+_RETAIL_BANNED = frozenset({
+    "--calendar",
+    "--from-date",
+    "--to-date",
+    "--scan-fraction",
+    "--merch-factor",
+    "-n",
+    "--count",
+    "--days",
+    "--events",
+})
+
+
+def _retail_forbidden_token(tokens: list[str]) -> str | None:
+    for t in tokens:
+        if t in _RETAIL_BANNED:
+            return t
+    return None
+
+
+def _parse_epoch_utc(s: str) -> datetime:
+    t = s.strip()
+    if t.endswith("Z"):
+        t = t[:-1] + "+00:00"
+    dt = datetime.fromisoformat(t)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _retail_generator_kwargs(args: argparse.Namespace) -> dict[str, object]:
+    kw: dict[str, object] = {}
+    if args.epoch is not None:
+        kw["epoch_utc"] = _parse_epoch_utc(args.epoch)
+    if args.shop_weights is not None:
+        kw["shop_weights"] = tuple(args.shop_weights)
+    kw["max_events"] = args.max_events
+    kw["max_simulated_duration_seconds"] = args.max_duration
+    kw["arrival_mode"] = args.arrival_mode
+    kw["poisson_rate"] = args.poisson_rate
+    kw["fixed_gap_seconds"] = args.fixed_gap_seconds
+    if args.arrival_mode == "weighted_gap":
+        kw["weighted_gaps"] = args.weighted_gaps
+        kw["weighted_gap_weights"] = args.weighted_gap_weights
+    if args.fan_pool is not None:
+        kw["fan_pool"] = args.fan_pool
+    return kw
+
+
+def _validate_generate_retail(
+    p: argparse.ArgumentParser,
+    ns: argparse.Namespace,
+    argv: list[str] | None,
+) -> None:
+    tok = _tokens_after_subcommand(argv, SUBCOMMAND_RETAIL)
+    bad = _retail_forbidden_token(tok)
+    if bad is not None:
+        p.error(
+            f"{bad} cannot be used with generate_retail "
+            "(v1/v2 options belong under generate_events)"
+        )
+    if ns.max_events is not None and ns.max_events < 0:
+        p.error("--max-events must be >= 0")
+    if ns.max_duration is not None and ns.max_duration <= 0:
+        p.error("--max-duration must be > 0")
+    if ns.epoch is not None:
+        _parse_epoch_utc(ns.epoch)
+    if ns.arrival_mode == "weighted_gap":
+        if not ns.weighted_gaps or not ns.weighted_gap_weights:
+            p.error("weighted_gap requires --weighted-gaps and --weighted-gap-weights")
+        if len(ns.weighted_gaps) != len(ns.weighted_gap_weights):
+            p.error("--weighted-gaps and --weighted-gap-weights must have the same length")
 
 
 # Options that consume the next argv token as their value (same set argparse uses).
@@ -94,12 +181,15 @@ def _explicit_v1_rolling_flags_in_tokens(tokens: list[str]) -> bool:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = ColoredArgumentParser(
         prog="fan_events",
-        description="Generate synthetic fan events as UTF-8 NDJSON (v1 rolling or v2 calendar).",
+        description=(
+            "Generate synthetic fan events as UTF-8 NDJSON "
+            "(v1 rolling, v2 calendar, or v3 retail)."
+        ),
         formatter_class=ColoredHelpFormatter,
     )
     sub = p.add_subparsers(dest="command", required=True, parser_class=ColoredArgumentParser)
     gen = sub.add_parser(
-        SUBCOMMAND,
+        SUBCOMMAND_EVENTS,
         help="Generate NDJSON to a file (v1 rolling or v2 calendar).",
         formatter_class=ColoredHelpFormatter,
     )
@@ -175,8 +265,112 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="both",
         help="Event types to emit (default: both)",
     )
-    raw = _tokens_for_flag_checks(argv)
+
+    ret = sub.add_parser(
+        SUBCOMMAND_RETAIL,
+        help="Generate match-independent retail_purchase NDJSON (v3) to a file or stdout.",
+        formatter_class=ColoredHelpFormatter,
+    )
+    ret.add_argument(
+        "-o",
+        "--output",
+        default=DEFAULT_RETAIL_OUTPUT,
+        help=f"Output NDJSON path when not using --stream (default: {DEFAULT_RETAIL_OUTPUT})",
+    )
+    ret.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="RNG seed for byte-identical reproducibility (batch and stream)",
+    )
+    ret.add_argument(
+        "--stream",
+        action="store_true",
+        help="Write NDJSON to stdout in generation order (no global sort); ignores file output",
+    )
+    ret.add_argument(
+        "--max-events",
+        type=int,
+        default=None,
+        help="Stop after N events (0 → empty). If omitted with no --max-duration, defaults to 200.",
+    )
+    ret.add_argument(
+        "--max-duration",
+        type=float,
+        default=None,
+        dest="max_duration",
+        metavar="SECONDS",
+        help=(
+            "Maximum simulated timeline length in seconds from epoch; "
+            "with --max-events, stop when either binds first"
+        ),
+    )
+    ret.add_argument(
+        "--epoch",
+        type=str,
+        default=None,
+        help="UTC start instant for the synthetic timeline (ISO-8601, e.g. 2026-01-01T00:00:00Z)",
+    )
+    ret.add_argument(
+        "--shop-weights",
+        nargs=3,
+        type=float,
+        metavar=("W1", "W2", "W3"),
+        default=None,
+        help=(
+            "Three non-negative weights for shops "
+            "(order: jan_breydel_fan_shop, webshop, bruges_city_shop)"
+        ),
+    )
+    ret.add_argument(
+        "--arrival-mode",
+        choices=("poisson", "fixed", "weighted_gap"),
+        default="poisson",
+        help="Inter-arrival model (default: poisson)",
+    )
+    ret.add_argument(
+        "--poisson-rate",
+        type=float,
+        default=0.1,
+        help="Poisson rate (events per second) for expovariate gaps (default: 0.1)",
+    )
+    ret.add_argument(
+        "--fixed-gap-seconds",
+        type=float,
+        default=60.0,
+        help="Fixed seconds between successive events when --arrival-mode fixed (default: 60)",
+    )
+    ret.add_argument(
+        "--weighted-gaps",
+        nargs="+",
+        type=float,
+        default=None,
+        metavar="SEC",
+        help="Candidate gap lengths for weighted_gap mode (use with --weighted-gap-weights)",
+    )
+    ret.add_argument(
+        "--weighted-gap-weights",
+        nargs="+",
+        type=float,
+        default=None,
+        metavar="W",
+        help="Weights for each value in --weighted-gaps (same length)",
+    )
+    ret.add_argument(
+        "--fan-pool",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Upper bound for fan_id numeric suffix pool (default: heuristic from max_events)",
+    )
+
     ns = p.parse_args(argv)
+
+    if ns.command == SUBCOMMAND_RETAIL:
+        _validate_generate_retail(p, ns, argv)
+        return ns
+
+    raw = _tokens_for_flag_checks(argv)
 
     if ns.calendar:
         if _explicit_v1_rolling_flags_in_tokens(raw):
@@ -239,10 +433,24 @@ def run_v2(args: argparse.Namespace) -> None:
     write_atomic_text(Path(args.output), text)
 
 
+def run_v3(args: argparse.Namespace) -> None:
+    rng = random.Random(args.seed) if args.seed is not None else random.Random()
+    kw = _retail_generator_kwargs(args)
+    if args.stream:
+        text = retail_stream_ndjson(rng, **kw)
+        sys.stdout.write(text)
+        sys.stdout.flush()
+    else:
+        text = generate_retail_ndjson(rng, **kw)
+        write_atomic_text(Path(args.output), text)
+
+
 def main(argv: list[str] | None = None) -> None:
     try:
         args = parse_args(argv)
-        if args.calendar:
+        if args.command == SUBCOMMAND_RETAIL:
+            run_v3(args)
+        elif args.calendar:
             run_v2(args)
         else:
             run_v1(args)
