@@ -442,7 +442,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=None,
         help=(
-            "RNG seed for reproducible draws (batch, stream, wall-clock sleep intervals); "
+            "RNG seed for reproducible draws (batch, stream); wall-clock sleep intervals use "
+            "a separate pacing RNG derived from the same seed; "
             "(default: none — omit for non-deterministic output)"
         ),
     )
@@ -569,7 +570,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="emit_wall_clock_min",
         help=(
             "Requires --stream. Lower bound (seconds) for random wall-clock sleep before each "
-            "stdout line after the first; draw uses the same RNG as --seed "
+            "stdout line after the first; draw uses a separate pacing RNG derived from --seed "
             "(default: none — set with --emit-wall-clock-max). 0 <= min <= max"
         ),
     )
@@ -685,6 +686,9 @@ def run_v2(args: argparse.Namespace) -> None:
 
 def run_v3(args: argparse.Namespace) -> None:
     rng = random.Random(args.seed) if args.seed is not None else random.Random()
+    pacing_rng = (
+        random.Random(f"pacing:{args.seed}") if args.seed is not None else random.Random()
+    )
     kw = _retail_generator_kwargs(args)
     fan_ids: set[str] | None = set() if args.fans_out else None
     if args.stream:
@@ -693,7 +697,7 @@ def run_v3(args: argparse.Namespace) -> None:
             for line in iter_retail_ndjson_lines(rng, fan_ids=fan_ids, **kw):
                 if not first:
                     time.sleep(
-                        rng.uniform(args.emit_wall_clock_min, args.emit_wall_clock_max)
+                        pacing_rng.uniform(args.emit_wall_clock_min, args.emit_wall_clock_max)
                     )
                 sys.stdout.write(line)
                 sys.stdout.flush()
