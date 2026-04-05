@@ -77,7 +77,7 @@ Always check which subcommand you are using. **`fan_events generate_events --hel
 
 ### `generate_retail` (v3)
 
-Match-independent `retail_purchase` lines (three shop channels). **Batch** (default) writes a **globally sorted** file to `-o` / `--output`. **`-t` / `--stream`** writes **stdout** in generation order (no global sort). Without wall-clock flags, stream output is written **as fast as the CPU allows** (same seed → same bytes as batch for equivalent limits). With **`--emit-wall-clock-min`** and **`--emit-wall-clock-max`**, the process **sleeps** a random number of seconds in `[min, max]` before each line **after the first** (draw uses the same RNG as `-s` / `--seed`). Default synthetic timeline start when **`-E` / `--epoch`** is omitted is **`2026-01-01T00:00:00Z`** (same as the v3 generator).
+Match-independent `retail_purchase` lines (three shop channels). **Batch** (default) writes a **globally sorted** file to `-o` / `--output`. **`-t` / `--stream`** writes **stdout** in generation order (no global sort). Without wall-clock flags, stream output is written **as fast as the CPU allows** (same seed → byte-identical stream output across repeated runs for equivalent limits, but batch vs stream ordering/bytes may differ because batch applies a global sort and stream does not). With **`--emit-wall-clock-min`** and **`--emit-wall-clock-max`**, the process **sleeps** a random number of seconds in `[min, max]` before each line **after the first** (draw uses the same RNG as `-s` / `--seed`). Default synthetic timeline start when **`-E` / `--epoch`** is omitted is **`2026-01-01T00:00:00Z`** (same as the v3 generator).
 
 | Argument | Default | Description |
 | -------- | ------- | ----------- |
