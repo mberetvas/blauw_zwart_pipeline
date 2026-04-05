@@ -40,6 +40,55 @@ DEFAULT_DAYS = 90
 SUBCOMMAND_EVENTS = "generate_events"
 SUBCOMMAND_RETAIL = "generate_retail"
 
+# Copy-paste examples (flags/paths align with README). Epilog is styled by ColoredHelpFormatter.
+_HELP_DEV_NOTE = (
+    "Without install, prefix with uv run or uv run python -m fan_events (same arguments).\n\n"
+)
+
+_EX_HELP_ROOT = "fan_events --help"
+_EX_HELP_EVENTS = "fan_events generate_events --help"
+_EX_HELP_RETAIL = "fan_events generate_retail --help"
+_EX_V1_ROLLING = "fan_events generate_events --seed 1 -n 200 --days 90 -o out/v1.ndjson"
+_EX_V2_CAL_ALL = (
+    "fan_events generate_events --calendar my_calendar.json --seed 42 -o out/v2.ndjson"
+)
+_EX_V2_DATE_RANGE = (
+    "fan_events generate_events --calendar my_calendar.json "
+    "--from-date 2026-09-01 --to-date 2026-12-31 --seed 42 -o out/v2.ndjson"
+)
+_EX_V3_FILE = "fan_events generate_retail -o out/retail.ndjson --seed 42"
+_EX_V3_STREAM = "fan_events generate_retail --stream --seed 42 --max-events 100"
+
+EPILOG_ROOT = (
+    _HELP_DEV_NOTE
+    + "Examples:\n\n"
+    + "\n".join(
+        (
+            _EX_HELP_ROOT,
+            _EX_HELP_EVENTS,
+            _EX_HELP_RETAIL,
+            "",
+            _EX_V1_ROLLING,
+            _EX_V2_CAL_ALL,
+            _EX_V2_DATE_RANGE,
+            "",
+            _EX_V3_FILE,
+            _EX_V3_STREAM,
+        )
+    )
+    + "\n"
+)
+
+EPILOG_GENERATE_EVENTS = (
+    "Examples:\n\n"
+    + "\n".join((_EX_HELP_EVENTS, _EX_V1_ROLLING, _EX_V2_CAL_ALL, _EX_V2_DATE_RANGE))
+    + "\n"
+)
+
+EPILOG_GENERATE_RETAIL = (
+    "Examples:\n\n" + "\n".join((_EX_HELP_RETAIL, _EX_V3_FILE, _EX_V3_STREAM)) + "\n"
+)
+
 
 def _parse_iso_date(s: str) -> date:
     return date.fromisoformat(s)
@@ -186,12 +235,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "(v1 rolling, v2 calendar, or v3 retail)."
         ),
         formatter_class=ColoredHelpFormatter,
+        epilog=EPILOG_ROOT,
     )
     sub = p.add_subparsers(dest="command", required=True, parser_class=ColoredArgumentParser)
     gen = sub.add_parser(
         SUBCOMMAND_EVENTS,
         help="Generate NDJSON to a file (v1 rolling or v2 calendar).",
         formatter_class=ColoredHelpFormatter,
+        epilog=EPILOG_GENERATE_EVENTS,
     )
     gen.add_argument(
         "-o",
@@ -270,6 +321,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         SUBCOMMAND_RETAIL,
         help="Generate match-independent retail_purchase NDJSON (v3) to a file or stdout.",
         formatter_class=ColoredHelpFormatter,
+        epilog=EPILOG_GENERATE_RETAIL,
     )
     ret.add_argument(
         "-o",

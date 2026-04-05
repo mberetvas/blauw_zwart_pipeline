@@ -106,6 +106,12 @@ class ColoredHelpFormatter(argparse.HelpFormatter):
         super().__init__(prog, indent_increment, max_help_position, width)
         self._color = use_color(sys.stdout)
 
+    def _fill_text(self, text: str, width: int, indent: str) -> str:
+        """Preserve newlines in description/epilog (like RawDescriptionHelpFormatter)."""
+        if not text:
+            return ""
+        return "".join(indent + line for line in text.splitlines(keepends=True))
+
     def _set_color(self, color: bool) -> None:
         """Init argparse 3.14+ _theme; apply TTY/NO_COLOR via use_color (not parser.color)."""
         if hasattr(argparse.HelpFormatter, "_set_color"):
