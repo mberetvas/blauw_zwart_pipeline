@@ -90,14 +90,17 @@ def iter_retail_records(
     weighted_gaps: Sequence[float] | None = None,
     weighted_gap_weights: Sequence[float] | None = None,
     fan_pool: int | None = None,
+    skip_default_event_cap: bool = False,
 ) -> Iterator[dict[str, Any]]:
     """
     Deterministic order of RNG draws: inter-arrival gap, then shop, item, amount, fan_id per event.
 
     Stopping: default when both ``max_events`` and ``max_simulated_duration_seconds`` are ``None``,
-    ``max_events`` is set to **200**. When only duration is set, event count is unlimited until the
-    duration window is exceeded. When both limits are set, generation stops when **either** is hit
-    first (duration checked after advancing the synthetic clock, before emitting).
+    ``max_events`` is set to **200** unless ``skip_default_event_cap`` is true (then there is no
+    event-count cap until ``max_simulated_duration_seconds`` binds, if set). When only duration is
+    set, event count is unlimited until the duration window is exceeded. When both limits are set,
+    generation stops when **either** is hit first (duration checked after advancing the synthetic
+    clock, before emitting).
     """
     if max_events == 0:
         return
@@ -111,7 +114,7 @@ def iter_retail_records(
 
     me = max_events
     md = max_simulated_duration_seconds
-    if me is None and md is None:
+    if me is None and md is None and not skip_default_event_cap:
         me = 200
 
     cap_n = me
@@ -162,8 +165,19 @@ def generate_retail_ndjson(rng: random.Random, **kwargs: Any) -> str:
     return records_to_ndjson_v3(generate_retail_batch(rng, **kwargs))
 
 
-def iter_retail_ndjson_lines(rng: random.Random, **kwargs: Any) -> Iterator[str]:
+def iter_retail_ndjson_lines(
+    rng: random.Random,
+    *,
+    fan_ids: set[str] | None = None,
+    **kwargs: Any,
+) -> Iterator[str]:
+    """Yield canonical NDJSON lines.
+
+    If ``fan_ids`` is a set, each emitted ``fan_id`` is added to it.
+    """
     for rec in iter_retail_records(rng, **kwargs):
+        if fan_ids is not None:
+            fan_ids.add(rec["fan_id"])
         yield format_line_v3(rec)
 
 
