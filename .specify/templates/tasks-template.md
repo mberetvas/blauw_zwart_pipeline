@@ -14,9 +14,12 @@ test where relevant). **Python** changes require **pytest** coverage with TDD pr
 `uv run pytest` from the repository root. For **NDJSON** or line-delimited synthetic outputs, include
 tests that assert **contract shape**, **ordering**, and **encoding**, plus **byte-identical** golden
 comparisons when the spec requires deterministic runs (e.g. fixed seed). Manage deps with UV (`uv add`,
-`uv add --dev`) so `pyproject.toml` and `uv.lock` stay in sync; generator runtime SHOULD stay stdlib-only
-unless the spec adds a justified dependency. Other test types (contract, integration) follow the feature
-specification.
+`uv add --dev`) so `pyproject.toml` and `uv.lock` stay in sync; **runtime** code MUST stay stdlib-only
+unless the spec justifies a non-stdlib dependency per constitution **VI** (clarity/readability/ease of
+use, or significant complexity, error-proneness, or opacity vs stdlib). **Python structure** (classes vs
+functions) MUST follow
+`.specify/memory/constitution.md` principle **XIII** and the feature’s **FR-PY-004** where applicable.
+Other test types (contract, integration) follow the feature specification.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 

@@ -1,0 +1,161 @@
+"""Kafka sink for the ``fan_events stream`` subcommand.
+
+Configuration is read from ``FAN_EVENTS_KAFKA_*`` environment variables; CLI flags passed as
+*overrides* take precedence when both are set.
+
+Environment variables
+---------------------
+FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS   Comma-separated broker list (default: localhost:9092)
+FAN_EVENTS_KAFKA_TOPIC               Target topic name (required when Kafka mode is active)
+FAN_EVENTS_KAFKA_CLIENT_ID           Producer client.id (default: fan-events-producer)
+FAN_EVENTS_KAFKA_COMPRESSION         Compression codec: none|gzip|snappy|lz4|zstd (default: none)
+FAN_EVENTS_KAFKA_ACKS                Required acks: 0|1|all|-1 (default: 1)
+
+For TLS/SASL (env only — keep secrets out of shell history):
+FAN_EVENTS_KAFKA_SECURITY_PROTOCOL   e.g. SASL_SSL
+FAN_EVENTS_KAFKA_SASL_MECHANISM      e.g. PLAIN, SCRAM-SHA-256
+FAN_EVENTS_KAFKA_SASL_USERNAME       SASL username
+FAN_EVENTS_KAFKA_SASL_PASSWORD       SASL password
+
+Message key
+-----------
+All messages are produced with ``key=None`` (null → Kafka round-robin partitioning).
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from dataclasses import dataclass, field
+from typing import Any
+
+_ENV_PREFIX = "FAN_EVENTS_KAFKA_"
+
+
+@dataclass
+class KafkaConfig:
+    bootstrap_servers: str = "localhost:9092"
+    topic: str = ""
+    client_id: str = "fan-events-producer"
+    compression: str = "none"
+    acks: str = "1"
+    # SSL / SASL — env-only, no CLI flags (keep secrets out of shell history)
+    security_protocol: str | None = None
+    sasl_mechanism: str | None = None
+    sasl_username: str | None = None
+    sasl_password: str | None = None
+    # Extra raw confluent-kafka producer config (unused by default; reserved for future use)
+    _extra: dict[str, str] = field(default_factory=dict, repr=False)
+
+
+def kafka_config_from_env(overrides: dict[str, str | None] | None = None) -> KafkaConfig:
+    """Return a :class:`KafkaConfig` populated from env vars, then apply *overrides*.
+
+    Only non-``None`` values in *overrides* replace the env-derived defaults, so callers
+    can pass ``vars(args)`` filtered to the relevant keys and ``None`` means "not provided".
+    """
+    cfg = KafkaConfig(
+        bootstrap_servers=os.environ.get(
+            f"{_ENV_PREFIX}BOOTSTRAP_SERVERS", "localhost:9092"
+        ),
+        topic=os.environ.get(f"{_ENV_PREFIX}TOPIC", ""),
+        client_id=os.environ.get(f"{_ENV_PREFIX}CLIENT_ID", "fan-events-producer"),
+        compression=os.environ.get(f"{_ENV_PREFIX}COMPRESSION", "none"),
+        acks=os.environ.get(f"{_ENV_PREFIX}ACKS", "1"),
+        security_protocol=os.environ.get(f"{_ENV_PREFIX}SECURITY_PROTOCOL"),
+        sasl_mechanism=os.environ.get(f"{_ENV_PREFIX}SASL_MECHANISM"),
+        sasl_username=os.environ.get(f"{_ENV_PREFIX}SASL_USERNAME"),
+        sasl_password=os.environ.get(f"{_ENV_PREFIX}SASL_PASSWORD"),
+    )
+    if overrides:
+        for key, value in overrides.items():
+            if value is not None and hasattr(cfg, key):
+                setattr(cfg, key, value)
+    return cfg
+
+
+def build_producer_config(cfg: KafkaConfig) -> dict[str, Any]:
+    """Build the ``confluent_kafka.Producer`` config dict from *cfg*."""
+    conf: dict[str, Any] = {
+        "bootstrap.servers": cfg.bootstrap_servers,
+        "client.id": cfg.client_id,
+        "compression.type": cfg.compression,
+        "acks": cfg.acks,
+    }
+    if cfg.security_protocol:
+        conf["security.protocol"] = cfg.security_protocol
+    if cfg.sasl_mechanism:
+        conf["sasl.mechanism"] = cfg.sasl_mechanism
+    if cfg.sasl_username:
+        conf["sasl.username"] = cfg.sasl_username
+    if cfg.sasl_password:
+        conf["sasl.password"] = cfg.sasl_password
+    conf.update(cfg._extra)
+    return conf
+
+
+class KafkaSink:
+    """Duck-typed sink that publishes NDJSON lines to a Kafka topic.
+
+    Designed to be passed to :func:`fan_events.orchestrator.write_merged_stream` in place of a
+    :class:`io.TextIO` object.  Implements ``.write()`` and ``.flush()`` to match the interface
+    used by ``write_merged_stream``, plus ``.close()`` for clean shutdown.
+
+    Lifecycle::
+
+        sink = KafkaSink(producer, topic)
+        try:
+            write_merged_stream(merged, sink, ...)
+        finally:
+            sink.close()   # blocks until all in-flight messages are delivered
+
+    Flush semantics
+    ---------------
+    - ``flush()``  — calls ``producer.poll(0)`` to drain delivery callbacks without blocking;
+      called after every line by ``write_merged_stream``.
+    - ``close()``  — calls ``producer.flush(timeout=30)`` to block until delivery; call once on
+      shutdown (normal completion *or* Ctrl+C via ``try/finally``).
+
+    Error handling
+    --------------
+    Delivery failures are captured via a per-message callback.  The first error is stored and
+    re-raised as :class:`RuntimeError` on the next ``.write()``, ``.flush()``, or ``.close()``
+    call.
+    """
+
+    def __init__(self, producer: Any, topic: str) -> None:
+        self._producer = producer
+        self._topic = topic
+        self._delivery_error: str | None = None
+
+    def _on_delivery(self, err: Any, _msg: Any) -> None:
+        if err is not None and self._delivery_error is None:
+            self._delivery_error = str(err)
+
+    def _check_error(self) -> None:
+        if self._delivery_error:
+            raise RuntimeError(f"Kafka delivery error: {self._delivery_error}")
+
+    def write(self, line: str) -> None:
+        self._check_error()
+        self._producer.produce(
+            self._topic,
+            value=line.encode("utf-8"),
+            on_delivery=self._on_delivery,
+        )
+
+    def flush(self) -> None:
+        """Poll for delivery callbacks (non-blocking); called after every line."""
+        self._producer.poll(0)
+        self._check_error()
+
+    def close(self) -> None:
+        """Block until all in-flight messages are delivered or timeout expires."""
+        remaining = self._producer.flush(timeout=30)
+        if remaining > 0:
+            print(
+                f"fan_events: warning: {remaining} Kafka message(s) not confirmed "
+                "before flush timeout",
+                file=sys.stderr,
+            )
+        self._check_error()

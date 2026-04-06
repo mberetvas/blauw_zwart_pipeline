@@ -145,6 +145,12 @@ def sort_key_v2(rec: dict[str, Any]) -> tuple:
     return (ts, er, fan, mid, rec["item"], float(rec["amount"]), loc)
 
 
+def format_line_v2(rec: dict[str, Any]) -> str:
+    """One NDJSON line (LF-terminated) for v2 stream mode."""
+    validate_record_v2(rec)
+    return dumps_canonical(rec) + "\n"
+
+
 def records_to_ndjson_v2(records: list[dict[str, Any]]) -> str:
     if not records:
         return ""

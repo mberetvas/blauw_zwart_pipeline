@@ -1,15 +1,14 @@
 <!--
 Sync Impact Report
-Version: 1.1.0 → 1.2.0
-Principles: VI expanded (stdlib-only generator guidance + UV/TDD unchanged). Added VII Spec-first;
-  VIII Byte-identical reproducibility; IX Contract-backed testing; X Versioned contracts;
-  XI Temporal semantics (UTC); XII Simplicity and named domain constants.
-Renamed doc title: Blue-Black Fan-360 → blauw_zwart_fan_sim_pipeline (scope ties Fan-360 + synthetic source).
-Added sections: None (new rules are numbered principles under Core Principles).
+Version: 1.4.0 → 1.5.0
+Principles: VI expanded — non-stdlib runtime deps may also be justified when they make code cleaner,
+simpler, easier to read, or easier to use (with written spec justification), alongside the existing bar
+(significant complexity, error-proneness, or opacity vs stdlib). I–V, VII–XIII unchanged.
+Added sections: None.
 Removed sections: None.
 Templates: .specify/templates/plan-template.md ✅ | spec-template.md ✅ | tasks-template.md ✅
-Commands: .specify/templates/commands/*.md — path not present in repo; .cursor/commands/*.md — no change required.
-Runtime: README.md ✅ (governance summary aligned with new principles).
+Commands: .specify/templates/commands/*.md — not present; .cursor/commands/*.md — no change required.
+Runtime: README.md — link-only to constitution; no change required.
 Deferred: None.
 -->
 
@@ -63,9 +62,14 @@ where a warehouse and dbt path apply.
 
 - Python work MUST target `requires-python` in `pyproject.toml` (currently >=3.12). Runtime packages
   belong in `[project] dependencies`; dev-only tools (e.g. pytest) MUST be added with `uv add --dev`.
-- **Generator scripts** (e.g. synthetic event producers): runtime logic SHOULD use only the Python
-  standard library unless a feature specification explicitly adds a runtime dependency with written
-  justification; additions MUST land in `[project] dependencies` and the spec, not ad hoc installs.
+- **Standard library is the default for runtime code**: Generator scripts, CLIs, and other feature
+  **runtime** logic MUST use only the **Python standard library** unless the feature specification
+  documents a **non-stdlib** dependency with **written justification**. A non-stdlib runtime dependency
+  is permitted when **either** staying stdlib-only would make the implementation **significantly** more
+  **complex**, **error-prone**, or **opaque**, **or** the dependency makes the code **clearly**
+  **cleaner**, **simpler**, **easier to read**, or **easier to use** for maintainers and callers. The
+  justification MUST be **concrete and reviewable**; vague preference or unexplained dependency sprawl
+  does **not** qualify. Additions MUST land in `[project] dependencies` and the spec, not ad hoc installs.
 - When adding or changing Python behavior, contributors MUST prefer **test-driven development**:
   write or extend a **failing** pytest test that encodes the desired behavior, implement the smallest
   change that makes it pass, then refactor if needed.
@@ -75,8 +79,9 @@ where a warehouse and dbt path apply.
   `uv run <tool>` when configured as a project script). Contributors MUST NOT use `pip install` or
   bare `python` for project work unless UV is unavailable and the user explicitly allows it.
 - Any dependency change MUST be reflected in `pyproject.toml` **and** `uv.lock` via UV only.
-- **Rationale**: Lockfile-backed reproducibility, minimal runtime footprint for generators, and tests as
-  the contract for Python code.
+- **Rationale**: Lockfile-backed reproducibility, a **minimal and deliberate** runtime footprint, and
+  tests as the contract for Python code. Exceptions reward **maintainability and clarity** as well as
+  avoiding brittle stdlib-only code.
 
 ### VII. Spec-first normative behavior
 
@@ -123,6 +128,23 @@ where a warehouse and dbt path apply.
   constants (or configuration with defaults), not as unexplained literals scattered through code.
 - **Rationale**: Readable demos and safer refactors.
 
+### XIII. Object-oriented Python when structure benefits the problem
+
+- Contributors MUST use **object-oriented** design (classes that group data with behavior, encapsulate
+  **invariant** state, expose a small **public** API, support **polymorphism** or **dependency
+  injection** for tests) when the problem fits one or more of: **real-world entities** with behavior;
+  **multiple related fields** that must stay consistent; **shared behavior** via inheritance or
+  composition; **interchangeable** implementations behind one interface; **large or growing** modules
+  that need clear boundaries; **reusable** library or CLI internals; **event-driven** or GUI-style
+  components; or **state-dependent** branching where behavior varies with encapsulated state.
+- Contributors MUST **prefer functions and plain data** (procedural or functional style) for **simple
+  linear scripts**, **stateless** transformations, and **data-heavy pipelines** where classes add
+  ceremony without clarity.
+- When the **same group of values** is passed through many related functions or **shared behavior**
+  spans entities, **favor** classes and encapsulation over scattered parameters.
+- **Rationale**: OOP and functional/procedural styles are both idiomatic Python; the choice MUST match
+  problem shape so generators and pipelines stay readable and testable.
+
 ## Project scope & non-goals
 
 This project is **blauw_zwart_fan_sim_pipeline**: synthetic fan event data for analytics and AI, within
@@ -148,6 +170,11 @@ bar.
   verification before merge MUST include **`uv run pytest`** passing at repository root unless
   Complexity Tracking documents a justified exception.
 - Python dependency changes MUST land only through UV so `pyproject.toml` and `uv.lock` stay in sync.
+  New **runtime** dependencies MUST meet the **VI** bar (stdlib default; non-stdlib only with written
+  justification per **VI**, including clarity/readability or avoiding significantly worse stdlib-only
+  code).
+- Non-trivial **Python structure** (beyond thin scripts) MUST align with **XIII**: OOP where entities,
+  state, interfaces, or test seams warrant it; otherwise functions and explicit data flow.
 
 ## Governance
 
@@ -163,7 +190,8 @@ bar.
 - **Compliance**: Reviewers MUST verify plans and specs reference warehouse models for analytics,
   preserve raw immutability, include or extend dbt tests for changed models, respect demo-first
   trade-offs, align code with cited spec and contract versions, enforce reproducibility and NDJSON
-  testing where applicable, and—for Python changes—enforce TDD-oriented pytest coverage and UV-based
-  workflows. Use `.specify/memory/constitution.md` as the authoritative checklist.
+  testing where applicable, and—for Python changes—enforce TDD-oriented pytest coverage, UV-based
+  workflows, **stdlib-first runtime dependencies per VI**, and **appropriate** OOP vs functional
+  structure per **XIII**. Use `.specify/memory/constitution.md` as the authoritative checklist.
 
-**Version**: 1.2.0 | **Ratified**: 2026-04-04 | **Last Amended**: 2026-04-04
+**Version**: 1.5.0 | **Ratified**: 2026-04-04 | **Last Amended**: 2026-04-06
