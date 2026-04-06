@@ -31,6 +31,10 @@
   - Details: 
   - Owner: 
   - Due: 
+- [ ] Setup Kafka container
+  - Details: Provision a Kafka container, ideally via Docker Compose, for local development and testing. Ensure connectivity settings are documented for producers/consumers.  
+  - Owner: 
+  - Due: 
 
 ---
 

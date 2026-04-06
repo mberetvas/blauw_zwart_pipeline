@@ -58,11 +58,18 @@ and AI; demo-quality Fan-360 when warehouse path applies):
   kickoffs) document conversion to UTC.
 - **Simplicity**: Small CLI, clear defaults; domain constants (capacities, venue facts) are named and
   documented, not magic numbers.
-- **Python / TDD / UV / generator deps**: Plans that touch Python code name test additions or updates
-  (pytest) and prefer red–green–refactor; generator runtime SHOULD stay stdlib-only unless the spec adds
-  a justified dependency. Local and CI commands use **UV** (`uv run pytest` from repo root, `uv run
-  python …` for scripts). Dependencies are managed with `uv add` / `uv add --dev` / `uv remove` only;
-  no `pip install` or bare `python` for project work unless UV is unavailable and explicitly allowed.
+- **Python / TDD / UV / runtime deps (constitution VI)**: Plans that touch Python code name test additions
+  or updates (pytest) and prefer red–green–refactor; **runtime** code MUST stay **stdlib-only** unless the
+  spec documents a non-stdlib dependency with written justification per **VI** (clearly **cleaner**,
+  **simpler**, **easier to read**, or **easier to use**, **or** stdlib-only would be **significantly** more
+  **complex**, **error-prone**, or **opaque**). Local and CI commands use **UV** (`uv run pytest` from
+  repo root, `uv run python …` for scripts). Dependencies are managed with `uv add` / `uv add --dev` /
+  `uv remove` only; no `pip install` or bare `python` for project work unless UV is unavailable and
+  explicitly allowed.
+- **Python / OOP vs functions per constitution XIII**: Plans that introduce non-trivial Python structure
+  MUST state whether **classes** (entities, encapsulated state, polymorphism, test doubles) or
+  **functions and plain data** (linear scripts, stateless transforms, pipeline-style flow) fit the
+  feature; Complexity Tracking MUST justify exceptions when the chosen style diverges from that fit.
 
 ## Project Structure
 

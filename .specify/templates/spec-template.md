@@ -120,8 +120,15 @@ Per project constitution:
 - **FR-PY-002**: Dependencies and runs MUST go through **UV** (`uv add`, `uv add --dev`, `uv remove`;
   `uv run pytest`; `uv run python <script>`). Lockfile (`uv.lock`) MUST stay aligned with
   `pyproject.toml` via UV only.
-- **FR-PY-003**: Generator and CLI runtime SHOULD remain stdlib-only unless this spec documents a new
-  runtime dependency with justification; Python MUST meet `requires-python` in `pyproject.toml`.
+- **FR-PY-003**: Generator, CLI, and feature **runtime** code MUST remain **stdlib-only** unless this spec
+  documents a **non-stdlib** runtime dependency with written justification per constitution **VI**
+  (clearly **cleaner**, **simpler**, **easier to read**, or **easier to use**, **or** a stdlib-only
+  approach would be **significantly** more **complex**, **error-prone**, or **opaque**); Python MUST meet
+  `requires-python` in `pyproject.toml`.
+- **FR-PY-004**: For Python beyond simple scripts or stateless transforms, this spec MUST describe or
+  delegate (with rationale) **structure per constitution XIII**: **OOP** (classes) when entities,
+  coordinated state, shared behavior, polymorphism, encapsulation, or test seams apply; **functions**
+  and plain data for linear pipelines and stateless flows.
 
 ### Spec, contracts, and synthetic interchange *(mandatory when feature defines NDJSON, events, or machine-readable handoff files)*
 
