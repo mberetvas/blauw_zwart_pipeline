@@ -5,6 +5,7 @@ All tests use a mock Producer — no real broker required.
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,6 +16,7 @@ from fan_events.kafka_sink import (
     KafkaSink,
     build_producer_config,
     kafka_config_from_env,
+    summarize_bootstrap_for_log,
 )
 
 # ---------------------------------------------------------------------------
@@ -147,6 +149,14 @@ def _mock_producer() -> MagicMock:
     return MagicMock()
 
 
+@pytest.fixture(autouse=True)
+def _reset_kafka_logger() -> None:
+    """Ensure the fan_events.kafka logger is clean between tests."""
+    kafka_logger = logging.getLogger("fan_events.kafka")
+    kafka_logger.handlers.clear()
+    kafka_logger.setLevel(logging.NOTSET)
+
+
 def test_kafka_sink_write_produces_utf8() -> None:
     producer = _mock_producer()
     sink = KafkaSink(producer, "test-topic")
@@ -181,14 +191,13 @@ def test_kafka_sink_close_calls_producer_flush_with_timeout() -> None:
     producer.flush.assert_called_once_with(timeout=30)
 
 
-def test_kafka_sink_close_warns_on_remaining(capsys: pytest.CaptureFixture[str]) -> None:
+def test_kafka_sink_close_warns_on_remaining(caplog: pytest.LogCaptureFixture) -> None:
     producer = _mock_producer()
     producer.flush.return_value = 3  # 3 messages not delivered
     sink = KafkaSink(producer, "t")
-    sink.close()
-    captured = capsys.readouterr()
-    assert "3" in captured.err
-    assert "not confirmed" in captured.err
+    with caplog.at_level(logging.WARNING, logger="fan_events.kafka"):
+        sink.close()
+    assert any("3" in r.message and "not confirmed" in r.message for r in caplog.records)
 
 
 def test_kafka_sink_delivery_error_raises_on_next_write() -> None:
@@ -353,6 +362,7 @@ def test_import_error_exits_with_message(capsys: pytest.CaptureFixture[str]) -> 
         max_duration = None
         emit_wall_clock_min = None
         emit_wall_clock_max = None
+        verbose = False
 
     with patch.dict(sys.modules, {"confluent_kafka": None}):
         with pytest.raises(SystemExit) as exc_info:
@@ -362,3 +372,168 @@ def test_import_error_exits_with_message(capsys: pytest.CaptureFixture[str]) -> 
     captured = capsys.readouterr()
     assert "confluent-kafka" in captured.err
     assert "kafka" in captured.err  # references the [kafka] extra
+
+
+# ---------------------------------------------------------------------------
+# summarize_bootstrap_for_log
+# ---------------------------------------------------------------------------
+
+
+def test_summarize_bootstrap_single_broker() -> None:
+    assert summarize_bootstrap_for_log("localhost:9092") == "1 broker (localhost:9092)"
+
+
+def test_summarize_bootstrap_multiple_brokers() -> None:
+    result = summarize_bootstrap_for_log("broker1:9092, broker2:9092, broker3:9092")
+    assert "3 brokers" in result
+    assert "broker1:9092" in result
+
+
+def test_summarize_bootstrap_empty_string() -> None:
+    assert summarize_bootstrap_for_log("") == "0 brokers"
+
+
+# ---------------------------------------------------------------------------
+# KafkaSink — logging (progress, delivery errors, close)
+# ---------------------------------------------------------------------------
+
+
+def test_kafka_sink_progress_log_at_interval(caplog: pytest.LogCaptureFixture) -> None:
+    """After *progress_interval* successful deliveries an INFO log should appear."""
+    producer = _mock_producer()
+    sink = KafkaSink(producer, "t", progress_interval=4)
+
+    mock_msg = MagicMock()
+    mock_msg.value.return_value = b"payload"
+
+    with caplog.at_level(logging.INFO, logger="fan_events.kafka"):
+        for _ in range(4):
+            sink._on_delivery(None, mock_msg)
+
+    progress_records = [r for r in caplog.records if "produced 4 messages" in r.message]
+    assert len(progress_records) == 1
+
+
+def test_kafka_sink_no_progress_log_before_interval(caplog: pytest.LogCaptureFixture) -> None:
+    """Before reaching progress_interval, no INFO progress log should appear."""
+    producer = _mock_producer()
+    sink = KafkaSink(producer, "t", progress_interval=256)
+
+    mock_msg = MagicMock()
+    mock_msg.value.return_value = b"x"
+
+    with caplog.at_level(logging.INFO, logger="fan_events.kafka"):
+        for _ in range(10):
+            sink._on_delivery(None, mock_msg)
+
+    progress_records = [r for r in caplog.records if "produced" in r.message]
+    assert len(progress_records) == 0
+
+
+def test_kafka_sink_delivery_error_logged(caplog: pytest.LogCaptureFixture) -> None:
+    """Delivery failure must emit an ERROR log with the broker error string."""
+    producer = _mock_producer()
+    sink = KafkaSink(producer, "t")
+
+    fake_err = MagicMock()
+    fake_err.__str__ = lambda self: "broker not available"
+
+    with caplog.at_level(logging.ERROR, logger="fan_events.kafka"):
+        sink._on_delivery(fake_err, MagicMock())
+
+    assert any(
+        r.levelno == logging.ERROR and "broker not available" in r.message for r in caplog.records
+    )
+    # Still stores the error for RuntimeError on next operation
+    assert sink._delivery_error == "broker not available"
+
+
+def test_kafka_sink_close_info_log(caplog: pytest.LogCaptureFixture) -> None:
+    """close() must emit an INFO log about flushing."""
+    producer = _mock_producer()
+    producer.flush.return_value = 0
+    sink = KafkaSink(producer, "t")
+    with caplog.at_level(logging.INFO, logger="fan_events.kafka"):
+        sink.close()
+    assert any("flushing" in r.message.lower() for r in caplog.records)
+
+
+def test_kafka_sink_counters_accumulate() -> None:
+    """produced_count and produced_bytes accumulate across deliveries."""
+    producer = _mock_producer()
+    sink = KafkaSink(producer, "t")
+
+    msg = MagicMock()
+    msg.value.return_value = b"hello"
+
+    for _ in range(5):
+        sink._on_delivery(None, msg)
+
+    assert sink._produced_count == 5
+    assert sink._produced_bytes == 25
+
+
+# ---------------------------------------------------------------------------
+# CLI: --verbose flag
+# ---------------------------------------------------------------------------
+
+
+def test_parse_stream_verbose_flag() -> None:
+    ns = parse_args([SUBCOMMAND_STREAM, "--verbose", "--kafka-topic", "t", "--max-events", "1"])
+    assert ns.verbose is True
+
+
+def test_parse_stream_no_verbose_default() -> None:
+    ns = parse_args([SUBCOMMAND_STREAM, "--kafka-topic", "t", "--max-events", "1"])
+    assert ns.verbose is False
+
+
+# ---------------------------------------------------------------------------
+# CLI integration: _run_stream_kafka startup log
+# ---------------------------------------------------------------------------
+
+
+def test_run_stream_kafka_startup_log(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_run_stream_kafka must emit an INFO startup line with topic and bootstrap summary."""
+    import sys
+    from unittest.mock import patch
+
+    from fan_events.cli import _run_stream_kafka
+
+    class _FakeArgs:
+        kafka_topic = "test-topic"
+        kafka_bootstrap_servers = "broker1:9092,broker2:9092"
+        kafka_client_id = "test-client"
+        kafka_compression = None
+        kafka_acks = None
+        max_events = 0
+        max_duration = None
+        emit_wall_clock_min = None
+        emit_wall_clock_max = None
+        verbose = False
+
+    mock_producer_cls = MagicMock()
+    mock_producer_instance = MagicMock()
+    mock_producer_instance.flush.return_value = 0
+    mock_producer_cls.return_value = mock_producer_instance
+
+    kafka_logger = logging.getLogger("fan_events.kafka")
+    kafka_logger.addHandler(caplog.handler)
+
+    with (
+        caplog.at_level(logging.INFO, logger="fan_events.kafka"),
+        patch.dict(sys.modules, {"confluent_kafka": MagicMock(Producer=mock_producer_cls)}),
+    ):
+        _run_stream_kafka(_FakeArgs(), iter([]), None, None, None)
+
+    startup = [r for r in caplog.records if "test-topic" in r.message]
+    assert len(startup) >= 1
+    assert any("2 brokers" in r.message for r in startup)
+    # Must NOT contain SASL passwords
+    assert not any(
+        "sasl" in r.message.lower() and "password" in r.message.lower()
+        for r in caplog.records
+    )

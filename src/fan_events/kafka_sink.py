@@ -24,10 +24,12 @@ All messages are produced with ``key=None`` (null → Kafka round-robin partitio
 
 from __future__ import annotations
 
+import logging
 import os
-import sys
 from dataclasses import dataclass, field
 from typing import Any
+
+logger = logging.getLogger("fan_events.kafka")
 
 _ENV_PREFIX = "FAN_EVENTS_KAFKA_"
 
@@ -94,6 +96,21 @@ def build_producer_config(cfg: KafkaConfig) -> dict[str, Any]:
     return conf
 
 
+def summarize_bootstrap_for_log(servers: str) -> str:
+    """Return a safe summary of bootstrap servers for INFO-level logging.
+
+    At INFO the summary is ``"3 brokers (first: kafka:9092)"``; callers wanting the
+    full list should log it at DEBUG separately.  Never includes SASL credentials.
+    """
+    brokers = [b.strip() for b in servers.split(",") if b.strip()]
+    count = len(brokers)
+    if count == 0:
+        return "0 brokers"
+    if count == 1:
+        return f"1 broker ({brokers[0]})"
+    return f"{count} brokers (first: {brokers[0]})"
+
+
 class KafkaSink:
     """Duck-typed sink that publishes NDJSON lines to a Kafka topic.
 
@@ -123,14 +140,38 @@ class KafkaSink:
     call.
     """
 
-    def __init__(self, producer: Any, topic: str) -> None:
+    def __init__(
+        self,
+        producer: Any,
+        topic: str,
+        *,
+        progress_interval: int = 256,
+    ) -> None:
         self._producer = producer
         self._topic = topic
         self._delivery_error: str | None = None
+        self._progress_interval = progress_interval
+        self._produced_count: int = 0
+        self._produced_bytes: int = 0
 
     def _on_delivery(self, err: Any, _msg: Any) -> None:
-        if err is not None and self._delivery_error is None:
-            self._delivery_error = str(err)
+        if err is not None:
+            logger.error("Kafka delivery failed: %s", err)
+            if self._delivery_error is None:
+                self._delivery_error = str(err)
+            return
+        self._produced_count += 1
+        if _msg is not None:
+            try:
+                self._produced_bytes += len(_msg.value()) if _msg.value() else 0
+            except Exception:  # noqa: BLE001 – defensive; mock messages may not support .value()
+                pass
+        if self._progress_interval > 0 and self._produced_count % self._progress_interval == 0:
+            logger.info(
+                "Kafka: produced %d messages (~%d bytes)",
+                self._produced_count,
+                self._produced_bytes,
+            )
 
     def _check_error(self) -> None:
         if self._delivery_error:
@@ -151,11 +192,11 @@ class KafkaSink:
 
     def close(self) -> None:
         """Block until all in-flight messages are delivered or timeout expires."""
+        logger.info("Closing Kafka producer — flushing in-flight messages")
         remaining = self._producer.flush(timeout=30)
         if remaining > 0:
-            print(
-                f"fan_events: warning: {remaining} Kafka message(s) not confirmed "
-                "before flush timeout",
-                file=sys.stderr,
+            logger.warning(
+                "%d Kafka message(s) not confirmed before flush timeout",
+                remaining,
             )
         self._check_error()

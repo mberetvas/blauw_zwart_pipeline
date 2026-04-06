@@ -11,6 +11,7 @@ Normative contracts:
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import random
 import sys
@@ -134,14 +135,8 @@ _EX_KAFKA_FLAGS = (
 )
 
 EPILOG_STREAM = (
-    "Unified NDJSON stream (v2 match events + v3 retail), merge-sorted by synthetic time.\n\n"
-    "Each emitted line is complete (LF-terminated) before flush; Ctrl+C may stop after a full "
-    "line only.\n\n"
-    "Without --max-events / --max-duration on this subcommand, the merged stream may run until "
-    "Ctrl+C, generator exhaustion, or retail internal limits — mind CPU, disk, and terminal "
-    "I/O.\n\n"
-    "Kafka output: use --kafka-topic to publish events to a Kafka topic instead of stdout/file.\n"
-    "Start a local broker: just kafka  (runs docker run -p 9092:9092 apache/kafka:4.1.2)\n\n"
+    "Without --max-events or --max-duration the stream runs until Ctrl+C or exhaustion.\n"
+    "Start a local Kafka broker: just kafka\n\n"
     "Examples:\n\n"
     + "\n".join(
         (
@@ -150,9 +145,9 @@ EPILOG_STREAM = (
             "fan_events stream -c cal.json --no-retail -s 42",
             _EX_STREAM_RETAIL_ONLY,
             "",
-            "# Kafka — via environment variables (.env or export):",
+            "# Kafka via env vars:",
             _EX_KAFKA_ENV,
-            "# Kafka — via CLI flags (bootstrap-servers defaults to localhost:9092):",
+            "# Kafka via CLI flags:",
             _EX_KAFKA_FLAGS,
         )
     )
@@ -482,7 +477,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     sub = p.add_subparsers(dest="command", required=True, parser_class=ColoredArgumentParser)
     gen = sub.add_parser(
         SUBCOMMAND_EVENTS,
-        help="Generate NDJSON to a file (v1 rolling or v2 calendar).",
+        help="Write v1 (rolling) or v2 (calendar) fan events to a file.",
         formatter_class=ColoredHelpFormatter,
         epilog=EPILOG_GENERATE_EVENTS,
     )
@@ -490,7 +485,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "-o",
         "--output",
         default=DEFAULT_OUTPUT,
-        help=f"Output NDJSON path (default: {DEFAULT_OUTPUT})",
+        help=f"Output NDJSON file path (default: {DEFAULT_OUTPUT})",
     )
     gen.add_argument(
         "-s",
@@ -498,12 +493,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=None,
         help=(
-            "RNG seed for byte-identical reproducibility in v1/v2; v1 also fixes “now” when set "
-            "(default: none — omit for non-deterministic v1/v2 output)"
+            "RNG seed for reproducible output (default: random)"
         ),
     )
 
-    rolling = gen.add_argument_group("Rolling window (fan-events-ndjson-v1)")
+    rolling = gen.add_argument_group("Rolling window (v1)")
     rolling.add_argument(
         "-n",
         "--count",
@@ -516,18 +510,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--days",
         type=int,
         default=DEFAULT_DAYS,
-        help=f"UTC rolling window length ending at generation time (default: {DEFAULT_DAYS})",
+        help=f"Window length in days ending at generation time (default: {DEFAULT_DAYS})",
     )
 
-    cal = gen.add_argument_group("Calendar (fan-events-ndjson-v2)")
+    cal = gen.add_argument_group("Calendar (v2, requires --calendar)")
     cal.add_argument(
         "-c",
         "--calendar",
         type=str,
         default=None,
         help=(
-            "Path to calendar JSON (data-model.md); enables v2 output "
-            "(default: none — omit for v1 rolling window)"
+            "Path to match calendar JSON; enables v2 output"
         ),
     )
     cal.add_argument(
@@ -535,8 +528,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=str,
         default=None,
         help=(
-            "Inclusive lower bound on kickoff UTC date (YYYY-MM-DD) with --calendar "
-            "(default: none — omit both --from-date and --to-date to include every match)"
+            "Earliest match date to include, YYYY-MM-DD (omit to include all)"
         ),
     )
     cal.add_argument(
@@ -544,8 +536,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=str,
         default=None,
         help=(
-            "Inclusive upper bound on kickoff UTC date (YYYY-MM-DD) with --calendar "
-            "(default: none — omit both --from-date and --to-date to include every match)"
+            "Latest match date to include, YYYY-MM-DD (omit to include all)"
         ),
     )
     cal.add_argument(
@@ -553,8 +544,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=None,
         help=(
-            f"Fraction of capacity for ticket_scan volume when using --calendar "
-            f"(default when omitted: {DEFAULT_SCAN_FRACTION})"
+            f"Ticket scan volume as fraction of stadium capacity (default: {DEFAULT_SCAN_FRACTION})"
         ),
     )
     cal.add_argument(
@@ -562,8 +552,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=None,
         help=(
-            f"Scale for merch_purchase event count vs capacity when using --calendar "
-            f"(default when omitted: {DEFAULT_MERCH_FACTOR})"
+            f"Merch purchase count scale relative to capacity (default: {DEFAULT_MERCH_FACTOR})"
         ),
     )
 
@@ -581,20 +570,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="PATH",
         help=(
-            "Companion JSON path: synthetic fan master keyed by fan_id "
-            "(join events.fan_id → fans[fan_id]; not part of NDJSON contracts). "
-            f"Default when omitted: same path as -o/--output with a .json suffix "
-            f"(e.g. {_companion_fans_json_path(DEFAULT_OUTPUT)})"
+            f"Write synthetic fan profiles to this JSON file "
+            f"(default: same path as --output with .json, e.g. {_companion_fans_json_path(DEFAULT_OUTPUT)})"
         ),
     )
 
     ret = sub.add_parser(
         SUBCOMMAND_RETAIL,
-        help=(
-            "Generate match-independent retail_purchase NDJSON (v3) to a file or stdout; "
-            "optional wall-clock delays between stdout lines "
-            "(--emit-wall-clock-min/max with --stream)."
-        ),
+        help="Write v3 retail purchase events to a file or stream to stdout.",
         formatter_class=ColoredHelpFormatter,
         epilog=EPILOG_GENERATE_RETAIL,
     )
@@ -602,7 +585,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "-o",
         "--output",
         default=DEFAULT_RETAIL_OUTPUT,
-        help=f"Output NDJSON path when not using --stream (default: {DEFAULT_RETAIL_OUTPUT})",
+        help=f"Output NDJSON file path (default: {DEFAULT_RETAIL_OUTPUT})",
     )
     ret.add_argument(
         "-s",
@@ -610,9 +593,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=None,
         help=(
-            "RNG seed for reproducible draws (batch, stream); wall-clock sleep intervals use "
-            "a separate pacing RNG derived from the same seed; "
-            "(default: none — omit for non-deterministic output)"
+            "RNG seed for reproducible output (default: random)"
         ),
     )
     ret.add_argument(
@@ -620,11 +601,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--stream",
         action="store_true",
         help=(
-            "Write NDJSON to stdout in generation order (no global sort); ignores -o/--output "
-            "(default: off — write a sorted batch file to -o). "
-            "Without wall-clock emit flags, lines are written as fast as the CPU allows; "
-            "with --emit-wall-clock-min/max, sleep a random interval in [min,max] seconds "
-            "before each line after the first"
+            "Stream NDJSON to stdout instead of writing to a file (default: off)"
         ),
     )
     ret.add_argument(
@@ -633,9 +610,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=None,
         help=(
-            "Stop after N events (0 → empty). Incompatible with --unlimited. "
-            f"If omitted with no --max-duration and no --unlimited, implied cap is "
-            f"{DEFAULT_RETAIL_IMPLIED_MAX_EVENTS} (same as v3 generator default)"
+            "Stop after N events; 0 = empty (default: 200 when no other limits set)"
         ),
     )
     ret.add_argument(
@@ -646,9 +621,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="max_duration",
         metavar="SECONDS",
         help=(
-            "Maximum simulated timeline length in seconds from epoch (timestamps in records) "
-            "(default: none). With -n/--max-events, stop when either limit binds first. "
-            "With --unlimited and file output, required to bound generation"
+            "Stop after N simulated seconds from epoch (default: none)"
         ),
     )
     ret.add_argument(
@@ -657,8 +630,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=str,
         default=None,
         help=(
-            "UTC start instant for the synthetic timeline (ISO-8601, e.g. "
-            f"2026-01-01T00:00:00Z). Default when omitted: {_DEFAULT_RETAIL_EPOCH_HELP_STR}"
+            f"Start of simulated timeline, ISO-8601 UTC (default: {_DEFAULT_RETAIL_EPOCH_HELP_STR})"
         ),
     )
     ret.add_argument(
@@ -668,24 +640,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar=("W1", "W2", "W3"),
         default=None,
         help=(
-            "Three non-negative weights for shops "
-            "(order: jan_breydel_fan_shop, webshop, bruges_city_shop). "
-            "Default when omitted: equal weight per shop (1/3 each)"
+            "Relative weights for 3 shops: jan_breydel_fan_shop, webshop, bruges_city_shop (default: equal)"
         ),
     )
     ret.add_argument(
         "--arrival-mode",
         choices=("poisson", "fixed", "weighted_gap"),
         default="poisson",
-        help="Inter-arrival time model for synthetic timestamps (default: poisson)",
+        help="Time model between events: poisson, fixed, or weighted_gap (default: poisson)",
     )
     ret.add_argument(
         "--poisson-rate",
         type=float,
         default=DEFAULT_RETAIL_POISSON_RATE,
         help=(
-            "Poisson rate (events per second) for expovariate gaps when --arrival-mode poisson "
-            f"(default: {DEFAULT_RETAIL_POISSON_RATE})"
+            f"Arrival rate in events/second for poisson mode (default: {DEFAULT_RETAIL_POISSON_RATE})"
         ),
     )
     ret.add_argument(
@@ -693,8 +662,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=DEFAULT_RETAIL_FIXED_GAP_SECONDS,
         help=(
-            "Seconds between successive synthetic events when --arrival-mode fixed "
-            f"(default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
+            f"Gap in seconds between events for fixed mode (default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
         ),
     )
     ret.add_argument(
@@ -704,8 +672,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="SEC",
         help=(
-            "Candidate gap lengths for --arrival-mode weighted_gap (default: none — requires "
-            "--weighted-gap-weights)"
+            "Gap lengths in seconds for weighted_gap mode (requires --weighted-gap-weights)"
         ),
     )
     ret.add_argument(
@@ -715,8 +682,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="W",
         help=(
-            "Weights for each --weighted-gaps value, same length (default: none — requires "
-            "--weighted-gaps)"
+            "Probability weights for each --weighted-gaps value (same length)"
         ),
     )
     ret.add_argument(
@@ -726,8 +692,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="N",
         help=(
-            "Upper bound for fan_id numeric suffix pool (default when omitted: heuristic from "
-            "implied event cap in v3 retail, typically up to 500)"
+            "Max fan ID pool size (default: auto)"
         ),
     )
     ret.add_argument(
@@ -737,9 +702,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="SEC",
         dest="emit_wall_clock_min",
         help=(
-            "Requires --stream. Lower bound (seconds) for random wall-clock sleep before each "
-            "stdout line after the first; draw uses a separate pacing RNG derived from --seed "
-            "(default: none — set with --emit-wall-clock-max). 0 <= min <= max"
+            "Min sleep in seconds between stdout lines; requires --stream and --emit-wall-clock-max"
         ),
     )
     ret.add_argument(
@@ -749,8 +712,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="SEC",
         dest="emit_wall_clock_max",
         help=(
-            "Requires --stream. Upper bound (seconds) for wall-clock sleep between lines "
-            "(default: none — pair with --emit-wall-clock-min)"
+            "Max sleep in seconds between stdout lines; requires --stream and --emit-wall-clock-min"
         ),
     )
     ret.add_argument(
@@ -758,11 +720,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--unlimited",
         action="store_true",
         help=(
-            f"Skip the implied --max-events {DEFAULT_RETAIL_IMPLIED_MAX_EVENTS} cap when both "
-            "-n/--max-events and -d/--max-duration are omitted (run until Ctrl+C or until "
-            "--max-duration ends the simulated timeline). Default: off. Incompatible with -n. "
-            "With --stream, also requires wall-clock emit bounds and/or --max-duration so "
-            "output cannot buffer forever"
+            f"Remove the default {DEFAULT_RETAIL_IMPLIED_MAX_EVENTS}-event cap; requires --max-duration or emit bounds with --stream"
         ),
     )
     ret.add_argument(
@@ -772,19 +730,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="PATH",
         help=(
-            "Companion JSON path: synthetic fan master keyed by fan_id "
-            "(join events.fan_id → fans[fan_id]; not part of NDJSON contracts). "
-            f"Default when omitted: same path as -o/--output with a .json suffix "
-            f"(e.g. {_companion_fans_json_path(DEFAULT_RETAIL_OUTPUT)})"
+            f"Write synthetic fan profiles to this JSON file "
+            f"(default: same path as --output with .json, e.g. {_companion_fans_json_path(DEFAULT_RETAIL_OUTPUT)})"
         ),
     )
 
     st = sub.add_parser(
         SUBCOMMAND_STREAM,
-        help=(
-            "Emit one UTF-8 NDJSON stream: v2 match events and/or v3 retail, "
-            "merge-sorted by synthetic time (stdout, append file, optional pacing)."
-        ),
+        help="Stream v2 match events and/or v3 retail as merged NDJSON sorted by time.",
         formatter_class=ColoredHelpFormatter,
         epilog=EPILOG_STREAM,
     )
@@ -795,8 +748,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="PATH",
         help=(
-            "Append NDJSON lines to this path (UTF-8, LF). "
-            "Omit or use '-' for stdout (default: stdout)"
+            "Append output to this file; omit or use '-' for stdout (default: stdout)"
         ),
     )
     st.add_argument(
@@ -805,14 +757,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=None,
         help=(
-            "RNG seed for v2, retail, and pacing draws "
-            "(default: none — non-deterministic)"
+            "RNG seed for reproducible output (default: random)"
         ),
     )
     st.add_argument(
         "--no-retail",
         action="store_true",
-        help="With --calendar: v2 only (omit v3 retail_purchase from the merged stream)",
+        help="Only emit v2 match events, skip retail (requires --calendar)",
     )
     cal_s = st.add_argument_group("Calendar (fan-events-ndjson-v2), optional")
     cal_s.add_argument(
@@ -820,27 +771,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--calendar",
         type=str,
         default=None,
-        help="Path to calendar JSON; omit for retail-only stream",
+        help="Path to match calendar JSON; enables v2 events in the stream",
     )
     cal_s.add_argument(
         "--from-date",
         type=str,
         default=None,
-        help="Inclusive lower bound on kickoff UTC date (YYYY-MM-DD) with --calendar",
+        help="Earliest match date to include, YYYY-MM-DD (requires --calendar)",
     )
     cal_s.add_argument(
         "--to-date",
         type=str,
         default=None,
-        help="Inclusive upper bound on kickoff UTC date (YYYY-MM-DD) with --calendar",
+        help="Latest match date to include, YYYY-MM-DD (requires --calendar)",
     )
     cal_s.add_argument(
         "--scan-fraction",
         type=float,
         default=None,
         help=(
-            f"Ticket_scan volume fraction of capacity "
-            f"(default when omitted: {DEFAULT_SCAN_FRACTION})"
+            f"Ticket scan volume as fraction of stadium capacity (default: {DEFAULT_SCAN_FRACTION})"
         ),
     )
     cal_s.add_argument(
@@ -848,7 +798,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=None,
         help=(
-            f"Merch event count scale vs capacity (default when omitted: {DEFAULT_MERCH_FACTOR})"
+            f"Merch purchase count scale relative to capacity (default: {DEFAULT_MERCH_FACTOR})"
         ),
     )
     cal_s.add_argument(
@@ -865,9 +815,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="N",
         help=(
-            "Stop after N complete lines after merge (optional). "
-            "Without --max-duration, the stream may run until interrupt or exhaustion — "
-            "see epilog."
+            "Stop after N merged output lines (default: none)"
         ),
     )
     lim.add_argument(
@@ -877,8 +825,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="SECONDS",
         dest="max_duration",
         help=(
-            "Maximum simulated span in seconds from the first emitted timestamp (optional); "
-            "omit lines that would exceed the window"
+            "Stop after N simulated seconds from the first event (default: none)"
         ),
     )
     rlim = st.add_argument_group("Retail-only iterator limits (v3, before merge)")
@@ -889,9 +836,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="N",
         dest="retail_max_events",
         help=(
-            "Cap retail events before merge (optional). When omitted with no "
-            "--retail-max-duration, retail uses unbounded count until post-merge caps or Ctrl+C "
-            f"(no implied {DEFAULT_RETAIL_IMPLIED_MAX_EVENTS} cap on stream)"
+            "Cap retail events before merging (default: none)"
         ),
     )
     rlim.add_argument(
@@ -900,7 +845,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="SECONDS",
         dest="retail_max_duration",
-        help="Maximum simulated retail timeline length in seconds from epoch (optional)",
+        help="Max simulated retail timeline in seconds (default: none)",
     )
     st.add_argument(
         "-E",
@@ -908,8 +853,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=str,
         default=None,
         help=(
-            "UTC start instant for retail synthetic timeline (ISO-8601). "
-            f"Default when omitted: {_DEFAULT_RETAIL_EPOCH_HELP_STR}"
+            f"Start of retail synthetic timeline, ISO-8601 UTC (default: {_DEFAULT_RETAIL_EPOCH_HELP_STR})"
         ),
     )
     st.add_argument(
@@ -918,27 +862,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         metavar=("W1", "W2", "W3"),
         default=None,
-        help="Three non-negative weights for retail shops (same order as generate_retail)",
+        help="Weights for 3 retail shops: jan_breydel_fan_shop, webshop, bruges_city_shop (default: equal)",
     )
     st.add_argument(
         "--arrival-mode",
         choices=("poisson", "fixed", "weighted_gap"),
         default="poisson",
-        help="Retail inter-arrival model (default: poisson)",
+        help="Time model between retail events: poisson, fixed, or weighted_gap (default: poisson)",
     )
     st.add_argument(
         "--poisson-rate",
         type=float,
         default=DEFAULT_RETAIL_POISSON_RATE,
-        help=f"Poisson rate when --arrival-mode poisson (default: {DEFAULT_RETAIL_POISSON_RATE})",
+        help=f"Arrival rate in events/second for poisson mode (default: {DEFAULT_RETAIL_POISSON_RATE})",
     )
     st.add_argument(
         "--fixed-gap-seconds",
         type=float,
         default=DEFAULT_RETAIL_FIXED_GAP_SECONDS,
         help=(
-            "Seconds between retail events when --arrival-mode fixed "
-            f"(default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
+            f"Gap in seconds between retail events for fixed mode (default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
         ),
     )
     st.add_argument(
@@ -947,7 +890,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=None,
         metavar="SEC",
-        help="Candidate gaps for --arrival-mode weighted_gap",
+        help="Gap lengths in seconds for weighted_gap mode (requires --weighted-gap-weights)",
     )
     st.add_argument(
         "--weighted-gap-weights",
@@ -955,7 +898,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=None,
         metavar="W",
-        help="Weights for each --weighted-gaps value",
+        help="Probability weights for each --weighted-gaps value (same length)",
     )
     st.add_argument(
         "-p",
@@ -964,8 +907,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="N",
         help=(
-            "When calendar + retail: shared upper bound for fan_id suffix pool on both sides "
-            "(default: heuristic from calendar capacity). Retail-only: same as generate_retail."
+            "Max fan ID pool size; shared between v2 and v3 when both active (default: auto)"
         ),
     )
     st.add_argument(
@@ -975,8 +917,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="SEC",
         dest="emit_wall_clock_min",
         help=(
-            "Lower bound (seconds) for random wall-clock sleep before each merged line after "
-            "the first; pair with --emit-wall-clock-max"
+            "Min sleep in seconds between output lines (requires --emit-wall-clock-max)"
         ),
     )
     st.add_argument(
@@ -985,18 +926,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="SEC",
         dest="emit_wall_clock_max",
-        help="Upper bound (seconds) for wall-clock sleep between merged lines",
+        help="Max sleep in seconds between output lines (requires --emit-wall-clock-min)",
     )
     kafka_g = st.add_argument_group(
         "Kafka output (mutually exclusive with -o / --output)",
         description=(
-            "Publish each NDJSON line to a Kafka topic instead of stdout or a file. "
-            "Broker and security settings are read from FAN_EVENTS_KAFKA_* env vars; "
-            "CLI flags override env when both are set. "
-            "Secrets (SASL passwords) are env-only — never pass them as CLI flags. "
-            "Message key is always null (round-robin partitioning). "
-            "Start a local broker: just kafka  "
-            "(docker run -p 9092:9092 apache/kafka:4.1.2)"
+            "Publish to a Kafka topic instead of stdout or a file. "
+            "Configure via FAN_EVENTS_KAFKA_* env vars or CLI flags. "
+            "Start a local broker: just kafka"
         ),
     )
     kafka_g.add_argument(
@@ -1006,9 +943,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="TOPIC",
         dest="kafka_topic",
         help=(
-            "Publish events to this Kafka topic (enables Kafka mode). "
-            "Env: FAN_EVENTS_KAFKA_TOPIC (CLI overrides env). "
-            "Mutually exclusive with -o / --output."
+            "Kafka topic to publish to; enables Kafka mode (env: FAN_EVENTS_KAFKA_TOPIC)"
         ),
     )
     kafka_g.add_argument(
@@ -1018,8 +953,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="SERVERS",
         dest="kafka_bootstrap_servers",
         help=(
-            "Comma-separated broker list. "
-            "Env: FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS (default: localhost:9092)"
+            "Broker addresses, e.g. localhost:9092 (env: FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS)"
         ),
     )
     kafka_g.add_argument(
@@ -1029,8 +963,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="ID",
         dest="kafka_client_id",
         help=(
-            "Producer client.id. "
-            "Env: FAN_EVENTS_KAFKA_CLIENT_ID (default: fan-events-producer)"
+            "Producer client ID (env: FAN_EVENTS_KAFKA_CLIENT_ID, default: fan-events-producer)"
         ),
     )
     kafka_g.add_argument(
@@ -1039,8 +972,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         dest="kafka_compression",
         help=(
-            "Compression codec for produced messages. "
-            "Env: FAN_EVENTS_KAFKA_COMPRESSION (default: none)"
+            "Message compression codec (env: FAN_EVENTS_KAFKA_COMPRESSION, default: none)"
         ),
     )
     kafka_g.add_argument(
@@ -1050,9 +982,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="ACKS",
         dest="kafka_acks",
         help=(
-            "Required broker acknowledgements: 0, 1, or all / -1. "
-            "Env: FAN_EVENTS_KAFKA_ACKS (default: 1)"
+            "Required broker acks: 0, 1, or all/-1 (env: FAN_EVENTS_KAFKA_ACKS, default: 1)"
         ),
+    )
+    st.add_argument(
+        "--verbose",
+        action="store_true",
+        default=False,
+        dest="verbose",
+        help="Raise Kafka logger to DEBUG for verbose broker diagnostics on stderr",
     )
 
     ns = p.parse_args(argv)
@@ -1255,6 +1193,31 @@ def run_stream(args: argparse.Namespace) -> None:
             )
 
 
+def _configure_kafka_observability(verbose: bool = False) -> None:
+    """Attach a stderr handler to the ``fan_events.kafka`` logger.
+
+    Called once when entering Kafka mode so non-Kafka subcommands are unaffected.
+    The level is resolved as: ``--verbose`` → DEBUG, else ``FAN_EVENTS_LOG_LEVEL`` /
+    ``LOGLEVEL`` env var, else INFO.
+    """
+    kafka_logger = logging.getLogger("fan_events.kafka")
+
+    if verbose:
+        level = logging.DEBUG
+    else:
+        env_level = os.environ.get("FAN_EVENTS_LOG_LEVEL") or os.environ.get("LOGLEVEL")
+        if env_level:
+            level = getattr(logging, env_level.upper(), logging.INFO)
+        else:
+            level = logging.INFO
+
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    kafka_logger.addHandler(handler)
+    kafka_logger.setLevel(level)
+    kafka_logger.propagate = False
+
+
 def _run_stream_kafka(
     args: argparse.Namespace,
     merged: object,
@@ -1275,7 +1238,15 @@ def _run_stream_kafka(
         )
         sys.exit(1)
 
-    from fan_events.kafka_sink import KafkaSink, build_producer_config, kafka_config_from_env
+    from fan_events.kafka_sink import (
+        KafkaSink,
+        build_producer_config,
+        kafka_config_from_env,
+        summarize_bootstrap_for_log,
+    )
+
+    _configure_kafka_observability(verbose=getattr(args, "verbose", False))
+    kafka_logger = logging.getLogger("fan_events.kafka")
 
     cfg = kafka_config_from_env({
         "topic": args.kafka_topic,
@@ -1284,6 +1255,15 @@ def _run_stream_kafka(
         "compression": args.kafka_compression,
         "acks": args.kafka_acks,
     })
+
+    kafka_logger.info(
+        "Kafka mode — topic=%s  client_id=%s  bootstrap=%s",
+        cfg.topic,
+        cfg.client_id,
+        summarize_bootstrap_for_log(cfg.bootstrap_servers),
+    )
+    kafka_logger.debug("Full bootstrap servers: %s", cfg.bootstrap_servers)
+
     producer = Producer(build_producer_config(cfg))
     sink = KafkaSink(producer, cfg.topic)
     try:
