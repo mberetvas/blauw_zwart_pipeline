@@ -2,7 +2,7 @@
 
 # Blauw zwart - Mock-up data creator
 
-Synthetic fan events are produced by the `fan_events` package (`src/fan_events/`). The CLI exposes two subcommands: **`generate_events`** (match-related **v1** rolling window or **v2** calendar) and **`generate_retail`** (**v3** match-independent retail). Run commands from the **repository root** after `uv sync`, using either `uv run fan_events …` or `uv run python -m fan_events …`.
+Synthetic fan events are produced by the `fan_events` package (`src/fan_events/`). The CLI exposes **`generate_events`** (match-related **v1** rolling window or **v2** calendar), **`generate_retail`** (**v3** match-independent retail), and **`stream`** (one time-ordered NDJSON stream mixing **v2** and **v3** when both are enabled). Run commands from the **repository root** after `uv sync`, using either `uv run fan_events …` or `uv run python -m fan_events …`.
 
 Or you can install the package using
 
@@ -20,20 +20,23 @@ After installation, the `fan_events` entry point is on your `PATH`. Use the same
 | **v1** (default) | `generate_events` without `-c` / `--calendar` | Rolling UTC window — no `match_id` on lines |
 | **v2** | `generate_events -c` / `--calendar …` | Match calendar — every line has `match_id` |
 | **v3 retail** | `generate_retail` | `retail_purchase` only — [`fan-events-ndjson-v3.md`](specs/003-ndjson-v3-retail-sim/contracts/fan-events-ndjson-v3.md) |
+| **Unified stream** | `stream` | **v2** and/or **v3** lines merged by synthetic time — [`cli-stream.md`](specs/004-unified-synthetic-stream/contracts/cli-stream.md) |
 
 ```bash
 # After `uv sync` at the repo root
 uv run fan_events generate_events [options]
 uv run fan_events generate_retail [options]
+uv run fan_events stream [options]
 
 # Installed package: same commands without `uv run`
 fan_events generate_events [options]
 fan_events generate_retail [options]
+fan_events stream [options]
 ```
 
 ## Parameters and defaults
 
-Flags are **subcommand-specific**: use a **separate** invocation per subcommand. Options that belong to `generate_events` only (for example `--calendar`, `--count`, `--days`, `--events`) are **not** valid on `generate_retail`—see **`fan_events generate_retail --help`** for the v3 flag list.
+Flags are **subcommand-specific**: use a **separate** invocation per subcommand. Options that belong to `generate_events` only (for example `--calendar`, `--count`, `--days`, `--events`) are **not** valid on `generate_retail`—see **`fan_events generate_retail --help`** for the v3 flag list. For the unified stream, see **`fan_events stream --help`** ([`cli-stream.md`](specs/004-unified-synthetic-stream/contracts/cli-stream.md)); post-merge caps use **`--max-events` / `--max-duration`** (long names only), not `generate_retail`’s **`-n` / `-d`**.
 
 ### Same letter, different meaning (`-n` and `-d`)
 
@@ -42,7 +45,13 @@ Flags are **subcommand-specific**: use a **separate** invocation per subcommand.
 | **`-n`** | `--count` (total events, v1) | `--max-events` (cap; implied default **200** when unset—see v3 table) |
 | **`-d`** | `--days` (rolling window length, v1) | `--max-duration` (simulated seconds from epoch for record timestamps) |
 
-Always check which subcommand you are using. **`fan_events generate_events --help`** and **`fan_events generate_retail --help`** list the authoritative short/long pairs.
+Always check which subcommand you are using. **`fan_events generate_events --help`**, **`fan_events generate_retail --help`**, and **`fan_events stream --help`** list the authoritative short/long pairs.
+
+### `stream` (unified NDJSON)
+
+Merged **stdout** or **append-only file** (`-o` / `--output`): **v2** when `--calendar` is set; **v3** retail is included if there is **no** `--calendar` (retail-only) or if `--calendar` is set **without** `--no-retail` (merged). **Calendar-only** is `--calendar` **with** `--no-retail`. **Post-merge** limits: **`--max-events`**, **`--max-duration`** (simulated span from the first emitted timestamp). **Retail-internal** caps: **`--retail-max-events`**, **`--retail-max-duration`**. Optional **`--emit-wall-clock-min` / `--emit-wall-clock-max`** sleep between **merged** lines (same idea as `generate_retail --stream`). Omitting both post-merge limits yields an **unbounded** run until interrupt, exhaustion, or retail-side caps — see **`fan_events stream --help`**. Pipe stdout to external tools (for example **`kcat`**) without adding a Kafka client to this repo.
+
+Normative detail: [`specs/004-unified-synthetic-stream/quickstart.md`](specs/004-unified-synthetic-stream/quickstart.md).
 
 ### `generate_events` (v1 / v2)
 

@@ -1,0 +1,101 @@
+# Implementation Plan: Unified orchestrated synthetic NDJSON stream (`fan_events stream`)
+
+**Branch**: `004-unified-synthetic-stream` | **Date**: 2026-04-06 | **Spec**: [spec.md](./spec.md)  
+**Input**: Feature specification from `/specs/004-unified-synthetic-stream/spec.md` (with clarifications 2026-04-06)
+
+## Summary
+
+Add a **`stream`** subcommand to `fan_events` that emits **one** time-ordered NDJSON stream combining **v2 calendar-driven** match events (`ticket_scan`, `merch_purchase`) and **v3** `retail_purchase` events, merged by **synthetic timestamp** with deterministic tie-breaks ([`contracts/orchestrated-stream.md`](./contracts/orchestrated-stream.md)). Implementation uses **sorted iterators** per source and **`heapq.merge`** (or equivalent) so the merge is **streaming** and does **not** require loading all events into memory for a global sort.
+
+Refactor or add **iterator-based** generation APIs: **globally time-sorted** lazy streams for v2 (built from per-match sorted chunks) and reuse **`iter_retail_records`** (already strictly increasing in synthetic time). Introduce **`fan_events/orchestrator.py`**: merge, optional **wall-clock pacing** between **emitted** lines (same pattern as `generate_retail --stream`), NDJSON lines via **`dumps_canonical`** / **`format_line_v3`** / v2 validation path from `ndjson_io`. **Sinks**: `stdout` or **append-only** file; existing commands keep **`write_atomic_text`** for batch files. **CLI**: new subparser **`stream`**, reuse **`_retail_generator_kwargs`** and calendar/v2 flags where possible. **Tests**: unit tests for merge ordering and ties; integration tests with **fixed seeds**; CLI smoke. **Docs**: README snippet for stdout and piping to **kcat** (no new core dependencies). **Runtime**: Python **3.12+**, **stdlib** + **`tzdata`** (existing); **pytest** / **ruff** for quality.
+
+## Technical Context
+
+**Language/Version**: Python **3.12+** (`pyproject.toml` `requires-python`)  
+**Primary Dependencies**: **stdlib** for generator/runtime; **`tzdata`** (already in `[project] dependencies`) for `zoneinfo` / calendar v2  
+**Storage**: NDJSON to **stdout** or **append-only** file path (no rotation in-product)  
+**Testing**: **pytest**, **ruff** (dev dependency group)  
+**Target Platform**: CLI on developer OS (Windows/Linux/macOS); UTF-8 console/file  
+**Project Type**: Python package + **CLI** (`fan_events` entry point)  
+**Performance Goals**: Streaming merge **O(1)** auxiliary memory beyond iterator state; suitable for long runs with optional caps  
+**Constraints**: **No** new runtime deps (constitution VI); byte-identical output for fixed seed + inputs where spec requires  
+**Scale/Scope**: Demo/load-test scale; unbounded runs allowed by spec (warn in help)
+
+## Constitution Check
+
+*GATE: Passed before Phase 0 research. Re-checked after Phase 1 design.*
+
+| Principle | Status | Notes |
+|-----------|--------|--------|
+| **I Modelled analytics** | **N/A** | Raw synthetic generator only; **no** dbt/app consumption changes in this feature. |
+| **II Immutable raw** | **OK** | Append-only NDJSON lines; no in-place raw rewrite. |
+| **III dbt data quality** | **N/A** | No dbt model changes in this slice. |
+| **IV Demonstrable path** | **OK** | NDJSON remains ingestible by existing pipeline story; optional README kcat pipe. |
+| **V Demo-first** | **OK** | Vertical slice: `stream` + tests + README snippet. |
+| **VI–VII Spec & contracts** | **OK** | Implements [`spec.md`](./spec.md), [`contracts/orchestrated-stream.md`](./contracts/orchestrated-stream.md); v2/v3 **per-line** contracts unchanged. |
+| **VIII Reproducibility** | **OK** | Plan: shared RNG seeds; golden tests for fixed inputs. |
+| **IX Contract-backed tests** | **OK** | pytest: shape (existing validators), merge order, UTF-8 newline discipline. |
+| **X Versioned schema** | **OK** | No breaking change to v1/v2/v3 line schemas; orchestration is a **supplement** doc. |
+| **XI UTC / Z** | **OK** | Reuse existing timestamp formatting. |
+| **XII Simplicity** | **OK** | One subcommand; defaults aligned with clarified spec (unbounded unless limits set). |
+| **VI Python / UV / stdlib** | **OK** | No new runtime packages; `uv run pytest` / `uv run ruff`. |
+| **XIII OOP vs functions** | **OK** | **Class** for orchestrator (merge + pacing + limits + sink); **functions** for pure merge keys and thin CLI wiring. |
+
+**Post-design re-check**: Design artifacts (`research.md`, `data-model.md`, `quickstart.md`) introduce no constitution violations.
+
+## Project Structure
+
+### Documentation (this feature)
+
+```text
+specs/004-unified-synthetic-stream/
+├── plan.md                 # This file
+├── research.md             # Phase 0
+├── data-model.md           # Phase 1
+├── quickstart.md           # Phase 1
+├── contracts/
+│   ├── orchestrated-stream.md   # Normative merge + mixed file (existing)
+│   └── cli-stream.md            # CLI surface (Phase 1)
+└── tasks.md                # generated by /speckit.tasks (see file in this directory)
+```
+
+### Source Code (repository root)
+
+```text
+src/fan_events/
+├── cli.py              # Add SUBCOMMAND_STREAM, stream parser, run_stream()
+├── orchestrator.py     # NEW: merge, pacing, sinks, global limits
+├── ndjson_io.py        # Reuse dumps_canonical, validate_record_v2/v3, format_line_v3
+├── v2_calendar.py      # REFACTOR: expose sorted iterators / helpers for merge
+├── v3_retail.py        # Reuse iter_retail_records / kwargs patterns
+├── fan_profiles.py     # Optional: unified fans sidecar for stream
+└── ...
+
+tests/
+├── test_orchestrator_merge.py    # NEW: ordering, ties, empty sources
+└── test_cli_stream.py            # NEW: smoke / argparse integration
+```
+
+**Structure Decision**: Single package under `src/fan_events/`; new **`orchestrator.py`** keeps merge logic testable without subprocess. **v2** gains iterator helpers next to **`generate_v2_records`** (may delegate to shared building blocks to avoid duplication).
+
+## Complexity Tracking
+
+> No constitution violations requiring justification for this feature.
+
+## Phase 0 — Research (resolved)
+
+See [`research.md`](./research.md). All items resolved: merge algorithm, v2 sortability, fan pool unification, limit semantics, interrupt behavior.
+
+## Phase 1 — Design artifacts
+
+- [`data-model.md`](./data-model.md) — entities and merge keys.
+- [`quickstart.md`](./quickstart.md) — operator examples (stdout, file, kcat).
+- [`contracts/cli-stream.md`](./contracts/cli-stream.md) — `stream` CLI contract.
+
+## Phase 2 — Out of scope for this command
+
+- **`tasks.md`** is maintained alongside implementation (generated/updated via **`/speckit.tasks`**); see the current `tasks.md` in this directory.
+
+## Agent context
+
+After this plan: run `update-agent-context.ps1 -AgentType cursor-agent` so Cursor rules reflect **`fan_events stream`** (done manually in this session if needed).

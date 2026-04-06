@@ -5,6 +5,7 @@ Normative contracts:
   specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md  (rolling mode)
   specs/002-match-calendar-events/contracts/fan-events-ndjson-v2.md  (--calendar mode)
   specs/003-ndjson-v3-retail-sim/contracts/fan-events-ndjson-v3.md  (generate_retail)
+  specs/004-unified-synthetic-stream/contracts/cli-stream.md  (stream)
 """
 
 from __future__ import annotations
@@ -30,18 +31,26 @@ from fan_events.ndjson_io import (
     records_to_ndjson_v3,
     write_atomic_text,
 )
+from fan_events.orchestrator import (
+    default_unified_fan_pool_max,
+    iter_merged_records,
+    open_append_sink,
+    write_merged_stream,
+)
 from fan_events.term_style import ColoredArgumentParser, ColoredHelpFormatter
 from fan_events.v1_batch import FIXED_NOW_UTC, generate_batch
 from fan_events.v2_calendar import (
     CalendarError,
     filter_matches_by_date_range,
     generate_v2_records,
+    iter_v2_records_merged_sorted,
     load_calendar_json,
     validate_and_parse_matches,
 )
 from fan_events.v3_retail import (
     generate_retail_batch,
     iter_retail_ndjson_lines,
+    iter_retail_records,
     retail_stream_ndjson,
 )
 
@@ -61,6 +70,7 @@ DEFAULT_RETAIL_FIXED_GAP_SECONDS = 60.0
 _DEFAULT_RETAIL_EPOCH_HELP_STR = DEFAULT_RETAIL_SIM_EPOCH_UTC.strftime("%Y-%m-%dT%H:%M:%SZ")
 SUBCOMMAND_EVENTS = "generate_events"
 SUBCOMMAND_RETAIL = "generate_retail"
+SUBCOMMAND_STREAM = "stream"
 
 # Copy-paste examples (flags/paths align with README). Epilog is styled by ColoredHelpFormatter.
 _HELP_DEV_NOTE = (
@@ -70,6 +80,7 @@ _HELP_DEV_NOTE = (
 _EX_HELP_ROOT = "fan_events --help"
 _EX_HELP_EVENTS = "fan_events generate_events --help"
 _EX_HELP_RETAIL = "fan_events generate_retail --help"
+_EX_HELP_STREAM = "fan_events stream --help"
 _EX_V1_ROLLING = "fan_events generate_events -s 1 -n 200 -d 90 -o out/v1.ndjson"
 _EX_V2_CAL_ALL = "fan_events generate_events -c my_calendar.json -s 42 -o out/v2.ndjson"
 _EX_V2_DATE_RANGE = (
@@ -81,6 +92,11 @@ _EX_V3_STREAM = "fan_events generate_retail -t -s 42 -n 100"
 _EX_V3_STREAM_LIVE = (
     "fan_events generate_retail -t -s 42 -n 50 --emit-wall-clock-min 0.5 --emit-wall-clock-max 2.0"
 )
+_EX_STREAM_MERGED = (
+    "fan_events stream -c my_calendar.json -s 42 -o out/mixed.ndjson "
+    "--retail-max-events 500 --max-events 1000"
+)
+_EX_STREAM_RETAIL_ONLY = "fan_events stream -s 1 --retail-max-events 10"
 
 EPILOG_ROOT = (
     _HELP_DEV_NOTE
@@ -90,6 +106,7 @@ EPILOG_ROOT = (
             _EX_HELP_ROOT,
             _EX_HELP_EVENTS,
             _EX_HELP_RETAIL,
+            _EX_HELP_STREAM,
             "",
             _EX_V1_ROLLING,
             _EX_V2_CAL_ALL,
@@ -97,6 +114,28 @@ EPILOG_ROOT = (
             "",
             _EX_V3_FILE,
             _EX_V3_STREAM,
+            "",
+            _EX_STREAM_MERGED,
+            _EX_STREAM_RETAIL_ONLY,
+        )
+    )
+    + "\n"
+)
+
+EPILOG_STREAM = (
+    "Unified NDJSON stream (v2 match events + v3 retail), merge-sorted by synthetic time.\n\n"
+    "Each emitted line is complete (LF-terminated) before flush; Ctrl+C may stop after a full "
+    "line only.\n\n"
+    "Without --max-events / --max-duration on this subcommand, the merged stream may run until "
+    "Ctrl+C, generator exhaustion, or retail internal limits — mind CPU, disk, and terminal "
+    "I/O.\n\n"
+    "Examples:\n\n"
+    + "\n".join(
+        (
+            _EX_HELP_STREAM,
+            _EX_STREAM_MERGED,
+            "fan_events stream -c cal.json --no-retail -s 42",
+            _EX_STREAM_RETAIL_ONLY,
         )
     )
     + "\n"
@@ -252,6 +291,95 @@ def _validate_generate_retail(
             p.error("--unlimited without --stream requires --max-duration")
 
 
+def _stream_retail_kwargs(ns: argparse.Namespace) -> dict[str, object]:
+    """Kwargs for ``iter_retail_records`` on ``stream``.
+
+    Retail-internal caps use separate argparse destinations from post-merge limits.
+    """
+    kw: dict[str, object] = {}
+    if ns.epoch is not None:
+        kw["epoch_utc"] = _parse_epoch_utc(ns.epoch)
+    if ns.shop_weights is not None:
+        kw["shop_weights"] = tuple(ns.shop_weights)
+    kw["max_events"] = ns.retail_max_events
+    kw["max_simulated_duration_seconds"] = ns.retail_max_duration
+    kw["arrival_mode"] = ns.arrival_mode
+    kw["poisson_rate"] = ns.poisson_rate
+    kw["fixed_gap_seconds"] = ns.fixed_gap_seconds
+    if ns.arrival_mode == "weighted_gap":
+        kw["weighted_gaps"] = ns.weighted_gaps
+        kw["weighted_gap_weights"] = ns.weighted_gap_weights
+    kw["skip_default_event_cap"] = (
+        ns.retail_max_events is None and ns.retail_max_duration is None
+    )
+    return kw
+
+
+def _validate_stream(
+    p: argparse.ArgumentParser,
+    ns: argparse.Namespace,
+    argv: list[str] | None,
+) -> None:
+    if ns.no_retail and not ns.calendar:
+        p.error("--no-retail requires --calendar (calendar-only mode)")
+    tok = _tokens_after_subcommand(argv, SUBCOMMAND_STREAM)
+    if _explicit_v1_rolling_flags_in_tokens(tok):
+        p.error(
+            "-n / --count / -d / --days (rolling window) are not valid on stream "
+            "(v1 rolling is out of scope; use --retail-max-events / "
+            "--retail-max-duration for retail)"
+        )
+    if ns.calendar:
+        if (ns.from_date is None) != (ns.to_date is None):
+            p.error(
+                "--from-date and --to-date must be given together, "
+                "or omit both to include all matches"
+            )
+    else:
+        if ns.from_date is not None or ns.to_date is not None:
+            p.error("--from-date / --to-date require --calendar")
+        if ns.scan_fraction is not None or ns.merch_factor is not None:
+            p.error("--scan-fraction / --merch-factor require --calendar")
+
+    if ns.retail_max_events is not None and ns.retail_max_events < 0:
+        p.error("--retail-max-events must be >= 0")
+    if ns.retail_max_duration is not None and ns.retail_max_duration <= 0:
+        p.error("--retail-max-duration must be > 0")
+    if ns.max_events is not None and ns.max_events < 0:
+        p.error("--max-events must be >= 0")
+    if ns.max_duration is not None and ns.max_duration <= 0:
+        p.error("--max-duration must be > 0")
+
+    if ns.epoch is not None:
+        _parse_epoch_utc(ns.epoch)
+    if ns.fan_pool is not None and ns.fan_pool < 1:
+        p.error("--fan-pool must be >= 1")
+    if ns.arrival_mode == "poisson" and ns.poisson_rate <= 0:
+        p.error("--poisson-rate must be > 0")
+    if ns.arrival_mode == "fixed" and ns.fixed_gap_seconds <= 0:
+        p.error("--fixed-gap-seconds must be > 0")
+    if ns.arrival_mode == "weighted_gap":
+        if not ns.weighted_gaps or not ns.weighted_gap_weights:
+            p.error("weighted_gap requires --weighted-gaps and --weighted-gap-weights")
+        if len(ns.weighted_gaps) != len(ns.weighted_gap_weights):
+            p.error("--weighted-gaps and --weighted-gap-weights must have the same length")
+        if any(gap < 0 for gap in ns.weighted_gaps):
+            p.error("--weighted-gaps values must be >= 0")
+        if any(weight < 0 for weight in ns.weighted_gap_weights):
+            p.error("--weighted-gap-weights values must be >= 0")
+        if sum(ns.weighted_gap_weights) <= 0:
+            p.error("--weighted-gap-weights must have a positive total weight")
+
+    emit_min = ns.emit_wall_clock_min
+    emit_max = ns.emit_wall_clock_max
+    if (emit_min is None) != (emit_max is None):
+        p.error("--emit-wall-clock-min and --emit-wall-clock-max must be given together")
+    if emit_min is not None and (emit_min < 0 or emit_max < 0):
+        p.error("--emit-wall-clock-min/max must be >= 0")
+    if emit_min is not None and emit_min > emit_max:
+        p.error("--emit-wall-clock-min must be <= --emit-wall-clock-max")
+
+
 # Options that consume the next argv token as their value (same set argparse uses).
 _OPTS_WITH_FOLLOWING_VALUE = frozenset({
     "-o",
@@ -306,7 +434,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         prog="fan_events",
         description=(
             "Generate synthetic fan events as UTF-8 NDJSON "
-            "(v1 rolling, v2 calendar, or v3 retail)."
+            "(v1 rolling, v2 calendar, v3 retail batch/stream, or unified stream)."
         ),
         formatter_class=ColoredHelpFormatter,
         epilog=EPILOG_ROOT,
@@ -611,7 +739,220 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
 
+    st = sub.add_parser(
+        SUBCOMMAND_STREAM,
+        help=(
+            "Emit one UTF-8 NDJSON stream: v2 match events and/or v3 retail, "
+            "merge-sorted by synthetic time (stdout, append file, optional pacing)."
+        ),
+        formatter_class=ColoredHelpFormatter,
+        epilog=EPILOG_STREAM,
+    )
+    st.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Append NDJSON lines to this path (UTF-8, LF). "
+            "Omit or use '-' for stdout (default: stdout)"
+        ),
+    )
+    st.add_argument(
+        "-s",
+        "--seed",
+        type=int,
+        default=None,
+        help=(
+            "RNG seed for v2, retail, and pacing draws "
+            "(default: none — non-deterministic)"
+        ),
+    )
+    st.add_argument(
+        "--no-retail",
+        action="store_true",
+        help="With --calendar: v2 only (omit v3 retail_purchase from the merged stream)",
+    )
+    cal_s = st.add_argument_group("Calendar (fan-events-ndjson-v2), optional")
+    cal_s.add_argument(
+        "-c",
+        "--calendar",
+        type=str,
+        default=None,
+        help="Path to calendar JSON; omit for retail-only stream",
+    )
+    cal_s.add_argument(
+        "--from-date",
+        type=str,
+        default=None,
+        help="Inclusive lower bound on kickoff UTC date (YYYY-MM-DD) with --calendar",
+    )
+    cal_s.add_argument(
+        "--to-date",
+        type=str,
+        default=None,
+        help="Inclusive upper bound on kickoff UTC date (YYYY-MM-DD) with --calendar",
+    )
+    cal_s.add_argument(
+        "--scan-fraction",
+        type=float,
+        default=None,
+        help=(
+            f"Ticket_scan volume fraction of capacity "
+            f"(default when omitted: {DEFAULT_SCAN_FRACTION})"
+        ),
+    )
+    cal_s.add_argument(
+        "--merch-factor",
+        type=float,
+        default=None,
+        help=(
+            f"Merch event count scale vs capacity (default when omitted: {DEFAULT_MERCH_FACTOR})"
+        ),
+    )
+    cal_s.add_argument(
+        "-e",
+        "--events",
+        choices=("both", TICKET_SCAN, MERCH_PURCHASE),
+        default="both",
+        help="Event types for v2 calendar side (default: both)",
+    )
+    lim = st.add_argument_group("Post-merge limits (merged NDJSON line stream)")
+    lim.add_argument(
+        "--max-events",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Stop after N complete lines after merge (optional). "
+            "Without --max-duration, the stream may run until interrupt or exhaustion — "
+            "see epilog."
+        ),
+    )
+    lim.add_argument(
+        "--max-duration",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        dest="max_duration",
+        help=(
+            "Maximum simulated span in seconds from the first emitted timestamp (optional); "
+            "omit lines that would exceed the window"
+        ),
+    )
+    rlim = st.add_argument_group("Retail-only iterator limits (v3, before merge)")
+    rlim.add_argument(
+        "--retail-max-events",
+        type=int,
+        default=None,
+        metavar="N",
+        dest="retail_max_events",
+        help=(
+            "Cap retail events before merge (optional). When omitted with no "
+            "--retail-max-duration, retail uses unbounded count until post-merge caps or Ctrl+C "
+            f"(no implied {DEFAULT_RETAIL_IMPLIED_MAX_EVENTS} cap on stream)"
+        ),
+    )
+    rlim.add_argument(
+        "--retail-max-duration",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        dest="retail_max_duration",
+        help="Maximum simulated retail timeline length in seconds from epoch (optional)",
+    )
+    st.add_argument(
+        "-E",
+        "--epoch",
+        type=str,
+        default=None,
+        help=(
+            "UTC start instant for retail synthetic timeline (ISO-8601). "
+            f"Default when omitted: {_DEFAULT_RETAIL_EPOCH_HELP_STR}"
+        ),
+    )
+    st.add_argument(
+        "--shop-weights",
+        nargs=3,
+        type=float,
+        metavar=("W1", "W2", "W3"),
+        default=None,
+        help="Three non-negative weights for retail shops (same order as generate_retail)",
+    )
+    st.add_argument(
+        "--arrival-mode",
+        choices=("poisson", "fixed", "weighted_gap"),
+        default="poisson",
+        help="Retail inter-arrival model (default: poisson)",
+    )
+    st.add_argument(
+        "--poisson-rate",
+        type=float,
+        default=DEFAULT_RETAIL_POISSON_RATE,
+        help=f"Poisson rate when --arrival-mode poisson (default: {DEFAULT_RETAIL_POISSON_RATE})",
+    )
+    st.add_argument(
+        "--fixed-gap-seconds",
+        type=float,
+        default=DEFAULT_RETAIL_FIXED_GAP_SECONDS,
+        help=(
+            "Seconds between retail events when --arrival-mode fixed "
+            f"(default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
+        ),
+    )
+    st.add_argument(
+        "--weighted-gaps",
+        nargs="+",
+        type=float,
+        default=None,
+        metavar="SEC",
+        help="Candidate gaps for --arrival-mode weighted_gap",
+    )
+    st.add_argument(
+        "--weighted-gap-weights",
+        nargs="+",
+        type=float,
+        default=None,
+        metavar="W",
+        help="Weights for each --weighted-gaps value",
+    )
+    st.add_argument(
+        "-p",
+        "--fan-pool",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "When calendar + retail: shared upper bound for fan_id suffix pool on both sides "
+            "(default: heuristic from calendar capacity). Retail-only: same as generate_retail."
+        ),
+    )
+    st.add_argument(
+        "--emit-wall-clock-min",
+        type=float,
+        default=None,
+        metavar="SEC",
+        dest="emit_wall_clock_min",
+        help=(
+            "Lower bound (seconds) for random wall-clock sleep before each merged line after "
+            "the first; pair with --emit-wall-clock-max"
+        ),
+    )
+    st.add_argument(
+        "--emit-wall-clock-max",
+        type=float,
+        default=None,
+        metavar="SEC",
+        dest="emit_wall_clock_max",
+        help="Upper bound (seconds) for wall-clock sleep between merged lines",
+    )
+
     ns = p.parse_args(argv)
+
+    if ns.command == SUBCOMMAND_STREAM:
+        _validate_stream(p, ns, argv)
+        return ns
 
     if ns.command == SUBCOMMAND_RETAIL:
         _validate_generate_retail(p, ns, argv)
@@ -722,17 +1063,104 @@ def run_v3(args: argparse.Namespace) -> None:
         _write_fans_sidecar(Path(args.fans_out), fan_ids, args.seed)
 
 
+def run_stream(args: argparse.Namespace) -> None:
+    rng = random.Random(args.seed) if args.seed is not None else random.Random()
+    pacing_rng = (
+        random.Random(f"pacing:{args.seed}") if args.seed is not None else random.Random()
+    )
+
+    contexts = []
+    if args.calendar:
+        path = Path(args.calendar)
+        doc = load_calendar_json(path)
+        rows = validate_and_parse_matches(doc)
+        from_d = _parse_iso_date(args.from_date) if args.from_date is not None else None
+        to_d = _parse_iso_date(args.to_date) if args.to_date is not None else None
+        contexts = filter_matches_by_date_range(rows, from_d, to_d)
+
+    include_v2 = args.calendar is not None
+    include_retail = args.calendar is None or not args.no_retail
+
+    unified: int | None = None
+    if include_v2 and include_retail:
+        unified = (
+            args.fan_pool
+            if args.fan_pool is not None
+            else default_unified_fan_pool_max(contexts)
+        )
+
+    sf = DEFAULT_SCAN_FRACTION if args.scan_fraction is None else args.scan_fraction
+    mf = DEFAULT_MERCH_FACTOR if args.merch_factor is None else args.merch_factor
+    events_mode = args.events
+
+    if include_v2:
+        v2_iter = iter_v2_records_merged_sorted(
+            contexts,
+            rng,
+            scan_fraction=sf,
+            merch_factor=mf,
+            events_mode=events_mode,
+            fan_pool_max=unified,
+        )
+    else:
+        v2_iter = iter(())
+
+    retail_kw = _stream_retail_kwargs(args)
+    if include_retail and include_v2:
+        retail_kw["fan_pool"] = unified
+    elif include_retail and args.fan_pool is not None:
+        retail_kw["fan_pool"] = args.fan_pool
+
+    retail_iter = iter_retail_records(rng, **retail_kw) if include_retail else iter(())
+
+    merged = iter_merged_records(retail_iter, v2_iter)
+
+    emit_min = args.emit_wall_clock_min
+    emit_max = args.emit_wall_clock_max
+    use_pacing = emit_min is not None and emit_max is not None
+    prng = pacing_rng if use_pacing else None
+    emin = emit_min if use_pacing else None
+    emax = emit_max if use_pacing else None
+
+    out = args.output
+    if out is None or out == "-":
+        write_merged_stream(
+            merged,
+            sys.stdout,
+            max_events=args.max_events,
+            max_duration_seconds=args.max_duration,
+            pacing_rng=prng,
+            emit_wall_clock_min=emin,
+            emit_wall_clock_max=emax,
+        )
+    else:
+        with open_append_sink(Path(out)) as sink:
+            write_merged_stream(
+                merged,
+                sink,
+                max_events=args.max_events,
+                max_duration_seconds=args.max_duration,
+                pacing_rng=prng,
+                emit_wall_clock_min=emin,
+                emit_wall_clock_max=emax,
+            )
+
+
 def main(argv: list[str] | None = None) -> None:
     try:
         args = parse_args(argv)
         if args.command == SUBCOMMAND_RETAIL:
             run_v3(args)
+        elif args.command == SUBCOMMAND_STREAM:
+            run_stream(args)
         elif args.calendar:
             run_v2(args)
         else:
             run_v1(args)
     except SystemExit:
         raise
+    except KeyboardInterrupt:
+        sys.exit(130)
     except CalendarError as e:
         print(f"fan_events: {e}", file=sys.stderr)
         sys.exit(1)
