@@ -9,6 +9,10 @@ requires-python = ">=3.12"
 # IANA time zone database for zoneinfo (required on Windows for Europe/Brussels etc.).
 dependencies = ["tzdata>=2024.1"]
 
+[project.optional-dependencies]
+# Kafka output for `fan_events stream --kafka-topic`; install with: uv sync --extra kafka
+kafka = ["confluent-kafka>=2.3"]
+
 [project.scripts]
 fan_events = "fan_events.cli:main"
 

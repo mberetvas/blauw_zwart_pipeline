@@ -11,6 +11,7 @@ Normative contracts:
 from __future__ import annotations
 
 import argparse
+import os
 import random
 import sys
 import time
@@ -122,6 +123,16 @@ EPILOG_ROOT = (
     + "\n"
 )
 
+_EX_KAFKA_ENV = (
+    "FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092 "
+    "FAN_EVENTS_KAFKA_TOPIC=fan-events "
+    "fan_events stream -s 42 --retail-max-events 100 --max-events 50"
+)
+_EX_KAFKA_FLAGS = (
+    "fan_events stream --kafka-topic fan-events "
+    "--kafka-bootstrap-servers localhost:9092 --max-events 50"
+)
+
 EPILOG_STREAM = (
     "Unified NDJSON stream (v2 match events + v3 retail), merge-sorted by synthetic time.\n\n"
     "Each emitted line is complete (LF-terminated) before flush; Ctrl+C may stop after a full "
@@ -129,6 +140,8 @@ EPILOG_STREAM = (
     "Without --max-events / --max-duration on this subcommand, the merged stream may run until "
     "Ctrl+C, generator exhaustion, or retail internal limits — mind CPU, disk, and terminal "
     "I/O.\n\n"
+    "Kafka output: use --kafka-topic to publish events to a Kafka topic instead of stdout/file.\n"
+    "Start a local broker: just kafka  (runs docker run -p 9092:9092 apache/kafka:4.1.2)\n\n"
     "Examples:\n\n"
     + "\n".join(
         (
@@ -136,6 +149,11 @@ EPILOG_STREAM = (
             _EX_STREAM_MERGED,
             "fan_events stream -c cal.json --no-retail -s 42",
             _EX_STREAM_RETAIL_ONLY,
+            "",
+            "# Kafka — via environment variables (.env or export):",
+            _EX_KAFKA_ENV,
+            "# Kafka — via CLI flags (bootstrap-servers defaults to localhost:9092):",
+            _EX_KAFKA_FLAGS,
         )
     )
     + "\n"
@@ -379,6 +397,23 @@ def _validate_stream(
     if emit_min is not None and emit_min > emit_max:
         p.error("--emit-wall-clock-min must be <= --emit-wall-clock-max")
 
+    _validate_stream_kafka(p, ns)
+
+
+def _validate_stream_kafka(p: argparse.ArgumentParser, ns: argparse.Namespace) -> None:
+    """Validate Kafka-specific stream flags."""
+    kafka_only_flags = {
+        "--kafka-bootstrap-servers": ns.kafka_bootstrap_servers,
+        "--kafka-client-id": ns.kafka_client_id,
+        "--kafka-compression": ns.kafka_compression,
+        "--kafka-acks": ns.kafka_acks,
+    }
+    stray = [name for name, val in kafka_only_flags.items() if val is not None]
+    if stray and ns.kafka_topic is None:
+        p.error(f"{', '.join(stray)} require --kafka-topic")
+    if ns.kafka_topic is not None and ns.output is not None:
+        p.error("--kafka-topic and -o / --output are mutually exclusive")
+
 
 # Options that consume the next argv token as their value (same set argparse uses).
 _OPTS_WITH_FOLLOWING_VALUE = frozenset({
@@ -398,6 +433,11 @@ _OPTS_WITH_FOLLOWING_VALUE = frozenset({
     "--events",
     "-F",
     "--fans-out",
+    "--kafka-topic",
+    "--kafka-bootstrap-servers",
+    "--kafka-client-id",
+    "--kafka-compression",
+    "--kafka-acks",
 })
 
 
@@ -947,6 +987,73 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="emit_wall_clock_max",
         help="Upper bound (seconds) for wall-clock sleep between merged lines",
     )
+    kafka_g = st.add_argument_group(
+        "Kafka output (mutually exclusive with -o / --output)",
+        description=(
+            "Publish each NDJSON line to a Kafka topic instead of stdout or a file. "
+            "Broker and security settings are read from FAN_EVENTS_KAFKA_* env vars; "
+            "CLI flags override env when both are set. "
+            "Secrets (SASL passwords) are env-only — never pass them as CLI flags. "
+            "Message key is always null (round-robin partitioning). "
+            "Start a local broker: just kafka  "
+            "(docker run -p 9092:9092 apache/kafka:4.1.2)"
+        ),
+    )
+    kafka_g.add_argument(
+        "--kafka-topic",
+        type=str,
+        default=os.environ.get("FAN_EVENTS_KAFKA_TOPIC"),
+        metavar="TOPIC",
+        dest="kafka_topic",
+        help=(
+            "Publish events to this Kafka topic (enables Kafka mode). "
+            "Env: FAN_EVENTS_KAFKA_TOPIC (CLI overrides env). "
+            "Mutually exclusive with -o / --output."
+        ),
+    )
+    kafka_g.add_argument(
+        "--kafka-bootstrap-servers",
+        type=str,
+        default=None,
+        metavar="SERVERS",
+        dest="kafka_bootstrap_servers",
+        help=(
+            "Comma-separated broker list. "
+            "Env: FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS (default: localhost:9092)"
+        ),
+    )
+    kafka_g.add_argument(
+        "--kafka-client-id",
+        type=str,
+        default=None,
+        metavar="ID",
+        dest="kafka_client_id",
+        help=(
+            "Producer client.id. "
+            "Env: FAN_EVENTS_KAFKA_CLIENT_ID (default: fan-events-producer)"
+        ),
+    )
+    kafka_g.add_argument(
+        "--kafka-compression",
+        choices=("none", "gzip", "snappy", "lz4", "zstd"),
+        default=None,
+        dest="kafka_compression",
+        help=(
+            "Compression codec for produced messages. "
+            "Env: FAN_EVENTS_KAFKA_COMPRESSION (default: none)"
+        ),
+    )
+    kafka_g.add_argument(
+        "--kafka-acks",
+        type=str,
+        default=None,
+        metavar="ACKS",
+        dest="kafka_acks",
+        help=(
+            "Required broker acknowledgements: 0, 1, or all / -1. "
+            "Env: FAN_EVENTS_KAFKA_ACKS (default: 1)"
+        ),
+    )
 
     ns = p.parse_args(argv)
 
@@ -1123,7 +1230,9 @@ def run_stream(args: argparse.Namespace) -> None:
     emax = emit_max if use_pacing else None
 
     out = args.output
-    if out is None or out == "-":
+    if args.kafka_topic is not None:
+        _run_stream_kafka(args, merged, prng, emin, emax)
+    elif out is None or out == "-":
         write_merged_stream(
             merged,
             sys.stdout,
@@ -1144,6 +1253,53 @@ def run_stream(args: argparse.Namespace) -> None:
                 emit_wall_clock_min=emin,
                 emit_wall_clock_max=emax,
             )
+
+
+def _run_stream_kafka(
+    args: argparse.Namespace,
+    merged: object,
+    prng: random.Random | None,
+    emin: float | None,
+    emax: float | None,
+) -> None:
+    """Publish the merged stream to Kafka (called from run_stream when --kafka-topic is set)."""
+    try:
+        from confluent_kafka import Producer
+    except ImportError:
+        print(
+            "fan_events: confluent-kafka is not installed. "
+            "Enable the kafka extra:\n"
+            "  uv sync --extra kafka          (local dev)\n"
+            "  pip install 'blauw-zwart-fan-sim-pipeline[kafka]'  (installed package)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    from fan_events.kafka_sink import KafkaSink, build_producer_config, kafka_config_from_env
+
+    cfg = kafka_config_from_env({
+        "topic": args.kafka_topic,
+        "bootstrap_servers": args.kafka_bootstrap_servers,
+        "client_id": args.kafka_client_id,
+        "compression": args.kafka_compression,
+        "acks": args.kafka_acks,
+    })
+    producer = Producer(build_producer_config(cfg))
+    sink = KafkaSink(producer, cfg.topic)
+    try:
+        write_merged_stream(
+            merged,  # type: ignore[arg-type]
+            sink,  # type: ignore[arg-type]
+            max_events=args.max_events,
+            max_duration_seconds=args.max_duration,
+            pacing_rng=prng,
+            emit_wall_clock_min=emin,
+            emit_wall_clock_max=emax,
+        )
+    finally:
+        # Always flush in-flight messages: normal completion and Ctrl+C alike.
+        # KeyboardInterrupt re-propagates after finally; main() handles exit code 130.
+        sink.close()
 
 
 def main(argv: list[str] | None = None) -> None:

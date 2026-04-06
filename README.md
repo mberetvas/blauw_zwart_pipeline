@@ -2,21 +2,46 @@
 
 # Blauw zwart - Mock-up data creator
 
-Synthetic fan events are produced by the `fan_events` package (`src/fan_events/`). The CLI exposes **`generate_events`** (match-related **v1** rolling window or **v2** calendar), **`generate_retail`** (**v3** match-independent retail), and **`stream`** (one time-ordered NDJSON stream mixing **v2** and **v3** when both are enabled). Run commands from the **repository root** after `uv sync`, using either `uv run fan_events …` or `uv run python -m fan_events …`.
+Synthetic fan events generator for Club Brugge KV simulations. The `fan_events` package (`src/fan_events/`) exposes a CLI with four modes: **`generate_events`** (match-related **v1** rolling window or **v2** calendar), **`generate_retail`** (**v3** match-independent retail purchases), and **`stream`** (one time-ordered NDJSON stream mixing **v2** and **v3**, with optional native Kafka output).
 
-Or you can install the package using
+## Prerequisites
 
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| Python | ≥ 3.12 | Required by `pyproject.toml` |
+| [uv](https://docs.astral.sh/uv/) | any recent | Package manager; used for all dev commands |
+| Docker | any | Only needed for `just kafka` (local broker) |
+| [just](https://just.systems/) | any | Optional task runner; `just kafka` starts the local broker |
+
+## Installation
+
+**Option A — local development (recommended):**
+
+```bash
+git clone https://github.com/mberetvas/blauw_zwart_pipeline
+cd blauw_zwart_pipeline
+uv sync                    # installs runtime + dev deps into .venv
+uv sync --extra kafka      # also installs confluent-kafka for Kafka output
+uv run fan_events --help
 ```
+
+**Option B — install globally via uv:**
+
+```bash
 uv tool install blauw-zwart-fan-sim-pipeline --from git+https://github.com/mberetvas/blauw_zwart_pipeline
+# For Kafka output support, include the kafka extra:
+uv tool install 'blauw-zwart-fan-sim-pipeline[kafka]' --from git+https://github.com/mberetvas/blauw_zwart_pipeline
+fan_events --help   # now on PATH
 ```
 
-After installation, the `fan_events` entry point is on your `PATH`. Use the same arguments as below without the `uv run` prefix (for example `fan_events generate_events -s 1 -o out/v1.ndjson`, `fan_events generate_retail -s 1 -o out/retail.ndjson`, or `fan_events stream -s 42 --retail-max-events 100 --max-events 50`).
+After a global install, use `fan_events` directly (drop the `uv run` prefix from all examples below).
+
+> **Kafka extra**: `confluent-kafka` (a C extension wrapping `librdkafka`) is an **optional** dependency. The base install works without it; only `fan_events stream --kafka-topic` (or `FAN_EVENTS_KAFKA_TOPIC` env var) requires it. Without the extra installed, that path exits with a clear error message.
 
 ## CLI overview
 
-
-| Mode             | When | Output contract |
-| ---------------- | ---- | ---------------- |
+| Mode | When | Output contract |
+| ---- | ---- | --------------- |
 | **v1** (default) | `generate_events` without `-c` / `--calendar` | Rolling UTC window — no `match_id` on lines |
 | **v2** | `generate_events -c` / `--calendar …` | Match calendar — every line has `match_id` |
 | **v3 retail** | `generate_retail` | `retail_purchase` only — [`fan-events-ndjson-v3.md`](specs/003-ndjson-v3-retail-sim/contracts/fan-events-ndjson-v3.md) |
@@ -27,16 +52,11 @@ After installation, the `fan_events` entry point is on your `PATH`. Use the same
 uv run fan_events generate_events [options]
 uv run fan_events generate_retail [options]
 uv run fan_events stream [options]
-
-# Installed package: same commands without `uv run`
-fan_events generate_events [options]
-fan_events generate_retail [options]
-fan_events stream [options]
 ```
 
 ## Parameters and defaults
 
-Flags are **subcommand-specific**: use a **separate** invocation per subcommand. Options that belong to `generate_events` only (for example `--calendar`, `--count`, `--days`, `--events`) are **not** valid on `generate_retail`. The **`stream`** subcommand has its own contract ([`cli-stream.md`](specs/004-unified-synthetic-stream/contracts/cli-stream.md)): it rejects v1 rolling-style flags, and merged-output limits use **`--max-events` / `--max-duration`** only—not **`generate_retail`’s `-n` / `-d`**.
+Flags are **subcommand-specific**: use a **separate** invocation per subcommand. Options that belong to `generate_events` only (for example `--calendar`, `--count`, `--days`, `--events`) are **not** valid on `generate_retail`. The **`stream`** subcommand has its own contract ([`cli-stream.md`](specs/004-unified-synthetic-stream/contracts/cli-stream.md)): it rejects v1 rolling-style flags, and merged-output limits use **`--max-events` / `--max-duration`** only—not **`generate_retail`'s `-n` / `-d`**.
 
 ### Same letter, different meaning (`-n` and `-d`)
 
@@ -54,7 +74,7 @@ Always check which subcommand you are using. **`fan_events generate_events --hel
 | Argument | Default | Description |
 | -------- | ------- | ----------- |
 | `-o`, `--output` | `out/fan_events.ndjson` | Output NDJSON path |
-| `-s`, `--seed` | *(none)* | RNG seed; **v1** also fixes “now” for repeatable output when set. Omit for non-deterministic v1/v2 |
+| `-s`, `--seed` | *(none)* | RNG seed; **v1** also fixes "now" for repeatable output when set. Omit for non-deterministic v1/v2 |
 | `-e`, `--events` | `both` | `both`, `ticket_scan`, or `merch_purchase` |
 | `-F`, `--fans-out` | *(none)* | Optional **companion JSON** path: synthetic fan master (`schema_version`, `rng_seed`, `fans` map). **Not** part of the NDJSON contracts — join on `fan_id` (`events.fan_id` → `fans[fan_id]`). Same `--seed` and same `fan_id` → same profile; profile RNG is separate from event RNG (v3 retail draw order unchanged). Only includes `fan_id`s that **appear in emitted events** |
 
@@ -88,7 +108,7 @@ Match-independent `retail_purchase` lines (three shop channels). **Batch** (defa
 | -------- | ------- | ----------- |
 | `-o`, `--output` | `out/retail.ndjson` | Output path; ignored when **`-t` / `--stream`** |
 | `-s`, `--seed` | *(none)* | RNG seed for batch, stream, and wall-clock sleep intervals; omit for non-deterministic output |
-| `-t`, `--stream` | off | Write NDJSON to stdout; default is a sorted batch file to `-o` |
+| `-t`, `--stream` | off | Write NDJSON to stdout in generation order (no global sort); ignores `-o`/`--output` |
 | `-n`, `--max-events` | *(none)* | Stop after N events (`0` → empty). **Not** compatible with **`-u` / `--unlimited`**. If **omitted** with no **`-d`** and no **`-u`**, the generator applies implied **200**; if **`-d`** is set without `-n`, only the simulated duration limits events |
 | `-d`, `--max-duration` | *(none)* | Max **simulated** seconds from epoch for timestamps (`SECONDS`). With `-n`, stop when **either** limit hits first |
 | `-E`, `--epoch` | `2026-01-01T00:00:00Z` when omitted | UTC start instant for the synthetic timeline (ISO-8601) |
@@ -116,7 +136,7 @@ Normative detail and extra examples: [`specs/003-ndjson-v3-retail-sim/quickstart
 
 ### `stream` (unified NDJSON — v2 and/or v3)
 
-One UTF-8 **NDJSON line stream** in **non-decreasing synthetic time**: v2 match events (`ticket_scan` / `merch_purchase` with `match_id`) interleaved with v3 `retail_purchase` using `heapq.merge` (see [`orchestrated-stream.md`](specs/004-unified-synthetic-stream/contracts/orchestrated-stream.md)). Output is **stdout** when **`-o` / `--output` is omitted** or set to **`-`**; otherwise the path is opened in **append** mode (creates parent dirs; each line is a complete JSON object + LF).
+One UTF-8 **NDJSON line stream** in **non-decreasing synthetic time**: v2 match events (`ticket_scan` / `merch_purchase` with `match_id`) interleaved with v3 `retail_purchase` using `heapq.merge` (see [`orchestrated-stream.md`](specs/004-unified-synthetic-stream/contracts/orchestrated-stream.md)). Output is **stdout** when **`-o` / `--output` is omitted**; otherwise the path is opened in **append** mode (creates parent dirs; each line is a complete JSON object + LF). Use **`--kafka-topic`** to publish to a Kafka topic instead (mutually exclusive with `-o`).
 
 **Which sources run**
 
@@ -130,7 +150,7 @@ One UTF-8 **NDJSON line stream** in **non-decreasing synthetic time**: v2 match 
 
 | Argument | Default | Description |
 | -------- | ------- | ----------- |
-| `-o`, `--output` | *(none)* | Append NDJSON to this path (UTF-8). Omit or `-` → **stdout** |
+| `-o`, `--output` | *(none)* | Append NDJSON to this path (UTF-8). Omit → **stdout**. Mutually exclusive with `--kafka-topic` |
 | `-s`, `--seed` | *(none)* | RNG seed for v2, retail, and wall-clock pacing draws |
 | `--no-retail` | off | With `--calendar`: v2 only (exclude v3 from the merge) |
 | `-c`, `--calendar` | *(none)* | Calendar JSON path; omit for retail-only stream |
@@ -151,10 +171,32 @@ One UTF-8 **NDJSON line stream** in **non-decreasing synthetic time**: v2 match 
 | `-p`, `--fan-pool` | *(none)* | **Merged** mode: shared upper bound for `fan_…` numeric pool on **both** v2 and v3 (default: heuristic from calendar capacity). **Retail-only**: same idea as `generate_retail` |
 | `--emit-wall-clock-min` / `--emit-wall-clock-max` | *(none)* | **Both** required if either set; random sleep in `[min, max]` before each line **after the first** (applies to **merged** output; separate pacing RNG from `--seed`) |
 
+**Kafka output flags** (require `--kafka-topic`; mutually exclusive with `-o` / `--output`):
+
+| Argument | Default | Env var override | Description |
+| -------- | ------- | ---------------- | ----------- |
+| `--kafka-topic` | *(none)* | `FAN_EVENTS_KAFKA_TOPIC` | **Enables Kafka mode.** Target topic name |
+| `--kafka-bootstrap-servers` | `localhost:9092` | `FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS` | Comma-separated broker list |
+| `--kafka-client-id` | `fan-events-producer` | `FAN_EVENTS_KAFKA_CLIENT_ID` | Producer `client.id` |
+| `--kafka-compression` | `none` | `FAN_EVENTS_KAFKA_COMPRESSION` | Codec: `none`, `gzip`, `snappy`, `lz4`, `zstd` |
+| `--kafka-acks` | `1` | `FAN_EVENTS_KAFKA_ACKS` | Required broker acks: `0`, `1`, `all` / `-1` |
+
+**TLS / SASL** (environment variables only — never pass secrets as CLI flags):
+
+| Env var | Example value | Description |
+| ------- | ------------- | ----------- |
+| `FAN_EVENTS_KAFKA_SECURITY_PROTOCOL` | `SASL_SSL` | Security protocol |
+| `FAN_EVENTS_KAFKA_SASL_MECHANISM` | `PLAIN` | SASL mechanism |
+| `FAN_EVENTS_KAFKA_SASL_USERNAME` | `myuser` | SASL username |
+| `FAN_EVENTS_KAFKA_SASL_PASSWORD` | `s3cret` | SASL password |
+
+CLI flags override the matching env var when both are set. Message key is always **null** (round-robin partitioning). Each message value is the raw UTF-8 NDJSON line (including the trailing `\n`).
+
 **Stopping / unbounded runs**
 
 - If **both** `--max-events` and `--max-duration` are **omitted**, the merged stream can run until **Ctrl+C**, generator exhaustion, or **retail** limits (`--retail-max-*`). Prefer explicit caps for demos and pipelines.
-- **Ctrl+C** exits with code **130**; each line is written as a **full** LF-terminated record before flush (no torn UTF-8 mid-line).
+- **Ctrl+C** exits with code **130**; each line is a **full** LF-terminated record before flush (no torn UTF-8 mid-line).
+- **Kafka shutdown**: on normal completion *and* on Ctrl+C, the producer flushes all in-flight messages before exit (30 s timeout). A warning is printed to stderr if messages remain unconfirmed after the timeout. Broker unreachable, auth failure, or delivery errors surface as a non-zero exit.
 
 **`stream` validation (argparse)**
 
@@ -162,6 +204,8 @@ One UTF-8 **NDJSON line stream** in **non-decreasing synthetic time**: v2 match 
 - **v1 rolling flags** (`-n` / `--count` / `-d` / `--days` as rolling options) are **rejected** on `stream`.
 - **`--emit-wall-clock-min` / `--emit-wall-clock-max`**: must appear together; `0 ≤ min ≤ max`.
 - **`--no-retail`**: requires `--calendar`.
+- **`--kafka-topic` and `-o` / `--output`**: mutually exclusive.
+- **`--kafka-bootstrap-servers`, `--kafka-client-id`, `--kafka-compression`, `--kafka-acks`**: require `--kafka-topic`.
 
 More copy-paste commands: [`specs/004-unified-synthetic-stream/quickstart.md`](specs/004-unified-synthetic-stream/quickstart.md).
 
@@ -240,27 +284,93 @@ uv run fan_events stream --calendar my_calendar.json --no-retail -s 42 --max-eve
 uv run fan_events stream -s 1 --retail-max-events 100 --max-events 50
 ```
 
-**Unified `stream`** (pipe to **kcat** — external tool; configure broker/topic yourself)
+## Kafka output
+
+The `stream` subcommand can publish events directly to a Kafka topic using the native `confluent-kafka` producer (no external piping needed). Each NDJSON line becomes one Kafka message; the message key is null (round-robin partitioning).
+
+### Start a local broker
+
+First, make sure the `kafka` extra is installed:
 
 ```bash
-uv run fan_events stream --calendar my_calendar.json -s 42 --max-events 500 | \
-  kcat -P -b localhost:9092 -t fan-events
+uv sync --extra kafka
 ```
+
+Then start the broker:
+
+```bash
+just kafka
+# Equivalent: docker run -p 9092:9092 apache/kafka:4.1.2
+```
+
+### Publish via environment variables
+
+Setting `FAN_EVENTS_KAFKA_TOPIC` in the environment is enough to activate Kafka mode — no `--kafka-topic` flag needed. This is the recommended approach for CI pipelines and `.env`-based workflows:
+
+```bash
+# Export variables (or load from .env: export $(cat .env | xargs))
+export FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+export FAN_EVENTS_KAFKA_TOPIC=fan-events
+
+uv run fan_events stream -s 42 --retail-max-events 100 --max-events 50
+```
+
+With `uv`, you can pass an env file directly:
+
+```bash
+uv run --env-file .env fan_events stream -s 42 --retail-max-events 100 --max-events 50
+```
+
+### Publish via CLI flags
+
+```bash
+uv run fan_events stream \
+  --kafka-topic fan-events \
+  --kafka-bootstrap-servers localhost:9092 \
+  --max-events 50 -s 42
+```
+
+### With a calendar (v2 + v3 merged to Kafka)
+
+```bash
+uv run fan_events stream \
+  --calendar my_calendar.json \
+  --kafka-topic fan-events \
+  --kafka-bootstrap-servers localhost:9092 \
+  --retail-max-events 500 --max-events 1000 -s 42
+```
+
+### Connecting to a secured broker (SASL_SSL)
+
+Pass secrets via environment only — never on the command line:
+
+```bash
+export FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS=my-broker:9092
+export FAN_EVENTS_KAFKA_TOPIC=fan-events
+export FAN_EVENTS_KAFKA_SECURITY_PROTOCOL=SASL_SSL
+export FAN_EVENTS_KAFKA_SASL_MECHANISM=PLAIN
+export FAN_EVENTS_KAFKA_SASL_USERNAME=myuser
+export FAN_EVENTS_KAFKA_SASL_PASSWORD=s3cret
+
+uv run fan_events stream --max-events 100
+```
+
+### Shutdown guarantee
+
+On both normal exit and Ctrl+C, the producer blocks for up to **30 seconds** to flush all in-flight messages. A warning is printed to stderr if messages remain unconfirmed after the timeout.
 
 ## Match calendar JSON (v2 input)
 
 UTF-8 JSON with a top-level `matches` array. Each object **must** include:
 
-
-| Field           | Type    | Notes                                                     |
-| --------------- | ------- | --------------------------------------------------------- |
-| `match_id`      | string  | Unique in the file                                        |
-| `kickoff_local` | string  | Naive local datetime, e.g. `2026-08-15T18:30:00` (no `Z`) |
-| `timezone`      | string  | IANA zone, e.g. `Europe/Brussels`                         |
-| `attendance`    | integer | `> 0`; for `home` at Jan Breydel, ≤ **29,062**            |
-| `home_away`     | string  | `home` or `away`                                          |
-| `venue_label`   | string  | Used in output locations                                  |
-
+| Field | Type | Notes |
+| ----- | ---- | ----- |
+| `match_id` | string | Unique in the file |
+| `kickoff_local` | string | Naive local datetime, e.g. `2026-08-15T18:30:00` (no `Z`) |
+| `timezone` | string | IANA zone, e.g. `Europe/Brussels` |
+| `attendance` | integer | `> 0`; for `home` at Jan Breydel, ≤ **29,062** |
+| `home_away` | string | `home` or `away` |
+| `venue_label` | string | Used in output locations |
 
 **Optional** per match: `window_start_offset_minutes` (default **120**), `window_end_offset_minutes` (default **90**), `competition`, `opponent`.
 
@@ -294,9 +404,9 @@ Read this before comparing **output** times to `kickoff_local` in the calendar.
 
 Optional **single JSON document** (canonical serialization, UTF-8, trailing newline). Use it when consumers need stable synthetic attributes per `fan_id` without changing event lines.
 
-- **Join**: each NDJSON event line has `fan_id`; look up **`fans["fan_00042"]`** (or equivalent) in the sidecar’s `fans` object.
+- **Join**: each NDJSON event line has `fan_id`; look up **`fans["fan_00042"]`** (or equivalent) in the sidecar's `fans` object.
 - **Determinism**: with the same CLI **`--seed`**, the same `fan_id` always gets the same profile fields. Without `--seed`, profiles are still stable per `fan_id` (derived without the process `hash()`). Event bytes are unchanged whether or not you pass `-F`.
-- **Scope**: only fans that appear in **that run’s** output (empty `fans` if there are zero events).
+- **Scope**: only fans that appear in **that run's** output (empty `fans` if there are zero events).
 
 ## Expected output
 
@@ -306,6 +416,15 @@ Optional **single JSON document** (canonical serialization, UTF-8, trailing newl
 - **v2 lines**: Same event types; **every** record includes `match_id`; timestamps are UTC with a `Z` suffix (**see [v2: UTC timestamps and the match window](#v2-utc-timestamps-and-the-match-window)**); global line order follows the v2 contract (see `specs/002-match-calendar-events/contracts/fan-events-ndjson-v2.md`).
 - **v3 lines**: `retail_purchase` only, closed six-field schema; batch output is globally sorted (see `specs/003-ndjson-v3-retail-sim/contracts/fan-events-ndjson-v3.md`). Stream mode (`-t` / `--stream`) can emit lines immediately or with wall-clock delays (`--emit-wall-clock-min` / `--emit-wall-clock-max`).
 - **Unified `stream`**: Lines are a **mix** of v2 and v3 schemas as selected by source mode; **global order** is non-decreasing by synthetic timestamp (and merge-key tie-breaks per [`orchestrated-stream.md`](specs/004-unified-synthetic-stream/contracts/orchestrated-stream.md)). Serialization is still canonical JSON, one object per line. **Append** mode does not truncate existing files.
+- **Kafka messages**: value = raw UTF-8 NDJSON line (LF-terminated). Key = null. One message per event.
 - **Empty output**: If v2 date filtering removes all matches, the file is **empty** (zero bytes). Retail with `-n 0` / `--max-events 0` yields an **empty** file or no stdout bytes in stream mode. With **`-F` / `--fans-out`**, the sidecar is still written: `fans` is `{}`, with `rng_seed` and `schema_version` set.
 
+## Development
+
+```bash
+uv run pytest          # run all tests
+uv run ruff check src/ tests/   # lint
+```
+
 Normative details: `specs/001-synthetic-fan-events/` (v1), `specs/002-match-calendar-events/` (v2), `specs/003-ndjson-v3-retail-sim/` (v3), `specs/004-unified-synthetic-stream/` (unified stream). Governance: [.specify/memory/constitution.md](.specify/memory/constitution.md).
+
