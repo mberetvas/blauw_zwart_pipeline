@@ -55,9 +55,13 @@ stream-file out="out/mixed.ndjson":
         -o {{ out }}
 
 # ── Kafka ───────────────────────────────────────────────────────────
-# Run Kafka in Docker (broker on localhost:9092)
+# Run Kafka via Docker Compose (broker on localhost:9092; data persisted in volume kafka-data)
 kafka:
-    docker run --rm -d -p 9092:9092 apache/kafka:4.1.2
+    cd {{ justfile_directory() }} && docker compose up -d
+
+# Stop Kafka Compose stack (volume kafka-data is kept; use `docker compose down -v` to wipe data)
+kafka-down:
+    cd {{ justfile_directory() }} && docker compose down
 
 # Stream to a local Kafka topic (requires: uv sync --extra kafka && just kafka)
 stream-kafka topic="fan-events":
