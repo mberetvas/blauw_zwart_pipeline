@@ -126,11 +126,11 @@ EPILOG_ROOT = (
 
 _EX_KAFKA_ENV = (
     "FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092 "
-    "FAN_EVENTS_KAFKA_TOPIC=fan-events "
+    "FAN_EVENTS_KAFKA_TOPIC=fan_events "
     "fan_events stream -s 42 --retail-max-events 100 --max-events 50"
 )
 _EX_KAFKA_FLAGS = (
-    "fan_events stream --kafka-topic fan-events "
+    "fan_events stream --kafka-topic fan_events "
     "--kafka-bootstrap-servers localhost:9092 --max-events 50"
 )
 

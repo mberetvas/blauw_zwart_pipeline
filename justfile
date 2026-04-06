@@ -3,6 +3,9 @@ calendar   := "match_day.example.json"
 seed       := "42"
 max        := "500"
 retail_max := "2000"
+# Wall-clock delay between emitted lines (seconds). Both are required by fan_events; use 0 and 0 to disable.
+emit_min   := "1"
+emit_max   := "3"
 
 # ── Help / discovery ────────────────────────────────────────────────
 # Show top-level CLI help
@@ -56,15 +59,28 @@ stream-file out="out/mixed.ndjson":
 
 # ── Kafka ───────────────────────────────────────────────────────────
 # Run Kafka via Docker Compose (broker on localhost:9092; data persisted in volume kafka-data)
-kafka:
-    cd {{ justfile_directory() }} && docker compose up -d
+kafka-up:
+    docker compose up -d
 
 # Stop Kafka Compose stack (volume kafka-data is kept; use `docker compose down -v` to wipe data)
 kafka-down:
-    cd {{ justfile_directory() }} && docker compose down
+    docker compose down
+
+# Create Kafka topic fan_events (requires: just kafka-up; uses single replica to match local broker)
+# Use //opt/... so Git Bash on Windows does not rewrite /opt to Git's install directory before docker exec.
+kafka-create-topic topic="fan_events":
+    docker compose exec broker //opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic {{ topic }} --partitions 3 --replication-factor 1
+
+# Show Kafka broker container logs (default last 200 lines; e.g. just kafka-logs tail=500)
+kafka-logs tail="200":
+    docker compose logs --tail {{ tail }} broker
+
+# Stream Kafka broker logs until Ctrl+C
+kafka-logs-follow:
+    docker compose logs -f broker
 
 # Stream to a local Kafka topic (requires: uv sync --extra kafka && just kafka)
-stream-kafka topic="fan-events":
+stream-kafka topic="fan_events":
     uv run fan_events stream \
         --calendar {{ calendar }} \
         -s {{ seed }} \
@@ -73,14 +89,21 @@ stream-kafka topic="fan-events":
         --kafka-topic {{ topic }} \
         --kafka-bootstrap-servers localhost:9092
 
-# Same as stream-kafka but no --max-events (stops when iterators end, or Ctrl+C)
-stream-kafka-live topic="fan-events":
+# Same as stream-kafka but no --max-events (stops when iterators end, or Ctrl+C).
+# Random sleep between lines: uniform(emit_min, emit_max) seconds — override e.g. emit_min=0.001 emit_max=2.5
+stream-kafka-live topic="fan_events":
     uv run fan_events stream \
         --calendar {{ calendar }} \
         -s {{ seed }} \
         --retail-max-events {{ retail_max }} \
+        --emit-wall-clock-min {{ emit_min }} \
+        --emit-wall-clock-max {{ emit_max }} \
         --kafka-topic {{ topic }} \
         --kafka-bootstrap-servers localhost:9092
+
+# Consume from Kafka topic fan_events and print each message to stdout (Ctrl+C to stop)
+kafka-consume topic="fan_events":
+    uv run python scripts/kafka_consume_fan_events.py --topic {{ topic }}
 
 # ── Batch generators ───────────────────────────────────────────────
 # Generate v1 rolling-window batch
