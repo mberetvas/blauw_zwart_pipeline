@@ -5,7 +5,7 @@ This document defines **merge and ordering** behavior for the unified synthetic 
 ## Ordering
 
 1. Each emitted line is one JSON object with a **synthetic timestamp** field per the relevant existing contract for that event type.
-2. The **emit order** MUST be **strictly increasing** in the following **sort key** tuple (lexicographic comparison):
+2. The **emit order** MUST be **non-decreasing** in the following **sort key** tuple (lexicographic comparison):
    - **K1**: Synthetic timestamp instant (UTC comparison per contract field semantics).
    - **K2**: `event` string (NDJSON field name), **ascending lexicographic** (ASCII order places `merch_purchase` before `retail_purchase` before `ticket_scan`).
    - **K3**: UTF-8 **lexicographic** order of the **exact JSON text** of the line as emitted, using the same **stable NDJSON line encoding** as the rest of this repository (sorted object keys, minimal separators, UTF-8, no ASCII escaping of non-ASCII where that is the established convention).

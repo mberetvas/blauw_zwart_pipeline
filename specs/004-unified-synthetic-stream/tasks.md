@@ -4,7 +4,7 @@ description: "Task list for feature 004 — unified orchestrated NDJSON stream"
 
 # Tasks: Unified orchestrated NDJSON stream (`fan_events stream`)
 
-**Input**: Design documents from `D:\Projecten_Thuis\blauw_zwart_fan_sim_pipeline\specs\004-unified-synthetic-stream\`  
+**Input**: Design documents from `specs/004-unified-synthetic-stream/`  
 **Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/](./contracts/)
 
 **Tests**: **Python** changes require **pytest** (TDD preferred per constitution). For NDJSON output, tests assert **contract shape** (`validate_record_v2` / `validate_record_v3`), **merge ordering** per [`contracts/orchestrated-stream.md`](./contracts/orchestrated-stream.md), **UTF-8** line discipline, and **byte-identical** golden runs where `--seed` is fixed. Run `uv run pytest` from the repository root; `uv run ruff check src tests` for lint. **No dbt** work in this feature.

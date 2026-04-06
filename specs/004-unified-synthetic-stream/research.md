@@ -81,6 +81,6 @@
 
 ## 10. `kcat` / documentation
 
-**Decision**: README snippet only; **no** Kafka client dependency; pipe **stdout** to external tool.
+**Decision**: Document both supported paths: default **stdout** output for piping to external tools such as `kcat`, and native Kafka output when the optional **`confluent-kafka`** extra is installed.
 
-**Rationale**: Constitution VI.
+**Rationale**: Constitution VI still applies because the core/default install does **not** require a Kafka client dependency; native Kafka support is explicitly **optional** and opt-in via `pip install 'blauw-zwart-fan-sim-pipeline[kafka]'`, preserving a minimal baseline while allowing a justified integration extra for users who need direct Kafka publishing.
