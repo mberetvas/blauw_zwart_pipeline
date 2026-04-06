@@ -403,10 +403,13 @@ def _validate_stream_kafka(p: argparse.ArgumentParser, ns: argparse.Namespace) -
         "--kafka-compression": ns.kafka_compression,
         "--kafka-acks": ns.kafka_acks,
     }
+    kafka_mode = ns.kafka_topic not in (None, "")
     stray = [name for name, val in kafka_only_flags.items() if val is not None]
-    if stray and ns.kafka_topic is None:
+    if ns.kafka_topic == "":
+        p.error("--kafka-topic must be a non-empty string")
+    if stray and not kafka_mode:
         p.error(f"{', '.join(stray)} require --kafka-topic")
-    if ns.kafka_topic is not None and ns.output is not None:
+    if kafka_mode and ns.output is not None:
         p.error("--kafka-topic and -o / --output are mutually exclusive")
 
 
@@ -1109,7 +1112,8 @@ def run_v3(args: argparse.Namespace) -> None:
 
 
 def run_stream(args: argparse.Namespace) -> None:
-    rng = random.Random(args.seed) if args.seed is not None else random.Random()
+    v2_rng = random.Random(f"v2:{args.seed}") if args.seed is not None else random.Random()
+    retail_rng = random.Random(f"retail:{args.seed}") if args.seed is not None else random.Random()
     pacing_rng = (
         random.Random(f"pacing:{args.seed}") if args.seed is not None else random.Random()
     )
@@ -1141,7 +1145,7 @@ def run_stream(args: argparse.Namespace) -> None:
     if include_v2:
         v2_iter = iter_v2_records_merged_sorted(
             contexts,
-            rng,
+            v2_rng,
             scan_fraction=sf,
             merch_factor=mf,
             events_mode=events_mode,
@@ -1156,7 +1160,7 @@ def run_stream(args: argparse.Namespace) -> None:
     elif include_retail and args.fan_pool is not None:
         retail_kw["fan_pool"] = args.fan_pool
 
-    retail_iter = iter_retail_records(rng, **retail_kw) if include_retail else iter(())
+    retail_iter = iter_retail_records(retail_rng, **retail_kw) if include_retail else iter(())
 
     merged = iter_merged_records(retail_iter, v2_iter)
 
@@ -1168,7 +1172,7 @@ def run_stream(args: argparse.Namespace) -> None:
     emax = emit_max if use_pacing else None
 
     out = args.output
-    if args.kafka_topic is not None:
+    if args.kafka_topic not in (None, ""):
         _run_stream_kafka(args, merged, prng, emin, emax)
     elif out is None or out == "-":
         write_merged_stream(

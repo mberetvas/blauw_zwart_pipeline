@@ -26,9 +26,33 @@ uv run fan_events stream --calendar my_calendar.json --no-retail -s 42 --max-eve
 uv run fan_events stream -s 1 --retail-max-events 50 --max-events 50
 ```
 
-## Pipe to **kcat** (Kafka cat — external tool)
+## Native Kafka output (optional `[kafka]` extra)
 
-**No Kafka client** is bundled. Example: produce lines from stdout to a topic (operator configures brokers via `kcat` env/flags):
+Install the optional extra and set the broker/topic via environment variables:
+
+```bash
+pip install 'blauw-zwart-fan-sim-pipeline[kafka]'
+export FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+```
+
+Publish directly to a Kafka topic:
+
+```bash
+uv run fan_events stream --calendar my_calendar.json -s 42 --max-events 1000 --kafka-topic fan-events
+```
+
+Or activate Kafka mode via env var alone (no `--kafka-topic` flag required):
+
+```bash
+export FAN_EVENTS_KAFKA_TOPIC=fan-events
+uv run fan_events stream --calendar my_calendar.json -s 42 --max-events 1000
+```
+
+`--kafka-topic` and `-o / --output` are mutually exclusive. TLS/SASL settings are env-only (`FAN_EVENTS_KAFKA_*`) to keep secrets out of shell history.
+
+## Pipe to **kcat** (alternative — no extra required)
+
+As an alternative to the built-in Kafka sink, pipe stdout to `kcat` (operator configures brokers via `kcat` env/flags):
 
 ```bash
 uv run fan_events stream --calendar my_calendar.json -s 42 --max-events 1000 | kcat -P -b localhost:9092 -t fan-events

@@ -86,14 +86,14 @@ An operator wants to limit how long a run lasts (by event count and/or simulated
 - **FR-007**: Operators MUST be able to enable **optional wall-clock pacing** between emitted lines, behaviorally aligned with existing streaming retail pacing (conceptual parity: delay between lines for demo/real-time simulation).
 - **FR-008**: Runs MUST support **optional bounded termination** via configurable **maximum event count** and/or **maximum simulated time span** (interpreted against synthetic event times). When **both** limits are **absent**, the run is **unbounded** until **interactive interrupt**, generator exhaustion (if applicable), or process failure. When **one or both** limits are set, the combination rule MUST be documented (e.g., stop when the **first** configured limit triggers). **CLI help** MUST **warn** that unbounded runs can consume unbounded time and disk.
 - **FR-009**: Interactive **stop** (e.g., keyboard interrupt) MUST be handled with **documented** semantics for buffer flush and whether a partial line can appear.
-- **FR-010**: The feature MUST **not** require any external message broker or similar service to function; integration with external tools is **optional** and **out of product scope** for this specification (documentation may illustrate piping only in follow-up material).
+- **FR-010**: The feature MUST **not** require any external message broker or similar service to function as a baseline; the default install uses only stdout. **Optional** native Kafka output is supported when the `[kafka]` extra (`confluent-kafka>=2.3`) is installed, via `--kafka-topic` / `FAN_EVENTS_KAFKA_TOPIC`. The base install remains stdlib-only and broker-free.
 - **FR-011**: **Determinism**: For a stated set of inputs (including randomness seed where randomness exists), successful runs MUST produce **byte-identical** output suitable for regression tests, unless explicitly documented exceptions apply.
 - **FR-012**: **`fan_id` coherence**: When **both** match-related and retail sources are active, `stream` MUST generate events from a **single unified synthetic fan population** so `fan_id` (and any related identity fields defined in the v2/v3 contracts) **refers consistently** to the same synthetic fans across lines. When only one source is active, that side uses one population for its events (no cross-stream requirement).
 
 ### Out of scope (non-goals)
 
 - Changing canonical v1/v2/v3 interchange contract documents **unless** a small explicit amendment is required and versioned; default is **no contract file churn**.
-- Adding a broker client or similar **non-stdlib** runtime dependency to project dependencies for this feature.
+- Adding a broker client or similar **non-stdlib** runtime dependency to the **base** project dependencies; any broker integration is an **optional extra** (`pip install 'blauw-zwart-fan-sim-pipeline[kafka]'`).
 - Defining new event types beyond combining existing v2 match-style and v3 retail events as described.
 - **v1 rolling** (non-calendar) match generation as a source inside **`stream`**; operators use existing **batch** generators for v1-only workflows.
 - **Built-in file rotation** or multi-file rollover for NDJSON output (out of scope for `stream`).

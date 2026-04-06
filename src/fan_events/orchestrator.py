@@ -55,6 +55,8 @@ def write_merged_stream(
 
     Pacing: if min/max set, sleep between lines (after first) like ``generate_retail --stream``.
     """
+    if max_events == 0:
+        return 0
     count = 0
     t_anchor: datetime | None = None
     first_line = True
