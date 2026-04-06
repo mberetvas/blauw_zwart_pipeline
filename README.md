@@ -36,7 +36,7 @@ fan_events stream [options]
 
 ## Parameters and defaults
 
-Flags are **subcommand-specific**: use a **separate** invocation per subcommand. Options that belong to `generate_events` only (for example `--calendar`, `--count`, `--days`, `--events`) are **not** valid on `generate_retail`—see **`fan_events generate_retail --help`** for the v3 flag list. For the unified stream, see **`fan_events stream --help`** ([`cli-stream.md`](specs/004-unified-synthetic-stream/contracts/cli-stream.md)); post-merge caps use **`--max-events` / `--max-duration`** (long names only), not `generate_retail`’s **`-n` / `-d`**.
+Flags are **subcommand-specific**: use a **separate** invocation per subcommand. Options that belong to `generate_events` only (for example `--calendar`, `--count`, `--days`, `--events`) are **not** valid on `generate_retail`. The **`stream`** subcommand has its own contract ([`cli-stream.md`](specs/004-unified-synthetic-stream/contracts/cli-stream.md)): it rejects v1 rolling-style flags, and merged-output limits use **`--max-events` / `--max-duration`** only—not **`generate_retail`’s `-n` / `-d`**.
 
 ### Same letter, different meaning (`-n` and `-d`)
 
@@ -45,13 +45,9 @@ Flags are **subcommand-specific**: use a **separate** invocation per subcommand.
 | **`-n`** | `--count` (total events, v1) | `--max-events` (cap; implied default **200** when unset—see v3 table) |
 | **`-d`** | `--days` (rolling window length, v1) | `--max-duration` (simulated seconds from epoch for record timestamps) |
 
+**`stream`**: this subcommand does **not** define **`-n` / `-d`**. Use **`--max-events` / `--max-duration`** for the **merged** line stream (after interleaving v2 and v3), and **`--retail-max-events` / `--retail-max-duration`** to cap the **retail** generator **before** merge.
+
 Always check which subcommand you are using. **`fan_events generate_events --help`**, **`fan_events generate_retail --help`**, and **`fan_events stream --help`** list the authoritative short/long pairs.
-
-### `stream` (unified NDJSON)
-
-Merged **stdout** or **append-only file** (`-o` / `--output`): **v2** when `--calendar` is set; **v3** retail is included if there is **no** `--calendar` (retail-only) or if `--calendar` is set **without** `--no-retail` (merged). **Calendar-only** is `--calendar` **with** `--no-retail`. **Post-merge** limits: **`--max-events`**, **`--max-duration`** (simulated span from the first emitted timestamp). **Retail-internal** caps: **`--retail-max-events`**, **`--retail-max-duration`**. Optional **`--emit-wall-clock-min` / `--emit-wall-clock-max`** sleep between **merged** lines (same idea as `generate_retail --stream`). Omitting both post-merge limits yields an **unbounded** run until interrupt, exhaustion, or retail-side caps — see **`fan_events stream --help`**. Pipe stdout to external tools (for example **`kcat`**) without adding a Kafka client to this repo.
-
-Normative detail: [`specs/004-unified-synthetic-stream/quickstart.md`](specs/004-unified-synthetic-stream/quickstart.md).
 
 ### `generate_events` (v1 / v2)
 
@@ -118,6 +114,57 @@ If **`-n` / `--max-events`** and **`-d` / `--max-duration`** are both set, gener
 
 Normative detail and extra examples: [`specs/003-ndjson-v3-retail-sim/quickstart.md`](specs/003-ndjson-v3-retail-sim/quickstart.md).
 
+### `stream` (unified NDJSON — v2 and/or v3)
+
+One UTF-8 **NDJSON line stream** in **non-decreasing synthetic time**: v2 match events (`ticket_scan` / `merch_purchase` with `match_id`) interleaved with v3 `retail_purchase` using `heapq.merge` (see [`orchestrated-stream.md`](specs/004-unified-synthetic-stream/contracts/orchestrated-stream.md)). Output is **stdout** when **`-o` / `--output` is omitted** or set to **`-`**; otherwise the path is opened in **append** mode (creates parent dirs; each line is a complete JSON object + LF).
+
+**Which sources run**
+
+| Mode | `--calendar` | `--no-retail` | v2 match lines | v3 retail lines |
+| ---- | -------------- | --------------- | -------------- | ---------------- |
+| **Merged** | set | omit | yes | yes |
+| **Calendar-only** | set | set | yes | no |
+| **Retail-only** | omit | omit | no | yes |
+
+**`--no-retail` without `--calendar` is an error** (nothing would be generated).
+
+| Argument | Default | Description |
+| -------- | ------- | ----------- |
+| `-o`, `--output` | *(none)* | Append NDJSON to this path (UTF-8). Omit or `-` → **stdout** |
+| `-s`, `--seed` | *(none)* | RNG seed for v2, retail, and wall-clock pacing draws |
+| `--no-retail` | off | With `--calendar`: v2 only (exclude v3 from the merge) |
+| `-c`, `--calendar` | *(none)* | Calendar JSON path; omit for retail-only stream |
+| `--from-date` / `--to-date` | *(none)* | Same semantics as `generate_events` v2 (both or neither) |
+| `--scan-fraction` | `0.85` when omitted | Same as `generate_events` v2 |
+| `--merch-factor` | `0.25` when omitted | Same as `generate_events` v2 |
+| `-e`, `--events` | `both` | v2 event filter: `both`, `ticket_scan`, or `merch_purchase` |
+| `--max-events` | *(none)* | **Post-merge**: stop after N complete lines |
+| `--max-duration` | *(none)* | **Post-merge**: max simulated **seconds** from the **first emitted** timestamp |
+| `--retail-max-events` | *(none)* | **Retail iterator**: event count cap before merge (no implied **200** when both retail limits omitted—unbounded retail until merge caps or Ctrl+C) |
+| `--retail-max-duration` | *(none)* | **Retail iterator**: max simulated seconds from retail epoch |
+| `-E`, `--epoch` | `2026-01-01T00:00:00Z` when omitted | Retail timeline start (ISO-8601 UTC) |
+| `--shop-weights` `W1` `W2` `W3` | equal **1/3** per shop when omitted | Same order as `generate_retail` |
+| `--arrival-mode` | `poisson` | `poisson`, `fixed`, or `weighted_gap` |
+| `--poisson-rate` | `0.1` | Used when `poisson` |
+| `--fixed-gap-seconds` | `60` | Used when `fixed` |
+| `--weighted-gaps` / `--weighted-gap-weights` | *(none)* | Required together for `weighted_gap` |
+| `-p`, `--fan-pool` | *(none)* | **Merged** mode: shared upper bound for `fan_…` numeric pool on **both** v2 and v3 (default: heuristic from calendar capacity). **Retail-only**: same idea as `generate_retail` |
+| `--emit-wall-clock-min` / `--emit-wall-clock-max` | *(none)* | **Both** required if either set; random sleep in `[min, max]` before each line **after the first** (applies to **merged** output; separate pacing RNG from `--seed`) |
+
+**Stopping / unbounded runs**
+
+- If **both** `--max-events` and `--max-duration` are **omitted**, the merged stream can run until **Ctrl+C**, generator exhaustion, or **retail** limits (`--retail-max-*`). Prefer explicit caps for demos and pipelines.
+- **Ctrl+C** exits with code **130**; each line is written as a **full** LF-terminated record before flush (no torn UTF-8 mid-line).
+
+**`stream` validation (argparse)**
+
+- **`--from-date` / `--to-date`**, **`--scan-fraction` / `--merch-factor`**: same pairing rules as v2 when `--calendar` is used.
+- **v1 rolling flags** (`-n` / `--count` / `-d` / `--days` as rolling options) are **rejected** on `stream`.
+- **`--emit-wall-clock-min` / `--emit-wall-clock-max`**: must appear together; `0 ≤ min ≤ max`.
+- **`--no-retail`**: requires `--calendar`.
+
+More copy-paste commands: [`specs/004-unified-synthetic-stream/quickstart.md`](specs/004-unified-synthetic-stream/quickstart.md).
+
 ## Examples
 
 Use `uv run fan_events` from the repo root after `uv sync`. If you installed the package, run **`fan_events`** with the same arguments (omit `uv run`).
@@ -165,6 +212,39 @@ uv run fan_events generate_retail -t -s 42 -n 50 \
 ```bash
 uv run fan_events generate_retail -t -u -s 42 \
   --emit-wall-clock-min 1 --emit-wall-clock-max 5
+```
+
+**Unified `stream`** (merged v2 + v3 to a file; post-merge cap 1000 lines)
+
+```bash
+uv run fan_events stream --calendar my_calendar.json -s 42 -o out/mixed.ndjson \
+  --retail-max-events 5000 --max-events 1000
+```
+
+**Unified `stream`** (merged to stdout)
+
+```bash
+uv run fan_events stream --calendar my_calendar.json -s 42 \
+  --retail-max-events 2000 --max-events 500
+```
+
+**Unified `stream`** (calendar-only: v2 lines only)
+
+```bash
+uv run fan_events stream --calendar my_calendar.json --no-retail -s 42 --max-events 200
+```
+
+**Unified `stream`** (retail-only; post-merge cap)
+
+```bash
+uv run fan_events stream -s 1 --retail-max-events 100 --max-events 50
+```
+
+**Unified `stream`** (pipe to **kcat** — external tool; configure broker/topic yourself)
+
+```bash
+uv run fan_events stream --calendar my_calendar.json -s 42 --max-events 500 | \
+  kcat -P -b localhost:9092 -t fan-events
 ```
 
 ## Match calendar JSON (v2 input)
@@ -225,6 +305,7 @@ Optional **single JSON document** (canonical serialization, UTF-8, trailing newl
 - **v1 lines**: `ticket_scan` and/or `merch_purchase` records **without** `match_id` (see `specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md`).
 - **v2 lines**: Same event types; **every** record includes `match_id`; timestamps are UTC with a `Z` suffix (**see [v2: UTC timestamps and the match window](#v2-utc-timestamps-and-the-match-window)**); global line order follows the v2 contract (see `specs/002-match-calendar-events/contracts/fan-events-ndjson-v2.md`).
 - **v3 lines**: `retail_purchase` only, closed six-field schema; batch output is globally sorted (see `specs/003-ndjson-v3-retail-sim/contracts/fan-events-ndjson-v3.md`). Stream mode (`-t` / `--stream`) can emit lines immediately or with wall-clock delays (`--emit-wall-clock-min` / `--emit-wall-clock-max`).
+- **Unified `stream`**: Lines are a **mix** of v2 and v3 schemas as selected by source mode; **global order** is non-decreasing by synthetic timestamp (and merge-key tie-breaks per [`orchestrated-stream.md`](specs/004-unified-synthetic-stream/contracts/orchestrated-stream.md)). Serialization is still canonical JSON, one object per line. **Append** mode does not truncate existing files.
 - **Empty output**: If v2 date filtering removes all matches, the file is **empty** (zero bytes). Retail with `-n 0` / `--max-events 0` yields an **empty** file or no stdout bytes in stream mode. With **`-F` / `--fans-out`**, the sidecar is still written: `fans` is `{}`, with `rng_seed` and `schema_version` set.
 
-Normative details: `specs/001-synthetic-fan-events/` (v1), `specs/002-match-calendar-events/` (v2), `specs/003-ndjson-v3-retail-sim/` (v3). Governance: [.specify/memory/constitution.md](.specify/memory/constitution.md).
+Normative details: `specs/001-synthetic-fan-events/` (v1), `specs/002-match-calendar-events/` (v2), `specs/003-ndjson-v3-retail-sim/` (v3), `specs/004-unified-synthetic-stream/` (unified stream). Governance: [.specify/memory/constitution.md](.specify/memory/constitution.md).
