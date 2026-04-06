@@ -69,6 +69,15 @@ stream-kafka topic="fan-events":
         --kafka-topic {{ topic }} \
         --kafka-bootstrap-servers localhost:9092
 
+# Same as stream-kafka but no --max-events (stops when iterators end, or Ctrl+C)
+stream-kafka-live topic="fan-events":
+    uv run fan_events stream \
+        --calendar {{ calendar }} \
+        -s {{ seed }} \
+        --retail-max-events {{ retail_max }} \
+        --kafka-topic {{ topic }} \
+        --kafka-bootstrap-servers localhost:9092
+
 # ── Batch generators ───────────────────────────────────────────────
 # Generate v1 rolling-window batch
 generate-events:
