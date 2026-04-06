@@ -10,7 +10,7 @@ Or you can install the package using
 uv tool install blauw-zwart-fan-sim-pipeline --from git+https://github.com/mberetvas/blauw_zwart_pipeline
 ```
 
-After installation, the `fan_events` entry point is on your `PATH`. Use the same arguments as below without the `uv run` prefix (for example `fan_events generate_events -s 1 -o out/v1.ndjson` or `fan_events generate_retail -s 1 -o out/retail.ndjson`).
+After installation, the `fan_events` entry point is on your `PATH`. Use the same arguments as below without the `uv run` prefix (for example `fan_events generate_events -s 1 -o out/v1.ndjson`, `fan_events generate_retail -s 1 -o out/retail.ndjson`, or `fan_events stream -s 42 --retail-max-events 100 --max-events 50`).
 
 ## CLI overview
 
