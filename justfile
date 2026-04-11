@@ -1,11 +1,13 @@
 # ── Defaults (override on CLI: just stream seed=99 max=100) ──────────
-calendar   := "match_day.example.json"
-seed       := "42"
-max        := "500"
-retail_max := "2000"
+calendar        := "match_day.example.json"
+seed            := "42"
+max             := "500"
+retail_max      := "2000"
 # Wall-clock delay between emitted lines (seconds). Both are required by fan_events; use 0 and 0 to disable.
-emit_min   := "1"
-emit_max   := "3"
+emit_min        := "1"
+emit_max        := "3"
+# Calendar-loop shift in days (default: 365 = replay season one year later)
+loop_shift_days := "365"
 
 # ── Help / discovery ────────────────────────────────────────────────
 # Show top-level CLI help
@@ -40,6 +42,30 @@ stream-calendar:
         --no-retail \
         -s {{ seed }} \
         --max-events {{ max }}
+
+# Continuous calendar loop to stdout — replays the season indefinitely, shifting each cycle
+# forward by loop_shift_days (default: 365). Stops on Ctrl+C or when --max-events is reached.
+# Override defaults e.g.: just stream-loop seed=7 emit_min=0.1 emit_max=0.5 loop_shift_days=7
+stream-loop:
+    uv run fan_events stream \
+        --calendar {{ calendar }} \
+        --no-retail \
+        -s {{ seed }} \
+        --calendar-loop \
+        --calendar-loop-shift {{ loop_shift_days }} \
+        --emit-wall-clock-min {{ emit_min }} \
+        --emit-wall-clock-max {{ emit_max }}
+
+# Continuous calendar loop merged with retail — runs forever (Ctrl+C to stop)
+stream-loop-merged:
+    uv run fan_events stream \
+        --calendar {{ calendar }} \
+        -s {{ seed }} \
+        --calendar-loop \
+        --calendar-loop-shift {{ loop_shift_days }} \
+        --retail-max-events {{ retail_max }} \
+        --emit-wall-clock-min {{ emit_min }} \
+        --emit-wall-clock-max {{ emit_max }}
 
 # Retail-only stream (no calendar/v2 lines)
 stream-retail:

@@ -109,6 +109,9 @@ services:
       - /app/match_day.example.json
       - --seed
       - ${FAN_EVENTS_STREAM_SEED:-42}
+      - --calendar-loop
+      - --calendar-loop-shift
+      - ${FAN_EVENTS_STREAM_LOOP_SHIFT_DAYS:-365}
       - --emit-wall-clock-min
       - ${FAN_EVENTS_STREAM_EMIT_WALL_CLOCK_MIN:-0.25}
       - --emit-wall-clock-max

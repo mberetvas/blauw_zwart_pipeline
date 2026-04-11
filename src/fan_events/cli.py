@@ -16,7 +16,7 @@ import os
 import random
 import sys
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from fan_events.domain import (
@@ -45,6 +45,7 @@ from fan_events.v2_calendar import (
     CalendarError,
     filter_matches_by_date_range,
     generate_v2_records,
+    iter_looped_v2_records,
     iter_v2_records_merged_sorted,
     load_calendar_json,
     validate_and_parse_matches,
@@ -69,6 +70,7 @@ DEFAULT_DAYS = 90
 DEFAULT_RETAIL_IMPLIED_MAX_EVENTS = 200
 DEFAULT_RETAIL_POISSON_RATE = 0.1
 DEFAULT_RETAIL_FIXED_GAP_SECONDS = 60.0
+DEFAULT_CALENDAR_LOOP_SHIFT_DAYS = 365
 _DEFAULT_RETAIL_EPOCH_HELP_STR = DEFAULT_RETAIL_SIM_EPOCH_UTC.strftime("%Y-%m-%dT%H:%M:%SZ")
 SUBCOMMAND_EVENTS = "generate_events"
 SUBCOMMAND_RETAIL = "generate_retail"
@@ -335,6 +337,10 @@ def _validate_stream(
 ) -> None:
     if ns.no_retail and not ns.calendar:
         p.error("--no-retail requires --calendar (calendar-only mode)")
+    if ns.calendar_loop and not ns.calendar:
+        p.error("--calendar-loop requires --calendar")
+    if ns.calendar_loop_shift is not None and ns.calendar_loop_shift <= 0:
+        p.error("--calendar-loop-shift must be > 0")
     tok = _tokens_after_subcommand(argv, SUBCOMMAND_STREAM)
     if _explicit_v1_rolling_flags_in_tokens(tok):
         p.error(
@@ -436,6 +442,7 @@ _OPTS_WITH_FOLLOWING_VALUE = frozenset({
     "--kafka-client-id",
     "--kafka-compression",
     "--kafka-acks",
+    "--calendar-loop-shift",
 })
 
 
@@ -815,6 +822,32 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="both",
         help="Event types for v2 calendar side (default: both)",
     )
+    cal_s.add_argument(
+        "--calendar-loop",
+        action="store_true",
+        default=False,
+        dest="calendar_loop",
+        help=(
+            "Repeat the calendar season on a loop: after the last match in the file is emitted, "
+            "restart from cycle 1 with all kickoff timestamps shifted forward by "
+            "--calendar-loop-shift days.  Requires --calendar.  "
+            "Runs indefinitely until stopped by --max-events, --max-duration, Ctrl+C, "
+            "or process exit."
+        ),
+    )
+    cal_s.add_argument(
+        "--calendar-loop-shift",
+        type=float,
+        default=None,
+        metavar="DAYS",
+        dest="calendar_loop_shift",
+        help=(
+            f"Number of days to shift kickoff timestamps forward per cycle when --calendar-loop "
+            f"is active (default: {DEFAULT_CALENDAR_LOOP_SHIFT_DAYS} days — one full year, "
+            f"so a season replay lands roughly on the same calendar dates one year later). "
+            f"Use fractional values for sub-day shifts."
+        ),
+    )
     lim = st.add_argument_group("Post-merge limits (merged NDJSON line stream)")
     lim.add_argument(
         "--max-events",
@@ -1155,14 +1188,31 @@ def run_stream(args: argparse.Namespace) -> None:
     events_mode = args.events
 
     if include_v2:
-        v2_iter = iter_v2_records_merged_sorted(
-            contexts,
-            v2_rng,
-            scan_fraction=sf,
-            merch_factor=mf,
-            events_mode=events_mode,
-            fan_pool_max=unified,
+        loop_shift_days = (
+            args.calendar_loop_shift
+            if args.calendar_loop_shift is not None
+            else DEFAULT_CALENDAR_LOOP_SHIFT_DAYS
         )
+        loop_shift = timedelta(days=loop_shift_days)
+        if getattr(args, "calendar_loop", False):
+            v2_iter = iter_looped_v2_records(
+                contexts,
+                v2_rng,
+                shift=loop_shift,
+                scan_fraction=sf,
+                merch_factor=mf,
+                events_mode=events_mode,
+                fan_pool_max=unified,
+            )
+        else:
+            v2_iter = iter_v2_records_merged_sorted(
+                contexts,
+                v2_rng,
+                scan_fraction=sf,
+                merch_factor=mf,
+                events_mode=events_mode,
+                fan_pool_max=unified,
+            )
     else:
         v2_iter = iter(())
 

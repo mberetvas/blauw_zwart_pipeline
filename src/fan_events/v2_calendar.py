@@ -318,3 +318,66 @@ def iter_v2_records_merged_sorted(
     if not per_match_iters:
         return
     yield from heapq.merge(*per_match_iters, key=merge_key_tuple)
+
+
+def shift_match_context(ctx: MatchContext, shift: timedelta, cycle: int) -> MatchContext:
+    """Return a new MatchContext with all timestamps shifted by *shift* and match_id suffixed.
+
+    The ``kickoff_local`` string in the row dict is updated to keep it consistent with
+    ``kickoff_utc`` (shift applied in UTC-equivalent wall-clock offset; the naive local string
+    is shifted by the same delta, which is correct for a synthetic replay that does not need
+    DST-aware rescheduling).
+    """
+    new_row = dict(ctx.row)
+    naive = datetime.fromisoformat(str(ctx.row["kickoff_local"]))
+    new_row["kickoff_local"] = (naive + shift).isoformat()
+    new_row["match_id"] = f"{ctx.row['match_id']}:c{cycle}"
+    return MatchContext(
+        row=new_row,
+        kickoff_utc=ctx.kickoff_utc + shift,
+        window_start=ctx.window_start + shift,
+        window_end=ctx.window_end + shift,
+        effective_cap=ctx.effective_cap,
+    )
+
+
+def iter_looped_v2_records(
+    base_contexts: list[MatchContext],
+    rng: random.Random,
+    *,
+    shift: timedelta,
+    scan_fraction: float = DEFAULT_SCAN_FRACTION,
+    merch_factor: float = DEFAULT_MERCH_FACTOR,
+    events_mode: str = "both",
+    fan_pool_max: int | None = None,
+) -> Iterator[dict[str, Any]]:
+    """Yield v2 records indefinitely by cycling over *base_contexts* with shifted kickoffs.
+
+    Cycle 0 uses the original contexts unmodified; cycle N ≥ 1 shifts all kickoff/window
+    timestamps by N × *shift* and appends ``:c{N}`` to each ``match_id`` for uniqueness.
+
+    A **single RNG instance** is shared across all cycles, producing a continuous stochastic
+    stream (fan assignments and timestamps within each window are not reproducible per cycle,
+    but the overall sequence is reproducible when the caller seeds the RNG before calling).
+
+    Stops only when the caller's consumer breaks out (e.g. via ``--max-events``, ``--max-duration``,
+    ``Ctrl+C``, or process exit).  If *base_contexts* is empty the generator returns immediately.
+    """
+    if not base_contexts:
+        return
+    cycle = 0
+    while True:
+        if cycle == 0:
+            contexts = base_contexts
+        else:
+            total_shift = shift * cycle
+            contexts = [shift_match_context(ctx, total_shift, cycle) for ctx in base_contexts]
+        yield from iter_v2_records_merged_sorted(
+            contexts,
+            rng,
+            scan_fraction=scan_fraction,
+            merch_factor=merch_factor,
+            events_mode=events_mode,
+            fan_pool_max=fan_pool_max,
+        )
+        cycle += 1
