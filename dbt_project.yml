@@ -26,6 +26,3 @@ models:
         +materialized: view
       match_events:
         +materialized: view
-
-    marts:
-      +materialized: table
