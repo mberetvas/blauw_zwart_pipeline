@@ -1,6 +1,10 @@
-# Copy to profiles.yml in this folder (gitignored) or merge into ~/.dbt/profiles.yml
+# Copy this file to profiles.yml in this folder (gitignored) or merge into ~/.dbt/profiles.yml
 #
-# From the repo root, point dbt at this directory:
+# dbt_project.yml lives at the repository root; run from the repo root:
+#   uv run dbt debug
+# If your cwd is dbt/, use: uv run dbt debug --project-dir ..
+#
+# Point dbt at this directory (no inline # comments on the same line as the path in .env):
 #   PowerShell:  $env:DBT_PROFILES_DIR = "$PWD\dbt"
 #   bash:        export DBT_PROFILES_DIR="$(pwd)/dbt"
 #
