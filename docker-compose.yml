@@ -1,25 +1,33 @@
-# Single-node Apache Kafka (KRaft, no ZooKeeper) for local testing.
-# Bootstrap from the host: localhost:9092
+# Local fan-event pipeline (Kafka KRaft + Postgres + pgAdmin + producer + ingest).
+# Quickstart: specs/005-compose-kafka-pipeline/quickstart.md
+#
+# Kafka listeners:
+#   - EXTERNAL (PLAINTEXT_HOST): host clients use localhost:9092 (optional host fan_events stream).
+#   - INTERNAL (PLAINTEXT_INTERNAL): Compose clients use broker:29092 (producer + ingest).
+#   - CONTROLLER: KRaft quorum on broker:9093 (not for clients).
+# Topics are auto-created on first produce (FR-13); partition count for new topics follows
+# KAFKA_NUM_PARTITIONS below (default 3).
 #
 #   docker compose up -d
-#   docker compose down        # stop (data kept in volume)
+#   docker compose down        # stop (data kept in volumes)
 #   docker compose down -v     # stop and remove persisted data
 
 services:
   broker:
-    image: apache/kafka:latest
+    # Pin: Docker Hub apache/kafka — use :port listeners (not 0.0.0.0) for KRaft (KAFKA-18281 on 3.9.0).
+    image: apache/kafka:4.2.0
     container_name: kafka-broker
     ports:
       - "9092:9092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      # Bind on all interfaces so published port 9092 accepts host connections.
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENERS: PLAINTEXT_INTERNAL://:29092,PLAINTEXT_HOST://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT_INTERNAL://broker:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@broker:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
@@ -28,6 +36,106 @@ services:
       KAFKA_LOG_DIRS: /var/lib/kafka/data
     volumes:
       - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 10s
+
+  postgres:
+    # Pin: Docker Hub library/postgres — `18-alpine` tracks latest PG 18 on Alpine.
+    # Major upgrade: remove/rename `postgres-data` volume or run pg_upgrade (not done here).
+    image: postgres:18-alpine
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    # Pin: Docker Hub dpage/pgadmin4
+    image: dpage/pgadmin4:9.14
+    env_file: .env
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ingest:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ingest
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-broker:29092}
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-fan_events}
+      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-fan-ingest-local}
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
+
+  # ─── Optional: Compose-managed producer ───────────────────────────────────
+  # This service is disabled by default (requires --profile producer or
+  # COMPOSE_PROFILES=producer).  The recommended primary workflow is to run
+  # `fan_events stream` on the host via UV (see quickstart.md §2).
+  #
+  #   docker compose --profile producer up -d   # start with Compose producer
+  #   docker compose up -d                       # start without producer (default)
+  producer:
+    profiles: [producer]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ingest
+    env_file: .env
+    command:
+      - fan_events
+      - stream
+      - --calendar
+      - /app/match_day.example.json
+      - --seed
+      - ${FAN_EVENTS_STREAM_SEED:-42}
+      - --calendar-loop
+      - --calendar-loop-shift
+      - ${FAN_EVENTS_STREAM_LOOP_SHIFT_DAYS:-365}
+      - --emit-wall-clock-min
+      - ${FAN_EVENTS_STREAM_EMIT_WALL_CLOCK_MIN:-0.25}
+      - --emit-wall-clock-max
+      - ${FAN_EVENTS_STREAM_EMIT_WALL_CLOCK_MAX:-1.0}
+      - --kafka-bootstrap-servers
+      - ${KAFKA_BOOTSTRAP_SERVERS:-broker:29092}
+      - --kafka-topic
+      - ${KAFKA_TOPIC:-fan_events}
+    volumes:
+      - ./match_day.example.json:/app/match_day.example.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
 
 volumes:
   kafka-data:
+  postgres-data:

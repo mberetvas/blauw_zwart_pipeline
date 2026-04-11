@@ -2,7 +2,7 @@
 
 # Blauw zwart - Mock-up data creator
 
-Synthetic fan events generator for Club Brugge KV simulations. The `fan_events` package (`src/fan_events/`) exposes a CLI with four modes: **`generate_events`** (match-related **v1** rolling window or **v2** calendar), **`generate_retail`** (**v3** match-independent retail purchases), and **`stream`** (one time-ordered NDJSON stream mixing **v2** and **v3**, with optional native Kafka output).
+Synthetic fan events generator for Club Brugge KV simulations. PyPI / `pyproject.toml` name: **`blauw-zwart-fan-sim-pipeline`**. The `fan_events` package (`src/fan_events/`) exposes a CLI with three subcommands: **`generate_events`** (match-related **v1** rolling window or **v2** calendar), **`generate_retail`** (**v3** match-independent retail purchases), and **`stream`** (one time-ordered NDJSON stream mixing **v2** and **v3**, with optional native Kafka output). A separate entry point, **`fan_ingest`**, consumes that NDJSON from Kafka into Postgres (used by Docker Compose; optional on the host).
 
 ## Prerequisites
 
@@ -10,33 +10,61 @@ Synthetic fan events generator for Club Brugge KV simulations. The `fan_events` 
 |-------------|---------|-------|
 | Python | ≥ 3.12 | Required by `pyproject.toml` |
 | [uv](https://docs.astral.sh/uv/) | any recent | Package manager; used for all dev commands |
-| Docker | any | Only needed for `just kafka` (local broker) |
-| [just](https://just.systems/) | any | Optional task runner; `just kafka` starts the local broker |
+| Docker | any | Kafka + Postgres + ingest via `docker-compose.yml` (see **Full local pipeline** below) |
+| [just](https://just.systems/) | any | Optional task runner; see [`justfile`](justfile) (e.g. `just kafka-up`, `just stream`, `just stream-kafka`) |
 
 ## Installation
 
 **Option A — local development (recommended):**
 
 ```bash
-git clone https://github.com/mberetvas/blauw_zwart_pipeline
+git clone https://github.com/mberetvas/blauw_zwart_pipeline.git
 cd blauw_zwart_pipeline
-uv sync                    # installs runtime + dev deps into .venv
-uv sync --extra kafka      # also installs confluent-kafka for Kafka output
+uv sync
+uv sync --extra kafka
 uv run fan_events --help
 ```
+
+`uv sync` installs the project plus the default **dev** dependency group (pytest, ruff). Add **`--extra ingest`** if you will run **`fan_ingest`** on the host, or use **`uv sync --all-extras`** for both **`kafka`** and **`ingest`**.
 
 **Option B — install globally via uv:**
 
 ```bash
-uv tool install blauw-zwart-fan-sim-pipeline --from git+https://github.com/mberetvas/blauw_zwart_pipeline
-# For Kafka output support, include the kafka extra:
-uv tool install 'blauw-zwart-fan-sim-pipeline[kafka]' --from git+https://github.com/mberetvas/blauw_zwart_pipeline
-fan_events --help   # now on PATH
+uv tool install 'blauw-zwart-fan-sim-pipeline[kafka,ingest]' --from git+https://github.com/mberetvas/blauw_zwart_pipeline
+fan_events --help
 ```
 
-After a global install, use `fan_events` directly (drop the `uv run` prefix from all examples below).
+Omit the bracket suffix for a minimal install, or use **`[kafka]`**, **`[ingest]`**, or **`[kafka,ingest]`** as needed (Kafka streaming and `fan_ingest` require their respective extras).
+
+After a global install, use `fan_events` / `fan_ingest` directly (drop the `uv run` prefix from command examples). `fan_ingest` needs the **`ingest`** extra.
 
 > **Kafka extra**: `confluent-kafka` (a C extension wrapping `librdkafka`) is an **optional** dependency. The base install works without it; only `fan_events stream --kafka-topic` (or `FAN_EVENTS_KAFKA_TOPIC` env var) requires it. Without the extra installed, that path exits with a clear error message.
+
+> **Ingest extra**: The **`fan_ingest`** CLI (Kafka → Postgres) needs the **`ingest`** optional dependency group (`asyncpg` + `confluent-kafka`). For the normal Compose workflow you do **not** need it on the host—the **`ingest`** service runs in Docker. Install **`ingest`** only if you run `uv run fan_ingest` locally.
+
+### Full local pipeline (Kafka → Postgres)
+
+End-to-end demo: Docker Compose now starts Kafka KRaft, Postgres, pgAdmin, the Kafka ingest worker, and a long-running `fan_events stream` producer. Step-by-step guide, ports, and acceptance checks: [`specs/005-compose-kafka-pipeline/quickstart.md`](specs/005-compose-kafka-pipeline/quickstart.md).
+
+| Port (defaults) | Service |
+|-----------------|---------|
+| **9092** | Kafka (host clients: `localhost:9092`; Compose services use `broker:29092`) |
+| **5432** | Postgres (override with `POSTGRES_PORT` if in use) |
+| **5050** | pgAdmin |
+
+```bash
+cp .env.example .env && docker compose up -d
+```
+
+**Ingest on the host (optional):** With the stack up and **`uv sync --extra ingest`**, you can run a second consumer or debug without rebuilding the image. Point **`DATABASE_URL`** at the **host-published** Postgres port from `.env` (`POSTGRES_PORT`, default **5432**), and **`KAFKA_BOOTSTRAP_SERVERS=localhost:9092`** (host listener; not `broker:29092`).
+
+```bash
+export DATABASE_URL="postgresql://postgres:changeme@localhost:5432/fan_pipeline"
+export KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+uv run fan_ingest --help
+```
+
+Adjust credentials and port to match your `.env`. Topic and consumer group default to the same values as `.env.example` when unset.
 
 ## CLI overview
 
@@ -286,7 +314,7 @@ uv run fan_events stream -s 1 --retail-max-events 100 --max-events 50
 
 ## Kafka output
 
-The `stream` subcommand can publish events directly to a Kafka topic using the native `confluent-kafka` producer (no external piping needed). Each NDJSON line becomes one Kafka message; the message key is null (round-robin partitioning).
+The `stream` subcommand can publish events directly to a Kafka topic using the native `confluent-kafka` producer (no external piping needed). Each NDJSON line becomes one Kafka message; the message key is null (round-robin partitioning). On exit (including Ctrl+C), the producer follows the same flush behavior described under **`stream`** → **Stopping / unbounded runs**.
 
 ### Start a local broker
 
@@ -296,12 +324,17 @@ First, make sure the `kafka` extra is installed:
 uv sync --extra kafka
 ```
 
-Then start the broker:
+Then start Kafka. The repo pins **`apache/kafka:4.2.0`** in [`docker-compose.yml`](docker-compose.yml) (KRaft, port **9092** on the host).
+
+**Broker only** (enough for a host producer hitting `localhost:9092`):
 
 ```bash
-just kafka
-# Equivalent: docker run -p 9092:9092 apache/kafka:4.1.2
+docker compose up -d broker
 ```
+
+**Full pipeline** (Postgres, pgAdmin, producer, ingest): copy [`.env.example`](.env.example) to `.env`, then `docker compose up -d` — see [`specs/005-compose-kafka-pipeline/quickstart.md`](specs/005-compose-kafka-pipeline/quickstart.md).
+
+Optional: **`just kafka-up`** runs `docker compose up -d` (entire stack). Other recipes: **`just stream-kafka`**, **`just kafka-consume`**, etc. — see [`justfile`](justfile).
 
 ### Publish via environment variables
 
@@ -310,7 +343,7 @@ Setting `FAN_EVENTS_KAFKA_TOPIC` in the environment is enough to activate Kafka 
 ```bash
 # Export variables (or load from .env: export $(cat .env | xargs))
 export FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-export FAN_EVENTS_KAFKA_TOPIC=fan-events
+export FAN_EVENTS_KAFKA_TOPIC=fan_events
 
 uv run fan_events stream -s 42 --retail-max-events 100 --max-events 50
 ```
@@ -325,7 +358,7 @@ uv run --env-file .env fan_events stream -s 42 --retail-max-events 100 --max-eve
 
 ```bash
 uv run fan_events stream \
-  --kafka-topic fan-events \
+  --kafka-topic fan_events \
   --kafka-bootstrap-servers localhost:9092 \
   --max-events 50 -s 42
 ```
@@ -335,7 +368,7 @@ uv run fan_events stream \
 ```bash
 uv run fan_events stream \
   --calendar my_calendar.json \
-  --kafka-topic fan-events \
+  --kafka-topic fan_events \
   --kafka-bootstrap-servers localhost:9092 \
   --retail-max-events 500 --max-events 1000 -s 42
 ```
@@ -346,7 +379,7 @@ Pass secrets via environment only — never on the command line:
 
 ```bash
 export FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS=my-broker:9092
-export FAN_EVENTS_KAFKA_TOPIC=fan-events
+export FAN_EVENTS_KAFKA_TOPIC=fan_events
 export FAN_EVENTS_KAFKA_SECURITY_PROTOCOL=SASL_SSL
 export FAN_EVENTS_KAFKA_SASL_MECHANISM=PLAIN
 export FAN_EVENTS_KAFKA_SASL_USERNAME=myuser
@@ -355,11 +388,9 @@ export FAN_EVENTS_KAFKA_SASL_PASSWORD=s3cret
 uv run fan_events stream --max-events 100
 ```
 
-### Shutdown guarantee
-
-On both normal exit and Ctrl+C, the producer blocks for up to **30 seconds** to flush all in-flight messages. A warning is printed to stderr if messages remain unconfirmed after the timeout.
-
 ## Match calendar JSON (v2 input)
+
+The repository ships **[`match_day.example.json`](match_day.example.json)** at the root for quick tries (the Compose producer mounts this file).
 
 UTF-8 JSON with a top-level `matches` array. Each object **must** include:
 
@@ -421,10 +452,12 @@ Optional **single JSON document** (canonical serialization, UTF-8, trailing newl
 
 ## Development
 
+From the **repository root** (where `pyproject.toml` and `tests/` live):
+
 ```bash
-uv run pytest          # run all tests
-uv run ruff check src/ tests/   # lint
+uv run pytest                 # run all tests (pythonpath includes src/)
+uv run ruff check .           # lint (respects pyproject excludes)
 ```
 
-Normative details: `specs/001-synthetic-fan-events/` (v1), `specs/002-match-calendar-events/` (v2), `specs/003-ndjson-v3-retail-sim/` (v3), `specs/004-unified-synthetic-stream/` (unified stream). Governance: [.specify/memory/constitution.md](.specify/memory/constitution.md).
+Normative details: `specs/001-synthetic-fan-events/` (v1), `specs/002-match-calendar-events/` (v2), `specs/003-ndjson-v3-retail-sim/` (v3), `specs/004-unified-synthetic-stream/` (unified stream), `specs/005-compose-kafka-pipeline/` (Compose / ingest). Governance: [.specify/memory/constitution.md](.specify/memory/constitution.md).
 
