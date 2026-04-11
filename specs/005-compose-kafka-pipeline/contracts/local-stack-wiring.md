@@ -9,6 +9,7 @@ Compose **service names**, **ports**, and **Kafka listener roles** for feature *
 | `broker` | `apache/kafka` | Single-node KRaft broker + controller |
 | `postgres` | `postgres` | Application database |
 | `pgadmin` | `dpage/pgadmin4` | Browser UI for Postgres |
+| `producer` | Project `Dockerfile.ingest` | Compose-managed `fan_events stream` producer publishing merged v2 + v3 events to Kafka |
 | `ingest` | Project `Dockerfile.ingest` | Kafka → Postgres consumer |
 
 *(Exact image tags pinned in `docker-compose.yml` at implementation time.)*
@@ -36,8 +37,8 @@ Documented fully in **`.env.example`** and **quickstart.md**:
 
 - **Postgres**: `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, optional `POSTGRES_PORT` for host mapping.
 - **pgAdmin**: `PGADMIN_DEFAULT_EMAIL`, `PGADMIN_DEFAULT_PASSWORD`, config for pre-registered server.
-- **Ingest**: `KAFKA_BOOTSTRAP_SERVERS=broker:29092` (INTERNAL), topic name, consumer group, `DATABASE_URL` or discrete `POSTGRES_*` matching `postgres` service.
-- **Producer (host)**: `FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092`, `FAN_EVENTS_KAFKA_TOPIC=…`.
+- **Compose producer + ingest**: `KAFKA_BOOTSTRAP_SERVERS=broker:29092` (INTERNAL) and a shared `KAFKA_TOPIC`; producer-specific pacing/seed defaults come from `FAN_EVENTS_STREAM_*`.
+- **Optional host producer**: `FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092`, `FAN_EVENTS_KAFKA_TOPIC=…`.
 
 ## Volumes
 

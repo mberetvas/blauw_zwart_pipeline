@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -31,7 +32,7 @@ async def insert_fan_event_row(pool: asyncpg.Pool, row: dict[str, Any]) -> bool:
         row["kafka_offset"],
         row["event_type"],
         row["event_time"],
-        row["payload_json"],
+        json.dumps(row["payload_json"], ensure_ascii=False, separators=(",", ":")),
     )
     return row_id is not None
 

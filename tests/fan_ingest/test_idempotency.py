@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
@@ -40,3 +41,16 @@ def test_insert_fan_event_row_return_matches_returning(
     assert asyncio.run(_run()) is expected
     pool.fetchval.assert_awaited_once()
     assert "ON CONFLICT" in pool.fetchval.await_args.args[0]
+
+
+def test_insert_fan_event_row_serializes_payload_json_for_asyncpg_jsonb() -> None:
+    pool = AsyncMock()
+    pool.fetchval = AsyncMock(return_value=1)
+
+    async def _run() -> None:
+        await db.insert_fan_event_row(pool, _sample_row())
+
+    asyncio.run(_run())
+    payload_arg = pool.fetchval.await_args.args[6]
+    assert isinstance(payload_arg, str)
+    assert json.loads(payload_arg) == _sample_row()["payload_json"]

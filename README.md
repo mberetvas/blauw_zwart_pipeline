@@ -40,16 +40,16 @@ After a global install, use `fan_events` directly (drop the `uv run` prefix from
 
 ### Full local pipeline (Kafka → Postgres)
 
-End-to-end demo: Docker Compose (Kafka KRaft, Postgres, pgAdmin, ingest) plus the host producer. Step-by-step guide, ports, and acceptance checks: [`specs/005-compose-kafka-pipeline/quickstart.md`](specs/005-compose-kafka-pipeline/quickstart.md).
+End-to-end demo: Docker Compose now starts Kafka KRaft, Postgres, pgAdmin, the Kafka ingest worker, and a long-running `fan_events stream` producer. Step-by-step guide, ports, and acceptance checks: [`specs/005-compose-kafka-pipeline/quickstart.md`](specs/005-compose-kafka-pipeline/quickstart.md).
 
 | Port (defaults) | Service |
 |-----------------|---------|
-| **9092** | Kafka (host producers: `localhost:9092`) |
+| **9092** | Kafka (host clients: `localhost:9092`; Compose services use `broker:29092`) |
 | **5432** | Postgres (override with `POSTGRES_PORT` if in use) |
 | **5050** | pgAdmin |
 
 ```bash
-cp .env.example .env && docker compose up -d && uv sync --extra kafka && uv run fan_events stream --kafka-topic fan_events --kafka-bootstrap-servers localhost:9092 --max-events 100
+cp .env.example .env && docker compose up -d
 ```
 
 ## CLI overview
