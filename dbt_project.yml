@@ -16,8 +16,16 @@ clean-targets:
 models:
   fan_sim_pipeline:
     +materialized: view
-    # When you add models under intermediate/ or marts/, nest defaults here, e.g.:
-    # intermediate:
-    #   +materialized: ephemeral
-    # marts:
-    #   +materialized: table
+
+    staging:
+      +materialized: view
+
+    intermediate:
+      +materialized: view
+      merch_purchase:
+        +materialized: view
+      match_events:
+        +materialized: view
+
+    marts:
+      +materialized: table
