@@ -28,8 +28,8 @@ dev = [
 ]
 # dbt against local Compose Postgres: `uv sync --group dbt` then see dbt/profiles.yml.example
 dbt = [
-    "dbt-core>=1.8,<2",
-    "dbt-postgres>=1.8,<2",
+    "dbt-core~=1.8",
+    "dbt-postgres~=1.8",
 ]
 
 [tool.setuptools.packages.find]
