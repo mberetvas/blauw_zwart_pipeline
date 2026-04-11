@@ -1,0 +1,53 @@
+# `fan_pipeline` sources: see dbt/models/intermediate/_sources.yaml (dbt allows one YAML definition per source table).
+version: 2
+
+models:
+  - name: stg_fan_events_ingested
+    description: >
+      Staging pass-through over the `fan_pipeline.fan_events_ingested` source table for downstream
+      intermediate and mart models. Add casts and renames here as the project grows.
+    config:
+      tags: [staging, fan_events, ingest]
+    meta:
+      owner: pipeline
+      layer: staging
+    columns:
+      - name: id
+        description: Surrogate primary key from the ingest table (BIGSERIAL).
+        data_type: bigint
+        tests:
+          - not_null
+          - unique
+      - name: ingested_at
+        description: Time the ingest service persisted the row.
+        data_type: timestamp with time zone
+        tests:
+          - not_null
+      - name: kafka_topic
+        description: Kafka topic for the message.
+        data_type: text
+        tests:
+          - not_null
+      - name: kafka_partition
+        description: Kafka partition index (non-negative).
+        data_type: integer
+        tests:
+          - not_null
+      - name: kafka_offset
+        description: Offset within the Kafka partition.
+        data_type: bigint
+        tests:
+          - not_null
+      - name: event_type
+        description: Declared event type from JSON; may be sentinel `unknown` when missing.
+        data_type: text
+        tests:
+          - not_null
+      - name: event_time
+        description: Business timestamp from the payload when present.
+        data_type: timestamp with time zone
+      - name: payload_json
+        description: Full event JSON (JSONB) for downstream parsing.
+        data_type: jsonb
+        tests:
+          - not_null

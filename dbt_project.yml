@@ -1,0 +1,28 @@
+name: fan_sim_pipeline
+version: 1.0.0
+config-version: 2
+
+# Must match the top-level key in dbt/profiles.yml
+profile: fan_sim_pipeline
+
+# Project assets live under dbt/; this file is at repo root so `uv run dbt debug` works from the repo root.
+model-paths: [dbt/models]
+macro-paths: [dbt/macros]
+
+clean-targets:
+  - dbt/target
+  - dbt/dbt_packages
+
+models:
+  fan_sim_pipeline:
+    +materialized: view
+
+    staging:
+      +materialized: view
+
+    intermediate:
+      +materialized: view
+      merch_purchase:
+        +materialized: view
+      match_events:
+        +materialized: view

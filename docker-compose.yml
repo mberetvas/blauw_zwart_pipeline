@@ -43,6 +43,29 @@ services:
       retries: 12
       start_period: 10s
 
+  # Ensure the ingest topic exists before consumers subscribe (avoids UNKNOWN_TOPIC_OR_PART
+  # when no producer has run yet). Partition count must match broker KAFKA_NUM_PARTITIONS.
+  kafka-init:
+    image: apache/kafka:4.2.0
+    depends_on:
+      broker:
+        condition: service_healthy
+    # Topic name from Compose interpolation (same default as ingest/producer). Partition count
+    # must stay aligned with broker KAFKA_NUM_PARTITIONS.
+    command:
+      - /opt/kafka/bin/kafka-topics.sh
+      - --bootstrap-server
+      - broker:29092
+      - --create
+      - --if-not-exists
+      - --topic
+      - ${KAFKA_TOPIC:-fan_events}
+      - --partitions
+      - ${KAFKA_NUM_PARTITIONS:-3}
+      - --replication-factor
+      - "1"
+    restart: "no"
+
   postgres:
     # Pin: Docker Hub library/postgres — `18-alpine` tracks latest PG 18 on Alpine.
     # Major upgrade: remove/rename `postgres-data` volume or run pg_upgrade (not done here).
@@ -96,16 +119,13 @@ services:
         condition: service_healthy
       broker:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
 
-  # ─── Optional: Compose-managed producer ───────────────────────────────────
-  # This service is disabled by default (requires --profile producer or
-  # COMPOSE_PROFILES=producer).  The recommended primary workflow is to run
-  # `fan_events stream` on the host via UV (see quickstart.md §2).
-  #
-  #   docker compose --profile producer up -d   # start with Compose producer
-  #   docker compose up -d                       # start without producer (default)
+  # ─── Event producer (fan_events stream) ─────────────────────────────────
+  # Runs by default with the stack. For an extra host-side producer instead, see
+  # specs/005-compose-kafka-pipeline/quickstart.md §3.
   producer:
-    profiles: [producer]
     build:
       context: .
       dockerfile: docker/Dockerfile.ingest
@@ -135,6 +155,8 @@ services:
         condition: service_healthy
       broker:
         condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
 
 volumes:
   kafka-data:

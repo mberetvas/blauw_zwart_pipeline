@@ -3,11 +3,15 @@
 ## Project: [Project Name]
 ### Owner: [Your Name]
 ### Date Created: [YYYY-MM-DD]
-### Last Updated: [YYYY-MM-DD]
+### Last Updated: 2026-04-11
 
 ---
 
 ### High Priority ⬆️
+- [ ] Docker Compose producer (`docker-compose.yml` `producer` service): emit v3 `retail_purchase` lines on the Kafka topic together with v2 calendar match events  
+  - Details: The stack runs `fan_events stream` with `--calendar` and Kafka flags; confirm the merged stream actually includes NDJSON v3 `retail_purchase` events (not only `ticket_scan` / `merch_purchase`). If needed, add explicit CLI args or env-driven defaults (e.g. retail caps, `--retail-epoch`, shop/arrival tuning) so v3 traffic is visible in local demos. Validate end-to-end through ingest → Postgres.  
+  - Owner:  
+  - Due:  
 - [ ] Unified orchestrated stream: retail (v3) + match-day events (v2-style) with tunable schedule and fan mix  
   - Details: Today `fan_events` exposes **separate** pipelines in `cli.py`: `generate_events` produces NDJSON v1 (rolling window, `ticket_scan` / `merch_purchase`, no `match_id`) or v2 (calendar-driven `MatchContext` in `v2_calendar.py`, same event types **with** `match_id`); `generate_retail` produces v3 `retail_purchase` only (`v3_retail.py`). There is **no** built-in way to interleave or time-merge those outputs into one chronological NDJSON/stream.  
   - **Goal:** Add an orchestration layer (new module/CLI entry or long-running mode) that drives **continuous v3 retail** generation together with **synthetic match windows** (conceptually v2: kickoff-relative scans/merch), emitting a **single ordered stream** (stdout or file) suitable for demos/load tests.  

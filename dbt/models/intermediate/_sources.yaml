@@ -1,0 +1,54 @@
+# Raw warehouse sources for the fan-event pipeline. Staging reads from here; intermediate
+# models merch_purchase and match_events consume staging (ref) but depend on this table upstream.
+version: 2
+
+sources:
+  - name: fan_pipeline
+    description: >
+      Raw relational data produced by the fan-event ingest service (Kafka → Postgres).
+      Schema matches docker/postgres/init and ingestion-persistence-v1.
+    schema: public
+    meta:
+      owner: pipeline
+      layer: raw
+    tables:
+      - name: fan_events_ingested
+        description: >
+          One row per Kafka message: NDJSON payload stored as JSONB plus Kafka coordinates
+          and ingest metadata. Unique on (kafka_topic, kafka_partition, kafka_offset).
+          Feeds stg_fan_events_ingested, then intermediate models merch_purchase and match_events.
+        identifier: fan_events_ingested
+        meta:
+          ingestion_contract: ingestion-persistence-v1
+          staging_model: stg_fan_events_ingested
+          intermediate_models:
+            - merch_purchase
+            - match_events
+        columns:
+          - name: id
+            description: Surrogate primary key (BIGSERIAL).
+            data_type: bigint
+          - name: ingested_at
+            description: Wall-clock time when the row was inserted by the ingest service.
+            data_type: timestamp with time zone
+          - name: kafka_topic
+            description: Kafka topic name for the originating message.
+            data_type: text
+          - name: kafka_partition
+            description: Non-negative Kafka partition index.
+            data_type: integer
+          - name: kafka_offset
+            description: Kafka offset within the partition.
+            data_type: bigint
+          - name: event_type
+            description: >
+              Top-level JSON `event` string when present; otherwise ingest maps to sentinel `unknown`.
+            data_type: text
+          - name: event_time
+            description: Business event timestamp from the payload when available.
+            data_type: timestamp with time zone
+          - name: payload_json
+            description: Full parsed event body as JSONB (v2/v3 fan event objects).
+            data_type: jsonb
+            meta:
+              contains_pii: false

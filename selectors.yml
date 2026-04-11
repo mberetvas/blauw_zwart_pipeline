@@ -1,0 +1,9 @@
+selectors:
+  - name: intermediate
+    description: >
+      Models tagged `intermediate` plus upstream parents (stg_fan_events_ingested).
+      Prefer this over `dbt run -s intermediate`, which only matches the path and skips upstream refs.
+    definition:
+      method: tag
+      value: intermediate
+      parents: true

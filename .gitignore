@@ -1,6 +1,12 @@
 # Synthetic fan events generator default output (NDJSON)
 out/
 
+# dbt (project in dbt/)
+dbt/profiles.yml
+dbt/logs/
+dbt/dbt_packages/
+dbt/.user.yml
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -219,3 +225,4 @@ __marimo__/
 .streamlit/secrets.toml
 
 out/
+dbt_internal_packages/

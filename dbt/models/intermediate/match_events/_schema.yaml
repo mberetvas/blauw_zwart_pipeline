@@ -1,0 +1,48 @@
+version: 2
+
+models:
+  - name: match_events
+    description: >
+      All ingested fan events that include a non-empty match_id in the payload (e.g. ticket_scan,
+      merch_purchase). Merch-only columns (item, amount) are null for non-purchase events.
+    config:
+      tags: [intermediate, fan_events, match]
+    columns:
+      - name: id
+        description: Surrogate primary key from the ingest table (same as staging).
+        data_type: bigint
+        tests:
+          - not_null
+          - unique
+      - name: ingested_at
+        data_type: timestamp with time zone
+        tests:
+          - not_null
+      - name: kafka_topic
+        data_type: text
+      - name: kafka_partition
+        data_type: integer
+      - name: kafka_offset
+        data_type: bigint
+      - name: event_type
+        data_type: text
+        tests:
+          - not_null
+      - name: event_time
+        data_type: timestamp with time zone
+      - name: fan_id
+        data_type: text
+        tests:
+          - not_null
+      - name: match_id
+        data_type: text
+        tests:
+          - not_null
+      - name: location
+        data_type: text
+      - name: item
+        description: Merchandise line description when event_type is merch_purchase.
+        data_type: text
+      - name: amount
+        description: Purchase amount when event_type is merch_purchase.
+        data_type: numeric
