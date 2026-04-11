@@ -12,9 +12,14 @@ dependencies = ["tzdata>=2024.1"]
 [project.optional-dependencies]
 # Kafka output for `fan_events stream --kafka-topic`; install with: uv sync --extra kafka
 kafka = ["confluent-kafka>=2.3"]
+ingest = [
+    "asyncpg>=0.29",
+    "confluent-kafka>=2.3",
+]
 
 [project.scripts]
 fan_events = "fan_events.cli:main"
+fan_ingest = "fan_ingest.main:main"
 
 [dependency-groups]
 dev = [

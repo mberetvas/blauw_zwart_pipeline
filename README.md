@@ -10,7 +10,7 @@ Synthetic fan events generator for Club Brugge KV simulations. The `fan_events` 
 |-------------|---------|-------|
 | Python | ≥ 3.12 | Required by `pyproject.toml` |
 | [uv](https://docs.astral.sh/uv/) | any recent | Package manager; used for all dev commands |
-| Docker | any | Only needed for `just kafka` (local broker) |
+| Docker | any | Local Kafka via `just kafka`, or full stack in `docker-compose.yml` |
 | [just](https://just.systems/) | any | Optional task runner; `just kafka` starts the local broker |
 
 ## Installation
@@ -37,6 +37,20 @@ fan_events --help   # now on PATH
 After a global install, use `fan_events` directly (drop the `uv run` prefix from all examples below).
 
 > **Kafka extra**: `confluent-kafka` (a C extension wrapping `librdkafka`) is an **optional** dependency. The base install works without it; only `fan_events stream --kafka-topic` (or `FAN_EVENTS_KAFKA_TOPIC` env var) requires it. Without the extra installed, that path exits with a clear error message.
+
+### Full local pipeline (Kafka → Postgres)
+
+End-to-end demo: Docker Compose (Kafka KRaft, Postgres, pgAdmin, ingest) plus the host producer. Step-by-step guide, ports, and acceptance checks: [`specs/005-compose-kafka-pipeline/quickstart.md`](specs/005-compose-kafka-pipeline/quickstart.md).
+
+| Port (defaults) | Service |
+|-----------------|---------|
+| **9092** | Kafka (host producers: `localhost:9092`) |
+| **5432** | Postgres (override with `POSTGRES_PORT` if in use) |
+| **5050** | pgAdmin |
+
+```bash
+cp .env.example .env && docker compose up -d && uv sync --extra kafka && uv run fan_events stream --kafka-topic fan_events --kafka-bootstrap-servers localhost:9092 --max-events 100
+```
 
 ## CLI overview
 

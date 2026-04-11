@@ -573,8 +573,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="PATH",
         help=(
-            f"Write synthetic fan profiles to this JSON file "
-            f"(default: same path as --output with .json, e.g. {_companion_fans_json_path(DEFAULT_OUTPUT)})"
+            f"Write synthetic fan profiles to this JSON file (default: same path as --output "
+            f"with .json, e.g. {_companion_fans_json_path(DEFAULT_OUTPUT)})"
         ),
     )
 
@@ -643,7 +643,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar=("W1", "W2", "W3"),
         default=None,
         help=(
-            "Relative weights for 3 shops: jan_breydel_fan_shop, webshop, bruges_city_shop (default: equal)"
+            "Relative weights for 3 shops: jan_breydel_fan_shop, webshop, "
+            "bruges_city_shop (default: equal)"
         ),
     )
     ret.add_argument(
@@ -657,7 +658,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=DEFAULT_RETAIL_POISSON_RATE,
         help=(
-            f"Arrival rate in events/second for poisson mode (default: {DEFAULT_RETAIL_POISSON_RATE})"
+            f"Arrival rate in events/second for poisson mode "
+            f"(default: {DEFAULT_RETAIL_POISSON_RATE})"
         ),
     )
     ret.add_argument(
@@ -665,7 +667,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=DEFAULT_RETAIL_FIXED_GAP_SECONDS,
         help=(
-            f"Gap in seconds between events for fixed mode (default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
+            f"Gap in seconds between events for fixed mode "
+            f"(default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
         ),
     )
     ret.add_argument(
@@ -723,7 +726,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--unlimited",
         action="store_true",
         help=(
-            f"Remove the default {DEFAULT_RETAIL_IMPLIED_MAX_EVENTS}-event cap; requires --max-duration or emit bounds with --stream"
+            f"Remove the default {DEFAULT_RETAIL_IMPLIED_MAX_EVENTS}-event cap; "
+            "requires --max-duration or emit bounds with --stream"
         ),
     )
     ret.add_argument(
@@ -733,8 +737,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="PATH",
         help=(
-            f"Write synthetic fan profiles to this JSON file "
-            f"(default: same path as --output with .json, e.g. {_companion_fans_json_path(DEFAULT_RETAIL_OUTPUT)})"
+            f"Write synthetic fan profiles to this JSON file (default: same path as --output "
+            f"with .json, e.g. {_companion_fans_json_path(DEFAULT_RETAIL_OUTPUT)})"
         ),
     )
 
@@ -856,7 +860,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=str,
         default=None,
         help=(
-            f"Start of retail synthetic timeline, ISO-8601 UTC (default: {_DEFAULT_RETAIL_EPOCH_HELP_STR})"
+            f"Start of retail synthetic timeline, ISO-8601 UTC "
+            f"(default: {_DEFAULT_RETAIL_EPOCH_HELP_STR})"
         ),
     )
     st.add_argument(
@@ -865,7 +870,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         metavar=("W1", "W2", "W3"),
         default=None,
-        help="Weights for 3 retail shops: jan_breydel_fan_shop, webshop, bruges_city_shop (default: equal)",
+        help=(
+            "Weights for 3 retail shops: jan_breydel_fan_shop, webshop, "
+            "bruges_city_shop (default: equal)"
+        ),
     )
     st.add_argument(
         "--arrival-mode",
@@ -877,14 +885,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--poisson-rate",
         type=float,
         default=DEFAULT_RETAIL_POISSON_RATE,
-        help=f"Arrival rate in events/second for poisson mode (default: {DEFAULT_RETAIL_POISSON_RATE})",
+        help=(
+            f"Arrival rate in events/second for poisson mode "
+            f"(default: {DEFAULT_RETAIL_POISSON_RATE})"
+        ),
     )
     st.add_argument(
         "--fixed-gap-seconds",
         type=float,
         default=DEFAULT_RETAIL_FIXED_GAP_SECONDS,
         help=(
-            f"Gap in seconds between retail events for fixed mode (default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
+            f"Gap in seconds between retail events for fixed mode "
+            f"(default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
         ),
     )
     st.add_argument(
