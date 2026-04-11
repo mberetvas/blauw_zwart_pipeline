@@ -1,0 +1,43 @@
+version: 2
+
+models:
+  - name: merch_purchase
+    description: >
+      Ingest rows for merchandise purchases with JSONB payload fields cast to typed columns.
+    config:
+      tags: [intermediate, fan_events, merch]
+    columns:
+      - name: id
+        description: Surrogate primary key from the ingest table (same as staging).
+        data_type: bigint
+        tests:
+          - not_null
+          - unique
+      - name: ingested_at
+        data_type: timestamp with time zone
+        tests:
+          - not_null
+      - name: kafka_topic
+        data_type: text
+      - name: kafka_partition
+        data_type: integer
+      - name: kafka_offset
+        data_type: bigint
+      - name: event_time
+        data_type: timestamp with time zone
+      - name: fan_id
+        data_type: text
+        tests:
+          - not_null
+      - name: match_id
+        data_type: text
+        tests:
+          - not_null
+      - name: location
+        data_type: text
+      - name: item
+        data_type: text
+      - name: amount
+        data_type: numeric
+        tests:
+          - not_null

@@ -1,9 +1,0 @@
-version: 2
-
-sources:
-  - name: fan_pipeline
-    description: Raw tables from docker/postgres/init (ingest pipeline)
-    schema: public
-    tables:
-      - name: fan_events_ingested
-        description: Kafka ingested fan events (ingestion-persistence-v1)
