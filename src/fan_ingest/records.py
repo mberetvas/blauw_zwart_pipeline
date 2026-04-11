@@ -9,6 +9,10 @@ from typing import Any
 _SENTINEL_UNKNOWN = "unknown"
 
 
+class ParseError(ValueError):
+    """Raised when a Kafka message cannot be parsed into a row (FR-012)."""
+
+
 def parse_event_time_utc(value: Any) -> datetime | None:
     """Parse synthetic `timestamp` field (ISO-8601, optional Z) to aware UTC; else None."""
     if not isinstance(value, str) or not value.strip():
@@ -31,25 +35,25 @@ def kafka_message_to_row(
     kafka_partition: int,
     kafka_offset: int,
     value: bytes | None,
-) -> dict[str, Any] | None:
-    """Return a row dict for insert, or None if the message must be skipped (FR-012).
+) -> dict[str, Any]:
+    """Return a row dict for insert, or raise :class:`ParseError` (FR-012).
 
-    Skips: missing/empty body, UTF-8 decode error, JSON parse error, or non-object JSON.
+    Raises on: missing/empty body, UTF-8 decode error, JSON parse error, or non-object JSON.
     On success: event_type from top-level string ``event``, else ``unknown``; event_time from
     ``timestamp`` when parseable, else NULL in DB.
     """
     if not value:
-        return None
+        raise ParseError("empty or missing message body")
     try:
         text = value.decode("utf-8")
-    except UnicodeDecodeError:
-        return None
+    except UnicodeDecodeError as exc:
+        raise ParseError(f"UTF-8 decode error: {exc}") from exc
     try:
         obj = json.loads(text)
-    except json.JSONDecodeError:
-        return None
+    except json.JSONDecodeError as exc:
+        raise ParseError(f"JSON parse error: {exc}") from exc
     if not isinstance(obj, dict):
-        return None
+        raise ParseError(f"expected JSON object, got {type(obj).__name__}")
 
     ev = obj.get("event")
     if isinstance(ev, str) and ev:

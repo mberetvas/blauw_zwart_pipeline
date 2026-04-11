@@ -97,7 +97,15 @@ services:
       broker:
         condition: service_healthy
 
+  # ─── Optional: Compose-managed producer ───────────────────────────────────
+  # This service is disabled by default (requires --profile producer or
+  # COMPOSE_PROFILES=producer).  The recommended primary workflow is to run
+  # `fan_events stream` on the host via UV (see quickstart.md §2).
+  #
+  #   docker compose --profile producer up -d   # start with Compose producer
+  #   docker compose up -d                       # start without producer (default)
   producer:
+    profiles: [producer]
     build:
       context: .
       dockerfile: docker/Dockerfile.ingest

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from confluent_kafka import Consumer, KafkaError, KafkaException, Message
 
 from fan_ingest import db as db_mod
-from fan_ingest.records import kafka_message_to_row
+from fan_ingest.records import ParseError, kafka_message_to_row
 
 if TYPE_CHECKING:
     import asyncpg
@@ -87,16 +87,39 @@ class IngestRuntime:
         with self._queues_lock:
             if partition in self._partition_queues:
                 return
-            q: asyncio.Queue[tuple[Message, dict[str, Any]] | None] = asyncio.Queue()
-            self._partition_queues[partition] = q
-            self._partition_tasks[partition] = asyncio.ensure_future(
-                self._partition_worker(partition, q), loop=self._loop
+            # Create the asyncio.Queue and schedule the Task on the event-loop thread.
+            # Creating asyncio primitives from a non-event-loop thread is not thread-safe,
+            # so we bootstrap via run_coroutine_threadsafe and block until done.
+            fut = asyncio.run_coroutine_threadsafe(
+                self._start_partition_worker(partition), self._loop
             )
+            fut.result(timeout=30.0)
+
+    async def _start_partition_worker(self, partition: int) -> None:
+        """Create Queue + Task for *partition* on the event-loop thread (thread-safe)."""
+        q: asyncio.Queue[tuple[Message, dict[str, Any]] | None] = asyncio.Queue()
+        self._partition_queues[partition] = q
+        task = asyncio.create_task(self._partition_worker(partition, q))
+        task.add_done_callback(self._on_partition_worker_done)
+        self._partition_tasks[partition] = task
 
     async def _shutdown_partition_workers(self) -> None:
         for q in list(self._partition_queues.values()):
             await q.put(None)
         await asyncio.gather(*list(self._partition_tasks.values()), return_exceptions=True)
+
+    def _on_partition_worker_done(self, task: asyncio.Task[None]) -> None:
+        """Done-callback: if a worker task fails, log and trigger a controlled shutdown."""
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.critical(
+                "partition_worker_failed – triggering shutdown: %s",
+                exc,
+                exc_info=exc,
+            )
+            self._stop.set()
 
     async def _partition_worker(
         self,
@@ -154,18 +177,20 @@ class IngestRuntime:
             partition = msg.partition()
             self._ensure_partition_worker(partition)
 
-            row = kafka_message_to_row(
-                kafka_topic=msg.topic(),
-                kafka_partition=partition,
-                kafka_offset=msg.offset(),
-                value=msg.value(),
-            )
-            if row is None:
+            try:
+                row = kafka_message_to_row(
+                    kafka_topic=msg.topic(),
+                    kafka_partition=partition,
+                    kafka_offset=msg.offset(),
+                    value=msg.value(),
+                )
+            except ParseError as exc:
                 logger.warning(
-                    "ingest_parse_skip topic=%s partition=%s offset=%s",
+                    "ingest_parse_skip topic=%s partition=%s offset=%s error=%s",
                     msg.topic(),
                     partition,
                     msg.offset(),
+                    exc,
                     extra={
                         "kafka_topic": msg.topic(),
                         "kafka_partition": partition,
