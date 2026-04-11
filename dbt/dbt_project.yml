@@ -1,0 +1,17 @@
+name: fan_sim_pipeline
+version: 1.0.0
+config-version: 2
+
+# Must match the top-level key in profiles.yml
+profile: fan_sim_pipeline
+
+model-paths: [models]
+macro-paths: [macros]
+
+clean-targets:
+  - target
+  - dbt_packages
+
+models:
+  fan_sim_pipeline:
+    +materialized: view

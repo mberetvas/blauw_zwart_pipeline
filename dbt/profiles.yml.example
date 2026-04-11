@@ -1,0 +1,26 @@
+# Copy to profiles.yml in this folder (gitignored) or merge into ~/.dbt/profiles.yml
+#
+# From the repo root, point dbt at this directory:
+#   PowerShell:  $env:DBT_PROFILES_DIR = "$PWD\dbt"
+#   bash:        export DBT_PROFILES_DIR="$(pwd)/dbt"
+#
+# Load the same variables as docker-compose (.env): POSTGRES_USER, POSTGRES_PASSWORD,
+# POSTGRES_DB, and optionally POSTGRES_PORT as DBT_POSTGRES_PORT when not using 5432.
+#
+# Host vs Docker:
+#   - dbt on your machine → host localhost, port = POSTGRES_PORT from .env (default 5432)
+#   - dbt inside Compose   → host postgres, port 5432 (add a service if you want this)
+
+fan_sim_pipeline:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DBT_POSTGRES_HOST', 'localhost') }}"
+      port: "{{ env_var('DBT_POSTGRES_PORT', '5432') | as_number }}"
+      user: "{{ env_var('POSTGRES_USER') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD') }}"
+      dbname: "{{ env_var('POSTGRES_DB') }}"
+      # dbt builds into this schema; use a dedicated schema (not public)
+      schema: "{{ env_var('DBT_TARGET_SCHEMA', 'dbt_dev') }}"
+      threads: 4
