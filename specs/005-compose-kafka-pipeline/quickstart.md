@@ -1,6 +1,6 @@
 # Quickstart: local Compose pipeline (005)
 
-Prerequisites: **Docker** + **Docker Compose** (infrastructure) and **UV** (host producer).
+Prerequisites: **Docker** + **Docker Compose** (full stack includes the **producer** service). **UV** is optional — only needed if you also run `fan_events stream` on the host (§3).
 
 ## 1. Configure environment
 
@@ -18,11 +18,11 @@ Edit `.env`: set **strong** values for `POSTGRES_PASSWORD`, `PGADMIN_DEFAULT_PAS
 docker compose up -d
 ```
 
-Wait until **Postgres** and **broker** are healthy (`docker compose ps`). The **ingest** service waits for those dependencies before starting.
+Wait until services are healthy (`docker compose ps`). The **producer** service (Compose) and **ingest** start after Postgres, broker, and topic init are ready.
 
-## 3. Produce events from the host (primary workflow — FR-015)
+## 3. Optional: second producer on the host (FR-015)
 
-Run `fan_events stream` **on the host** via UV with the **EXTERNAL** listener (`localhost:9092`):
+To run an **additional** `fan_events stream` on your machine (e.g. for debugging), use UV with the **EXTERNAL** listener (`localhost:9092`):
 
 ```bash
 uv run fan_events stream \
@@ -33,7 +33,7 @@ uv run fan_events stream \
   --emit-wall-clock-min 0.25 --emit-wall-clock-max 1.0
 ```
 
-Leave this running in a terminal (Ctrl-C to stop).
+Leave this running in a terminal (Ctrl-C to stop). Skip this section if the Compose **producer** alone is enough.
 
 ## 4. Verify messages are flowing
 
@@ -100,18 +100,12 @@ The broker uses **multiple partitions** (default 3). The ingest service runs **o
 
 ## Acceptance (manual)
 
-1. **Host-producer flow** (primary): Stack up, run `fan_events stream` on host, rows appear in `fan_events_ingested`.
+1. **Compose flow** (primary): `docker compose up -d`, **producer** + **ingest** running, rows appear in `fan_events_ingested` (optionally add host producer from §3).
 2. **SC-002**: Volume-preserving restart (section 6): existing rows survive `down` without `-v`.
 3. **SC-003**: Produce **100** valid messages; scan `docker compose logs ingest` — no unexplained write errors for acknowledged processing paths.
 4. **SC-004**: Produce **≥30** messages quickly; logs show concurrent handling across partitions (section 7).
 5. **SC-001** (optional): First-time setup within **30** minutes on a clean machine with prerequisites installed.
 
-## Appendix: Compose-managed producer (optional)
+## Appendix: Compose producer (default)
 
-If you don't want to run `fan_events stream` on the host, the Compose stack includes an optional `producer` service. It is disabled by default and must be started explicitly with the `producer` profile:
-
-```bash
-docker compose --profile producer up -d
-```
-
-The bundled Compose producer reuses `KAFKA_BOOTSTRAP_SERVERS=broker:29092` and `KAFKA_TOPIC`, plus the `FAN_EVENTS_STREAM_*` pacing/seed defaults from `.env`. Inside Compose, both producer and ingest services use the Kafka **INTERNAL** listener (`broker:29092`); `localhost:9092` remains only for optional host-side clients.
+The **`producer`** service starts with `docker compose up -d`. It runs `fan_events stream` with `KAFKA_BOOTSTRAP_SERVERS=broker:29092` and `KAFKA_TOPIC`, plus `FAN_EVENTS_STREAM_*` from `.env`. Inside Compose, producer and ingest use the Kafka **INTERNAL** listener (`broker:29092`); **`localhost:9092`** is for optional **host-side** clients (§3).
