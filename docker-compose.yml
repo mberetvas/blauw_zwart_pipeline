@@ -61,7 +61,7 @@ services:
       - --topic
       - ${KAFKA_TOPIC:-fan_events}
       - --partitions
-      - "3"
+      - ${KAFKA_NUM_PARTITIONS:-3}
       - --replication-factor
       - "1"
     restart: "no"
