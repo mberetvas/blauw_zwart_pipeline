@@ -56,7 +56,13 @@ def build_retail_rate_factor_fn(
     ]
 
     def _approx_k_range(base_kickoff_utc: datetime, tu: datetime) -> range:
-        """Return a small range of season indices to check around the approximate year delta."""
+        """Return a small range of season indices to check around the approximate year delta.
+
+        Uses the individual kickoff's UTC year (not the season start year), so cross-year
+        matches (e.g., a Jan match in an Aug-May season) each compute their own delta
+        correctly. The ``[-1, +3)`` window provides a safety margin for year-boundary edge
+        cases without unbounded iteration.
+        """
         approx_k = max(0, tu.year - base_kickoff_utc.year)
         return range(max(0, approx_k - 1), approx_k + 3)
 
