@@ -209,6 +209,16 @@ def index() -> Any:
     return send_from_directory(app.static_folder, "index.html")
 
 
+@app.get("/leaderboard")
+def leaderboard() -> Any:
+    return send_from_directory(app.static_folder, "leaderboard.html")
+
+
+@app.get("/player-stats")
+def player_stats() -> Any:
+    return send_from_directory(app.static_folder, "player-stats.html")
+
+
 @app.get("/health")
 def health() -> Any:
     return jsonify({"status": "ok"})

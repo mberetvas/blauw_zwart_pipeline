@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-secondary": "#283044",
+                      "on-tertiary": "#233144",
+                      "surface-container-low": "#131b2e",
+                      "background": "#0b1326",
+                      "tertiary-fixed": "#d5e3fc",
+                      "surface": "#0b1326",
+                      "primary-fixed": "#d9e2ff",
+                      "surface-container": "#171f33",
+                      "secondary": "#bec6e0",
+                      "on-background": "#dae2fd",
+                      "error-container": "#93000a",
+                      "on-secondary-fixed": "#131b2e",
+                      "inverse-primary": "#0058c9",
+                      "secondary-fixed": "#dae2fd",
+                      "on-error": "#690005",
+                      "on-surface-variant": "#c2c6d8",
+                      "on-primary-fixed-variant": "#00429a",
+                      "surface-variant": "#2d3449",
+                      "surface-bright": "#31394d",
+                      "on-primary": "#002d6e",
+                      "inverse-on-surface": "#283044",
+                      "inverse-surface": "#dae2fd",
+                      "tertiary": "#b9c7df",
+                      "on-primary-fixed": "#001944",
+                      "on-tertiary-fixed-variant": "#3a485b",
+                      "secondary-container": "#3f465c",
+                      "primary": "#b0c6ff",
+                      "surface-tint": "#b0c6ff",
+                      "surface-container-high": "#222a3d",
+                      "outline-variant": "#414655",
+                      "surface-container-highest": "#2d3449",
+                      "primary-fixed-dim": "#b0c6ff",
+                      "on-error-container": "#ffdad6",
+                      "outline": "#8c90a1",
+                      "on-secondary-container": "#adb4ce",
+                      "tertiary-container": "#8392a8",
+                      "error": "#ffb4ab",
+                      "tertiary-fixed-dim": "#b9c7df",
+                      "on-tertiary-fixed": "#0d1c2e",
+                      "on-primary-container": "#002761",
+                      "secondary-fixed-dim": "#bec6e0",
+                      "on-secondary-fixed-variant": "#3f465c",
+                      "surface-dim": "#0b1326",
+                      "primary-container": "#548dff",
+                      "on-tertiary-container": "#1c2a3d",
+                      "on-surface": "#dae2fd",
+                      "surface-container-lowest": "#060e20"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "fontFamily": {
+                      "headline": ["Space Grotesk"],
+                      "body": ["Inter"],
+                      "label": ["Inter"]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .no-line-rule { border: none !important; }
+        .tonal-shift-only { border: none; }
+        .glass-card {
+            background: rgba(45, 52, 73, 0.6);
+            backdrop-filter: blur(20px);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body selection:bg-primary/30">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 bg-[#0b1326] dark:bg-[#0b1326] flex justify-between items-center px-6 py-4 w-full no-line-rule tonal-shift-only bg-[#131b2e]">
+<div class="text-xl font-black italic text-[#0572FF] tracking-tighter">CLUB BRUGGE AI</div>
+<div class="hidden md:flex items-center gap-8">
+<a class="font-spaceGrotesk tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">MATCHES</a>
+<a class="font-spaceGrotesk tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">SHOP</a>
+<a class="font-spaceGrotesk tracking-wide uppercase font-bold text-[#b0c6ff] border-b-2 border-[#0572FF] pb-1" href="#">STATS</a>
+</div>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-[#0572FF] scale-95 duration-200">account_circle</button>
+</div>
+</nav>
+<!-- SideNavBar -->
+<aside class="hidden lg:flex fixed left-0 top-0 h-full w-64 bg-[#131b2e] dark:bg-[#131b2e] flex flex-col h-full py-8 px-4 gap-6 z-40 mt-16 no-line-rule">
+<div class="flex items-center gap-3 px-4 mb-4">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center">
+<img alt="Crest" class="w-6 h-6" data-alt="Official Club Brugge blue and black striped crest with refined metallic texture" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCUtRJVLBq6DWnsqtSbRq1AkYJATzgteR4uZBTP8Q0iYrgbzjtWKGlyqcXqGF1WK2GhIdZqsDFI16WiIOadyjmfW5_P7h3q-kPeO44qfXWKXIMikgKqyAwmsIuB87-a27VeWxxPdGUSMC3motJpYHq9rF5HUbYaFdHz4bMrLge1uTwaMQgukPaNZvPAnkucpwVajqXCcgLI3WaEe5vqxEADxXfjlsSlPB_vBdoNShXbGemO31ZtKQCN5-zaKgbvcsnb8gV1nadAjgSs"/>
+</div>
+<div>
+<p class="font-headline font-bold text-sm tracking-tight">Stadium Nocturne</p>
+<p class="text-[10px] opacity-60 uppercase tracking-widest">AI Assistant</p>
+</div>
+</div>
+<button class="mx-4 py-3 px-4 rounded-xl bg-primary-container text-on-primary-container font-headline font-bold text-sm hover:opacity-90 transition-all active:scale-[0.98]">
+            New Chat
+        </button>
+<nav class="flex flex-col gap-1 flex-1">
+<a class="flex items-center gap-3 text-[#dae2fd] opacity-60 px-4 py-3 hover:bg-[#2d3449] hover:opacity-100 transition-all font-inter text-sm font-medium" href="#">
+<span class="material-symbols-outlined">chat</span> Current Match
+            </a>
+<a class="flex items-center gap-3 text-[#dae2fd] opacity-60 px-4 py-3 hover:bg-[#2d3449] hover:opacity-100 transition-all font-inter text-sm font-medium" href="#">
+<span class="material-symbols-outlined">history</span> History
+            </a>
+<a class="flex items-center gap-3 bg-[#2d3449] text-[#b0c6ff] rounded-xl px-4 py-3 font-inter text-sm font-medium" href="#">
+<span class="material-symbols-outlined">analytics</span> Saved Analysis
+            </a>
+<a class="flex items-center gap-3 text-[#dae2fd] opacity-60 px-4 py-3 hover:bg-[#2d3449] hover:opacity-100 transition-all font-inter text-sm font-medium" href="#">
+<span class="material-symbols-outlined">settings</span> Club Settings
+            </a>
+</nav>
+<div class="mt-auto flex flex-col gap-1 border-t border-white/5 pt-4">
+<a class="flex items-center gap-3 text-[#dae2fd] opacity-60 px-4 py-3 hover:opacity-100 text-sm" href="#">
+<span class="material-symbols-outlined">help</span> Help
+            </a>
+<a class="flex items-center gap-3 text-[#dae2fd] opacity-60 px-4 py-3 hover:opacity-100 text-sm" href="#">
+<span class="material-symbols-outlined">shield</span> Privacy
+            </a>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="min-h-screen pt-24 pb-24 lg:pl-64 lg:pr-8 px-4 max-w-7xl mx-auto">
+<!-- Header & Achievement Callout -->
+<div class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
+<div>
+<h1 class="font-headline text-4xl md:text-6xl font-black italic tracking-tighter uppercase text-on-surface">
+                    Leaderboard
+                </h1>
+<p class="text-primary font-medium tracking-widest text-xs uppercase mt-2">Season: Blue &amp; Black Dominance</p>
+</div>
+<div class="glass-card rounded-xl p-4 flex items-center gap-4 max-w-sm">
+<div class="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+</div>
+<div>
+<p class="text-xs font-bold text-primary uppercase tracking-wider">Recent Achievement</p>
+<p class="text-sm font-medium">Stadium regular badge earned by 124 fans today</p>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-8">
+<!-- Podium Section -->
+<div class="xl:col-span-5 flex flex-col gap-6">
+<div class="relative h-[480px] bg-surface-container-low rounded-3xl overflow-hidden flex flex-col justify-end p-8">
+<div class="absolute top-0 left-0 w-full h-full opacity-20 pointer-events-none" style="background: radial-gradient(circle at 50% -20%, #0572FF 0%, transparent 70%);"></div>
+<!-- Podium Visual -->
+<div class="relative flex items-end justify-center gap-2 md:gap-4 h-full">
+<!-- 2nd Place -->
+<div class="flex flex-col items-center gap-3 w-1/3">
+<div class="relative">
+<div class="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-slate-400 overflow-hidden bg-surface-container-highest">
+<img alt="Fan 2" class="w-full h-full object-cover" data-alt="Portrait of a young man wearing a Club Brugge scarf in a dark stadium lighting setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDSBBYi6zsfZnx7V2YlwzcAfCELM1zFtgs-7eX4dY6kAvtGx2MbxZeYDB7Lo5lq0T8EXBUClEPYsxan7BKZKA9I7GSLwx7qMIH1JdnU8ftm5fyf8E42D-oL1g2nIC6boUHOSJAunOMaHIcAX383i2mLKMYCo9Nt63477nJ7ZR6JzudSO8sgbphlFivtn1SpLy-PSVv3-zPCPaUTU4OOzs00hxxEFD4zaGUdY8FlPtHuqBarLBlWoVu8A5cm5iTN4KBfzc2LauRBfxya"/>
+</div>
+<div class="absolute -bottom-2 -right-2 bg-slate-400 text-background w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs">2</div>
+</div>
+<div class="text-center">
+<p class="font-bold text-sm truncate w-full">S. Mignolet Fan</p>
+<p class="text-primary font-black text-lg">14,200</p>
+</div>
+<div class="w-full bg-slate-400/20 h-24 rounded-t-xl"></div>
+</div>
+<!-- 1st Place -->
+<div class="flex flex-col items-center gap-3 w-1/3 z-10">
+<div class="relative -top-8">
+<div class="w-20 h-20 md:w-28 md:h-28 rounded-full border-4 border-[#0572FF] overflow-hidden bg-surface-container-highest shadow-[0_0_40px_rgba(5,114,255,0.4)]">
+<img alt="Fan 1" class="w-full h-full object-cover" data-alt="Close up of a focused fan with blue face paint, cinematic stadium lighting, bokeh background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDMWvmUbFHteQBMGRjkiFnAWz40Gq5a9_JmFCpgzalZn9vU5oWe1bxItcdTJVoIpCR9_oB0VVzNDdbFPAt_oP0GeDGrSd6SP3bYCYRb2PDkK_yP4-LpmTpOA8k4QHNIc_OZRu862JOAOMYkWprI8C0E578_wm9oW6Dp6dEVFCUq1pRYZ5ycPFLm9ZL0Qni8h3MDVPASDAmWPQ3_a6qlinOGLeB4CSRZCjJYhM5N7dCE5uKj3wiLRuc7SS0IL_PX3ItYjPD691SlTLZe"/>
+</div>
+<div class="absolute -bottom-2 -right-2 bg-[#0572FF] text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">1</div>
+</div>
+<div class="text-center -mt-6">
+<p class="font-bold text-base truncate w-full">Kylian_Brugge</p>
+<p class="text-primary font-black text-2xl">18,540</p>
+</div>
+<div class="w-full bg-primary/30 h-40 rounded-t-xl flex items-start justify-center pt-4">
+<span class="material-symbols-outlined text-primary text-3xl">star</span>
+</div>
+</div>
+<!-- 3rd Place -->
+<div class="flex flex-col items-center gap-3 w-1/3">
+<div class="relative">
+<div class="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-amber-700/50 overflow-hidden bg-surface-container-highest">
+<img alt="Fan 3" class="w-full h-full object-cover" data-alt="Young woman smiling, wearing a blue and black Brugge jersey, soft focus city lights background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAOr78JILbWmeXUpqT5FIG2Lo8_cO1rcD5DoScIQy_8X4TpaLCqxRxg0pMmR8B8NOJB_E_9kG30EN9Fl7Cgohc7eAIEL_uCH-jxd7os8-D79T5fv7xePXoU5KFwXXLrzHSQwAqdUPXdpXJA4CKBsrfZPM8XC1TX_rUUCdq15z05XTFfiaOZt1z0cZ6BHnExTC8r8IMef6AI_NzLl07iZ6Ueticqjcmf-pYKLY7LDOx8RpAu1pWkAbGZKzYKLD08JHCzPqzA9wjDirOt"/>
+</div>
+<div class="absolute -bottom-2 -right-2 bg-amber-700 text-white w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs">3</div>
+</div>
+<div class="text-center">
+<p class="font-bold text-sm truncate w-full">Jan_Breydel_King</p>
+<p class="text-primary font-black text-lg">12,850</p>
+</div>
+<div class="w-full bg-amber-700/20 h-16 rounded-t-xl"></div>
+</div>
+</div>
+</div>
+<!-- Fan of the Month Card -->
+<div class="bg-surface-container-highest rounded-3xl p-6 relative overflow-hidden">
+<div class="flex justify-between items-start">
+<div>
+<span class="bg-primary/20 text-primary text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full mb-3 inline-block">FAN OF THE MONTH</span>
+<h3 class="font-headline text-2xl font-bold mb-2">Marc Van Damme</h3>
+<p class="text-on-surface-variant text-sm max-w-[200px]">Highest engagement in match-day AI chat analysis for October.</p>
+</div>
+<div class="w-20 h-20 rounded-2xl bg-surface-container rotate-3 flex items-center justify-center border border-white/5">
+<span class="material-symbols-outlined text-primary text-4xl" style="font-variation-settings: 'FILL' 1;">military_tech</span>
+</div>
+</div>
+</div>
+</div>
+<!-- List Section -->
+<div class="xl:col-span-7 flex flex-col">
+<div class="bg-surface-container-low rounded-3xl overflow-hidden flex flex-col h-full">
+<div class="px-8 py-6 flex justify-between items-center bg-surface-container">
+<h2 class="font-headline font-bold text-xl uppercase tracking-wider">Rankings</h2>
+<div class="flex gap-2">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary">filter_list</span>
+</div>
+</div>
+<div class="overflow-y-auto max-h-[600px] flex-1">
+<!-- Header Labels -->
+<div class="grid grid-cols-12 px-8 py-4 text-[10px] font-black text-on-surface-variant tracking-[0.2em] uppercase bg-surface-container/50">
+<div class="col-span-2">Rank</div>
+<div class="col-span-5">Fan Profile</div>
+<div class="col-span-3">Level</div>
+<div class="col-span-2 text-right">Points</div>
+</div>
+<!-- Ranking Items -->
+<div class="divide-y divide-white/5">
+<!-- User Highlighted Row -->
+<div class="grid grid-cols-12 px-8 py-5 items-center bg-primary/10 border-l-4 border-primary">
+<div class="col-span-2 font-headline font-black text-xl italic text-primary">#42</div>
+<div class="col-span-5 flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden border border-primary/30">
+<img alt="Your Avatar" class="w-full h-full object-cover" data-alt="Abstract minimalist representation of a profile placeholder with blue glowing edges" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGNLlFZ2ddQO1rfIMiQh-f5aSTUNTgX9usT6Ht9wZM8R4o73p4pKrl3uYamJ-0nDt1-P5swQqmKpn5K_EPVu91Kvcw786I62HC0N7y2EL32zLoRzgPl-k3e28NDTXVt7WiddD1pMeGXxaRdFhBfXqTCxqIU78GiyVIIKWTQy2drHqvdAOD0G-uegOlBMxIKmTDWPh03XMd_Y3EGvpnZ-S1hAoXPzjCFh-kTfQfRXPLvTCVmx97tup36-_hS3xNIvhxRCOsVOtiv3zH"/>
+</div>
+<div>
+<p class="font-bold text-sm">You (BruggeFan_88)</p>
+<p class="text-[10px] text-primary uppercase font-bold">Rising Star</p>
+</div>
+</div>
+<div class="col-span-3">
+<div class="flex items-center gap-2">
+<span class="text-xs font-bold">LVL 24</span>
+<div class="h-1 flex-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[70%]"></div>
+</div>
+</div>
+</div>
+<div class="col-span-2 text-right font-headline font-bold text-primary">8,940</div>
+</div>
+<!-- List Item 4 -->
+<div class="grid grid-cols-12 px-8 py-5 items-center hover:bg-surface-container-high transition-colors">
+<div class="col-span-2 font-headline font-bold text-lg opacity-40">04</div>
+<div class="col-span-5 flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
+<img alt="Fan" class="w-full h-full object-cover" data-alt="Portrait of a fan with a vintage blue and black jersey in a dimly lit setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA54HdSHC9uBQ0jeE0d_MbZ3IdRXFxgphkez8YL3r9pkbISI1rv9hX2AnGBifnWPb8V1VJvWcnuOSw96q_xbEKfQCHXFp2JNpb4hCVKCfDuVOTLtd16yOAB2Bq0FKsd3xOSrmWC-clS5-VTzdZaEM2AGYjAtXlMxpTqz7DCD9oi_RSrCG_AwoLj4SYN4ZacPgmdEN5YtXuhMlenkBXa2z5ParcXxyRHlxzdsGV65GMehe8rpP_va-tpSCCaZk0Lw6m1XFczrrzSUDnj"/>
+</div>
+<p class="font-bold text-sm">Lukas_Vande</p>
+</div>
+<div class="col-span-3 text-xs font-medium opacity-60">Elite Member</div>
+<div class="col-span-2 text-right font-headline font-bold">11,200</div>
+</div>
+<!-- List Item 5 -->
+<div class="grid grid-cols-12 px-8 py-5 items-center hover:bg-surface-container-high transition-colors">
+<div class="col-span-2 font-headline font-bold text-lg opacity-40">05</div>
+<div class="col-span-5 flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
+<img alt="Fan" class="w-full h-full object-cover" data-alt="Man in his 30s with short hair wearing a modern football jacket, stadium lights background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDd9SCRkGSYCl2q9HC1eW1MSNwhr1VTpLFQobdH3I61rwpbATFbbBsruhlfsrRrDtDvN6_HhsoZq-7_e8pglgLDnOdPHykRyXRBWF39VL0SX7-jhLGuJrfdD4ql8NhCOOtO8QYb9iWrq9E7eJSFsj7iO-5Gzg4UUr-tSjqf-0HcUBWHsdWOdc0-a9dlSEaHYeDzTU2HC8Pa-bbALR-d6qAcmUvP9inIF5Oq6efvfC1PTtOpRtdBfK2LYyEevZUY3odkzQ3pz0jrX9y0"/>
+</div>
+<p class="font-bold text-sm">Pieter.Brugge</p>
+</div>
+<div class="col-span-3 text-xs font-medium opacity-60">Season Holder</div>
+<div class="col-span-2 text-right font-headline font-bold">10,850</div>
+</div>
+<!-- List Item 6 -->
+<div class="grid grid-cols-12 px-8 py-5 items-center hover:bg-surface-container-high transition-colors">
+<div class="col-span-2 font-headline font-bold text-lg opacity-40">06</div>
+<div class="col-span-5 flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
+<img alt="Fan" class="w-full h-full object-cover" data-alt="Fan cheering in the stands with a blue and black flag draped over shoulders" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDe9uAu-MTyKYBwu1eX8hZ0sS_aDFEdu3KSjBZDDPtqA7Pqkf_eGyQJ0Vr0Rwvk3b7BChMHFdRHOvHhKm26hjAF7xahXSkFC8ywiZkGu0gfCdU5uIKeM3RxN3v0noyOs0fQa1WexF2-8H6rnipxR7d4m6jtlqS_VZ3agu-39JXx1atr4tXdPpOnyz_g81jpDQNney-spL4jZP_LbfqpBCI3kYCqLdfRi_FDXod9WXjiNXAb7vaBzZqvA458NWWzt1PTVcAh5yAsL75I"/>
+</div>
+<p class="font-bold text-sm">Thomas_FCB</p>
+</div>
+<div class="col-span-3 text-xs font-medium opacity-60">Data Expert</div>
+<div class="col-span-2 text-right font-headline font-bold">10,400</div>
+</div>
+<!-- List Item 7 -->
+<div class="grid grid-cols-12 px-8 py-5 items-center hover:bg-surface-container-high transition-colors">
+<div class="col-span-2 font-headline font-bold text-lg opacity-40">07</div>
+<div class="col-span-5 flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
+<img alt="Fan" class="w-full h-full object-cover" data-alt="Close up of eyes reflecting stadium floodlights, intense atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuANUY7p0PquVGjndHzhdDwLCrsSgnQmCmwebKygOC1HGF-irLwty_Wj9I6jB4PxGkI_OGH4GuuEadJNPYkrmx2OUNymJS6VFgFSmP4LhAYBKHFQyeMZC_qBdJz0k1HAxoby5p3-If_qdAkGW_OLjugfgvfufuZYD6dFTnAs1O3wNbXlZDp5wO-zc-u0ao8PkYB9xl3mX5CWfmZROktmg9yOehbLKsQF4V_MnGzWGXRO716gE17ShuiZudQsiKAREmRMJjFCcv_6fguC"/>
+</div>
+<p class="font-bold text-sm">Sofie_Blue</p>
+</div>
+<div class="col-span-3 text-xs font-medium opacity-60">Top Predictor</div>
+<div class="col-span-2 text-right font-headline font-bold">9,920</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar (Mobile Only) -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-[#0b1326]/80 backdrop-blur-xl z-50 md:hidden no-line-rule">
+<div class="flex flex-col items-center justify-center text-[#dae2fd] opacity-50 p-2 hover:opacity-100 transition-all">
+<span class="material-symbols-outlined">forum</span>
+<span class="font-inter text-[10px] uppercase font-bold tracking-widest mt-1">Chat</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#dae2fd] opacity-50 p-2 hover:opacity-100 transition-all">
+<span class="material-symbols-outlined">shopping_bag</span>
+<span class="font-inter text-[10px] uppercase font-bold tracking-widest mt-1">Shop</span>
+</div>
+<div class="flex flex-col items-center justify-center bg-[#0572FF] text-white rounded-xl p-2 scale-110 duration-300">
+<span class="material-symbols-outlined">leaderboard</span>
+<span class="font-inter text-[10px] uppercase font-bold tracking-widest mt-1">Data</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#dae2fd] opacity-50 p-2 hover:opacity-100 transition-all">
+<span class="material-symbols-outlined">person</span>
+<span class="font-inter text-[10px] uppercase font-bold tracking-widest mt-1">Profile</span>
+</div>
+</nav>
+<!-- Sticky "Your Rank" Bar (Tablet/Mobile fallback) -->
+<div class="fixed bottom-20 left-4 right-4 md:bottom-8 md:right-8 md:left-auto md:w-80 glass-card p-4 rounded-2xl shadow-2xl z-40 border border-white/5 animate-pulse-subtle">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center font-bold text-on-primary">42</div>
+<div>
+<p class="text-xs font-bold uppercase tracking-widest opacity-60">Your Rank</p>
+<p class="text-sm font-black italic">8,940 pts</p>
+</div>
+</div>
+<button class="bg-primary/20 p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined">arrow_upward</span>
+</button>
+</div>
+</div>
+</body></html>
