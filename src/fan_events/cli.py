@@ -1257,8 +1257,10 @@ def _stream_t0_anchor_and_retail_epoch(
     include_v2: bool,
     include_retail: bool,
 ) -> tuple[datetime | None, datetime]:
-    """``--max-duration`` anchor uses CLI/default retail epoch in ``compute_stream_t0``; emission
-    start follows research §3 (no backward retail vs first v2 window when calendar is present)."""
+    """``--max-duration`` anchor uses the effective retail emission epoch in ``compute_stream_t0``;
+    emission start follows research §3 (no backward retail vs first v2 window when calendar is
+    present). When ``--epoch`` is omitted, both emission and the t0 anchor use ``earliest_v2``
+    so that duration semantics are aligned with the master-clock start actually used."""
     retail_epoch_cli = (
         _parse_epoch_utc(args.epoch) if args.epoch is not None else DEFAULT_RETAIL_SIM_EPOCH_UTC
     )
@@ -1281,7 +1283,7 @@ def _stream_t0_anchor_and_retail_epoch(
     if args.max_duration is not None:
         if include_v2 and contexts:
             if include_retail:
-                t0_anchor = compute_stream_t0(retail_epoch_cli, contexts)
+                t0_anchor = compute_stream_t0(retail_emission, contexts)
             else:
                 t0_anchor = earliest_v2
         elif include_retail:

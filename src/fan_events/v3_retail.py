@@ -135,10 +135,14 @@ def iter_retail_records(
         if cap_n is not None and count >= cap_n:
             break
         if arrival_mode == "poisson":
+            if poisson_rate <= 0:
+                raise ValueError("poisson_rate must be > 0 for arrival_mode='poisson'")
             lam = poisson_rate
             if rate_factor_fn is not None:
                 fac = max(1.0, float(rate_factor_fn(t)))
                 lam = poisson_rate * fac
+            if lam <= 0:
+                raise ValueError("lam must be > 0 for arrival_mode='poisson'")
             gap = float(rng.expovariate(lam))
         else:
             gap = _next_interarrival_seconds(
