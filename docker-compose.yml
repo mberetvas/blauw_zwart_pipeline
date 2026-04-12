@@ -130,20 +130,22 @@ services:
       context: .
       dockerfile: docker/Dockerfile.ingest
     env_file: .env
+    # Logs: Kafka mode does not print each NDJSON line to stdout — stderr gets startup + periodic summaries.
+    # Code default is every 256 deliveries; this service sets FAN_EVENTS_KAFKA_PROGRESS_INTERVAL=50 for livelier logs.
+    environment:
+      PYTHONUNBUFFERED: "1"
+      FAN_EVENTS_KAFKA_PROGRESS_INTERVAL: "50"
     command:
       - fan_events
       - stream
       - --calendar
       - /app/match_day.example.json
-      - --seed
+      - -s
       - ${FAN_EVENTS_STREAM_SEED:-42}
-      - --calendar-loop
-      - --calendar-loop-shift
-      - ${FAN_EVENTS_STREAM_LOOP_SHIFT_DAYS:-365}
       - --emit-wall-clock-min
-      - ${FAN_EVENTS_STREAM_EMIT_WALL_CLOCK_MIN:-0.25}
+      - ${FAN_EVENTS_STREAM_EMIT_WALL_CLOCK_MIN:-0.1}
       - --emit-wall-clock-max
-      - ${FAN_EVENTS_STREAM_EMIT_WALL_CLOCK_MAX:-1.0}
+      - ${FAN_EVENTS_STREAM_EMIT_WALL_CLOCK_MAX:-0.5}
       - --kafka-bootstrap-servers
       - ${KAFKA_BOOTSTRAP_SERVERS:-broker:29092}
       - --kafka-topic

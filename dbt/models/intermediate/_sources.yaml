@@ -1,5 +1,5 @@
 # Raw warehouse sources for the fan-event pipeline. Staging reads from here; intermediate
-# models merch_purchase and match_events consume staging (ref) but depend on this table upstream.
+# models merch_purchase, retail_purchase, and match_events consume staging (ref) but depend on this table upstream.
 version: 2
 
 sources:
@@ -16,13 +16,15 @@ sources:
         description: >
           One row per Kafka message: NDJSON payload stored as JSONB plus Kafka coordinates
           and ingest metadata. Unique on (kafka_topic, kafka_partition, kafka_offset).
-          Feeds stg_fan_events_ingested, then intermediate models merch_purchase and match_events.
+          Feeds stg_fan_events_ingested, then intermediate models merch_purchase, retail_purchase,
+          and match_events.
         identifier: fan_events_ingested
         meta:
           ingestion_contract: ingestion-persistence-v1
           staging_model: stg_fan_events_ingested
           intermediate_models:
             - merch_purchase
+            - retail_purchase
             - match_events
         columns:
           - name: id

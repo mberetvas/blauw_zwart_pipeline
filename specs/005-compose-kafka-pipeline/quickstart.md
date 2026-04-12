@@ -41,7 +41,13 @@ Leave this running in a terminal (Ctrl-C to stop). Skip this section if the Comp
 docker compose logs -f ingest
 ```
 
-You should see the ingest service consuming from the topic. To confirm the topic exists and has traffic, inspect it from the broker container (replace `fan_events` if you changed `KAFKA_TOPIC`):
+You should see the ingest service consuming from the topic (`ingest_started …` on startup).
+
+**Producer logs (Compose `producer` service):** Events are written to **Kafka**, not to container stdout. Operational logs go to **stderr** (visible via `docker compose logs -f producer`): an **INFO** line when Kafka mode starts, then **periodic summaries** (not one line per message). By default the stack sets `FAN_EVENTS_KAFKA_PROGRESS_INTERVAL=50` in `docker-compose.yml`; without that, summaries appear every **256** messages (which can mean a long quiet period with wall-clock pacing). For more detail, set `FAN_EVENTS_LOG_LEVEL=DEBUG` (or run `fan_events stream --verbose` on the host). **Do not** expect NDJSON payloads in Docker logs — use `kafka-console-consumer` (below) or the database.
+
+```bash
+docker compose logs -f producer
+``` To confirm the topic exists and has traffic, inspect it from the broker container (replace `fan_events` if you changed `KAFKA_TOPIC`):
 
 ```bash
 docker compose exec broker /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic fan_events --from-beginning --max-messages 3

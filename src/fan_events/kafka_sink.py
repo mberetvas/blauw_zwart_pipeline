@@ -17,6 +17,12 @@ FAN_EVENTS_KAFKA_SASL_MECHANISM      e.g. PLAIN, SCRAM-SHA-256
 FAN_EVENTS_KAFKA_SASL_USERNAME       SASL username
 FAN_EVENTS_KAFKA_SASL_PASSWORD       SASL password
 
+Progress logging (optional)
+---------------------------
+Set ``FAN_EVENTS_KAFKA_PROGRESS_INTERVAL`` to a positive integer to log a summary every *N*
+successful deliveries (default **256** when unset). Use ``0`` to disable progress INFO lines.
+CLI/tests may pass ``progress_interval=…`` to :class:`KafkaSink` explicitly; that overrides the env var.
+
 Message key
 -----------
 All messages are produced with ``key=None`` (null → Kafka round-robin partitioning).
@@ -145,12 +151,22 @@ class KafkaSink:
         producer: Any,
         topic: str,
         *,
-        progress_interval: int = 256,
+        progress_interval: int | None = None,
     ) -> None:
         self._producer = producer
         self._topic = topic
         self._delivery_error: str | None = None
-        self._progress_interval = progress_interval
+        if progress_interval is not None:
+            self._progress_interval = max(0, progress_interval)
+        else:
+            raw = os.environ.get("FAN_EVENTS_KAFKA_PROGRESS_INTERVAL", "").strip()
+            if raw == "":
+                self._progress_interval = 256
+            else:
+                try:
+                    self._progress_interval = max(0, int(raw))
+                except ValueError:
+                    self._progress_interval = 256
         self._produced_count: int = 0
         self._produced_bytes: int = 0
 

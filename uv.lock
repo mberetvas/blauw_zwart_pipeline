@@ -125,8 +125,8 @@ provides-extras = ["kafka", "ingest"]
 
 [package.metadata.requires-dev]
 dbt = [
-    { name = "dbt-core", specifier = ">=1.8,<2" },
-    { name = "dbt-postgres", specifier = ">=1.8,<2" },
+    { name = "dbt-core", specifier = "~=1.8" },
+    { name = "dbt-postgres", specifier = "~=1.8" },
 ]
 dev = [
     { name = "pytest", specifier = ">=9.0.2" },
