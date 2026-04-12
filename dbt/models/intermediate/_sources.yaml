@@ -7,25 +7,16 @@ sources:
     description: >
       Raw relational data produced by the fan-event ingest service (Kafka → Postgres).
       Schema matches docker/postgres/init and ingestion-persistence-v1.
+      Owner: pipeline; layer: raw.
     schema: public
-    meta:
-      owner: pipeline
-      layer: raw
     tables:
       - name: fan_events_ingested
         description: >
           One row per Kafka message: NDJSON payload stored as JSONB plus Kafka coordinates
           and ingest metadata. Unique on (kafka_topic, kafka_partition, kafka_offset).
           Feeds stg_fan_events_ingested, then intermediate models merch_purchase, retail_purchase,
-          and match_events.
+          and match_events. Contract: ingestion-persistence-v1.
         identifier: fan_events_ingested
-        meta:
-          ingestion_contract: ingestion-persistence-v1
-          staging_model: stg_fan_events_ingested
-          intermediate_models:
-            - merch_purchase
-            - retail_purchase
-            - match_events
         columns:
           - name: id
             description: Surrogate primary key (BIGSERIAL).
@@ -50,7 +41,5 @@ sources:
             description: Business event timestamp from the payload when available.
             data_type: timestamp with time zone
           - name: payload_json
-            description: Full parsed event body as JSONB (v2/v3 fan event objects).
+            description: Full parsed event body as JSONB (v2/v3 fan event objects). No PII in synthetic payloads.
             data_type: jsonb
-            meta:
-              contains_pii: false

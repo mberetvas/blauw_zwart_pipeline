@@ -108,11 +108,16 @@ cp .env.example .env
 docker compose up -d
 ```
 
-**3. Materialise the dbt marts** (requires the `dbt` dependency group; copy `dbt/profiles.yml.example` → `dbt/profiles.yml` first):
+**3. Wait for the dbt scheduler to materialise the marts** (starts automatically inside Compose and runs immediately on boot):
 
 ```bash
-uv sync --group dbt
-uv run dbt run --select marts
+docker compose logs -f dbt-scheduler
+```
+
+If you want a one-off manual run instead of waiting for the next interval:
+
+```bash
+docker compose run --rm dbt-scheduler dbt run --project-dir /app --profiles-dir /app/dbt --select +mart_fan_loyalty
 ```
 
 **4. Open the chat UI or use curl:**

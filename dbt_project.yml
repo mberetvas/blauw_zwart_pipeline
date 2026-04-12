@@ -28,7 +28,4 @@ models:
         +materialized: view
       match_events:
         +materialized: view
-
-    marts:
-      # Each mart model declares its own materialization via config().
-      # mart_fan_loyalty uses incremental; new models can override as needed.
+    # Marts live under dbt/models/marts/; each model sets materialization in its own config().

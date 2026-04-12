@@ -107,6 +107,12 @@ tailwind.config = {
   .data-wrap td{color:#dae2fd;max-width:220px;overflow:hidden;text-overflow:ellipsis}
   .data-wrap tr:nth-child(even) td{background:rgba(255,255,255,.02)}
   .table-notice{padding:.35rem .65rem;font-size:.75rem;color:#8c90a1}
+  .trace-block{padding:.9rem 1rem;display:flex;flex-direction:column;gap:.8rem}
+  .trace-meta{display:flex;flex-wrap:wrap;gap:.45rem}
+  .trace-chip{display:inline-flex;align-items:center;border-radius:9999px;padding:.2rem .6rem;background:#222a3d;color:#b0c6ff;font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .trace-chip.model{color:#dae2fd;background:#171f33;font-family:'Consolas','Menlo',monospace;text-transform:none;letter-spacing:0}
+  .trace-list{margin:0;padding-left:1rem;display:flex;flex-direction:column;gap:.45rem;color:#c2c6d8;font-size:.8rem;line-height:1.55}
+  .trace-list li::marker{color:#548dff}
   /* ── Copy button ────────────────────────────────────── */
   .copy-btn{position:absolute;top:.5rem;right:.5rem;padding:.2rem .5rem;font-size:.62rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border:1px solid rgba(255,255,255,.1);border-radius:.25rem;background:#171f33;color:#414655;cursor:pointer;opacity:0;transition:opacity .15s,color .15s}
   .msg.assistant:hover .copy-btn,.msg.assistant:focus-within .copy-btn{opacity:1}
@@ -131,9 +137,9 @@ tailwind.config = {
 <header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 bg-surface-container-low no-line-rule">
   <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
   <nav class="hidden md:flex gap-8">
-    <a href="/" class="font-headline tracking-wide uppercase font-bold text-primary border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors">MATCHES</a>
+    <a href="/" class="font-headline tracking-wide uppercase font-bold text-primary border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors">Data Q&amp;A</a>
     <a href="#" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all" aria-disabled="true">SHOP</a>
-    <a href="/leaderboard" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">STATS</a>
+    <a href="/leaderboard" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Fan Leaderboard</a>
   </nav>
   <button class="material-symbols-outlined text-[#0572FF]" aria-label="Account">account_circle</button>
 </header>
@@ -161,13 +167,10 @@ tailwind.config = {
     <a href="#" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
       <span class="material-symbols-outlined">history</span>History
     </a>
-    <a href="/leaderboard" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
-      <span class="material-symbols-outlined">analytics</span>Saved Analysis
-    </a>
     <a href="/player-stats" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
       <span class="material-symbols-outlined">compare_arrows</span>Player Stats
     </a>
-    <a href="#" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+    <a href="/settings" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
       <span class="material-symbols-outlined">settings</span>Club Settings
     </a>
   </nav>
@@ -283,9 +286,9 @@ tailwind.config = {
     <span class="material-symbols-outlined">leaderboard</span>
     <span class="text-[9px] uppercase font-bold tracking-widest">Data</span>
   </a>
-  <a href="#" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
-    <span class="material-symbols-outlined">person</span>
-    <span class="text-[9px] uppercase font-bold tracking-widest">Profile</span>
+  <a href="/settings" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+    <span class="material-symbols-outlined">settings</span>
+    <span class="text-[9px] uppercase font-bold tracking-widest">Settings</span>
   </a>
 </nav>
 
@@ -312,15 +315,35 @@ tailwind.config = {
   let cancelTimer = null;
   const TIMEOUT_MS = 120_000;
 
-  // ── Restore + persist provider/model preference ──────────────
-  (function initPrefs() {
-    try {
-      const p = JSON.parse(localStorage.getItem("llm_pref") || "{}");
-      if (p.provider) providerEl.value = p.provider;
-      if (p.model)    modelEl.value    = p.model;
-    } catch (_) {}
-    modelEl.setAttribute("list", providerEl.value === "openrouter" ? "openrouter-models" : "ollama-models");
-  })();
+  // ── Defaults from server if no local preference; else localStorage ──
+  async function initLlmUiDefaults() {
+    const raw = localStorage.getItem("llm_pref");
+    if (raw) {
+      try {
+        const p = JSON.parse(raw);
+        if (p.provider) providerEl.value = p.provider;
+        if (p.model) modelEl.value = p.model;
+      } catch (_) {}
+    } else {
+      try {
+        const r = await fetch("/api/llm-config");
+        if (r.ok) {
+          const c = await r.json();
+          if (c.default_provider) providerEl.value = c.default_provider;
+          const dm =
+            providerEl.value === "openrouter"
+              ? c.openrouter_model
+              : c.ollama_model;
+          if (dm) modelEl.value = dm;
+        }
+      } catch (_) {}
+    }
+    modelEl.setAttribute(
+      "list",
+      providerEl.value === "openrouter" ? "openrouter-models" : "ollama-models"
+    );
+  }
+  void initLlmUiDefaults();
 
   function savePrefs() {
     try {
@@ -532,6 +555,10 @@ tailwind.config = {
     const answerText = data.answer || "";
     let html = '<div class="answer-text">' + escHtml(answerText) + "</div>";
 
+    if (data.trace) {
+      html += buildTraceHtml(data.trace);
+    }
+
     if (data.sql) {
       html += "<details><summary>SQL query</summary>"
             + '<div class="sql-block">' + escHtml(data.sql) + "</div></details>";
@@ -564,7 +591,10 @@ tailwind.config = {
 
   // ── Render error ──────────────────────────────────────────────
   function showError(data) {
-    let html = '<div class="err-label">Error</div>' + escHtml(data.error || "Unknown error");
+    let html = escHtml(data.error || "Unknown error");
+    if (data.trace) {
+      html += buildTraceHtml(data.trace);
+    }
     if (data.sql) {
       html += "<details><summary>SQL query</summary>"
             + '<div class="sql-block">' + escHtml(data.sql) + "</div></details>";
@@ -575,6 +605,31 @@ tailwind.config = {
     }
     const msgEl = appendMsg("error", html);
     msgEl.setAttribute("role", "alert");
+  }
+
+  function buildTraceHtml(trace) {
+    const notes = Array.isArray(trace.notes) ? trace.notes : [];
+    if (!notes.length && !trace.provider_label && !trace.model) {
+      return "";
+    }
+    let html = "<details><summary>Model thinking</summary><div class=\"trace-block\">";
+    html += '<div class="trace-meta">';
+    if (trace.provider_label || trace.provider) {
+      html += '<span class="trace-chip">' + escHtml(trace.provider_label || trace.provider) + "</span>";
+    }
+    if (trace.model) {
+      html += '<span class="trace-chip model">' + escHtml(trace.model) + "</span>";
+    }
+    html += "</div>";
+    if (notes.length) {
+      html += '<ol class="trace-list">';
+      notes.forEach((note) => {
+        html += "<li>" + escHtml(note) + "</li>";
+      });
+      html += "</ol>";
+    }
+    html += "</div></details>";
+    return html;
   }
 
   // ── Build HTML table from array of objects ────────────────────

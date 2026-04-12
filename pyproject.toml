@@ -33,7 +33,8 @@ dev = [
     "pytest>=9.0.2",
     "ruff>=0.8.0",
 ]
-# dbt against local Compose Postgres: `uv sync --group dbt` then see dbt/profiles.yml.example
+# dbt against local Compose Postgres: `uv sync --group dbt` then `uv run dbt ...`.
+# On Windows, prefer `uv run dbt` over a global `dbt` if that binary is dbt-fusion (Postgres DLL errors).
 dbt = [
     "dbt-core~=1.8",
     "dbt-postgres~=1.8",

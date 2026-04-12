@@ -83,9 +83,9 @@ tailwind.config = {
 <header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 bg-surface-container-low">
   <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
   <nav class="hidden md:flex gap-8">
-    <a href="/" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">MATCHES</a>
+    <a href="/" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Data Q&amp;A</a>
     <a href="#" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all" aria-disabled="true">SHOP</a>
-    <a href="/leaderboard" class="font-headline tracking-wide uppercase font-bold text-primary border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors">STATS</a>
+    <a href="/leaderboard" class="font-headline tracking-wide uppercase font-bold text-primary border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors">Fan Leaderboard</a>
   </nav>
   <button class="material-symbols-outlined text-[#0572FF]" aria-label="Account">account_circle</button>
 </header>
@@ -108,13 +108,10 @@ tailwind.config = {
     <a href="#" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
       <span class="material-symbols-outlined">history</span>History
     </a>
-    <a href="/leaderboard" class="flex items-center gap-3 bg-surface-container-highest text-primary rounded-2xl px-4 py-3 text-sm font-medium">
-      <span class="material-symbols-outlined">analytics</span>Saved Analysis
-    </a>
     <a href="/player-stats" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
       <span class="material-symbols-outlined">compare_arrows</span>Player Stats
     </a>
-    <a href="#" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+    <a href="/settings" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
       <span class="material-symbols-outlined">settings</span>Club Settings
     </a>
   </nav>
@@ -364,9 +361,9 @@ tailwind.config = {
     <span class="material-symbols-outlined">leaderboard</span>
     <span class="text-[9px] uppercase font-bold tracking-widest">Data</span>
   </a>
-  <a href="#" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
-    <span class="material-symbols-outlined">person</span>
-    <span class="text-[9px] uppercase font-bold tracking-widest">Profile</span>
+  <a href="/settings" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+    <span class="material-symbols-outlined">settings</span>
+    <span class="text-[9px] uppercase font-bold tracking-widest">Settings</span>
   </a>
 </nav>
 

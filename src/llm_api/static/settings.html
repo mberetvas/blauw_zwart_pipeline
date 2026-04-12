@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Club Settings — Club Brugge AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "surface-container-low":     "#131b2e",
+        "surface-container":         "#171f33",
+        "surface-container-high":    "#222a3d",
+        "surface-container-highest": "#2d3449",
+        "surface-container-lowest":  "#060e20",
+        "surface-bright":            "#31394d",
+        "surface":                   "#0b1326",
+        "background":                "#0b1326",
+        "primary":                   "#b0c6ff",
+        "primary-container":         "#548dff",
+        "on-primary":                "#002d6e",
+        "on-primary-container":      "#002761",
+        "secondary-container":       "#3f465c",
+        "on-secondary-container":    "#adb4ce",
+        "on-surface":                "#dae2fd",
+        "on-surface-variant":        "#c2c6d8",
+        "outline":                   "#8c90a1",
+        "outline-variant":           "#414655",
+        "error":                     "#ffb4ab",
+        "surface-variant":           "#2d3449",
+        "secondary":                 "#bec6e0"
+      },
+      borderRadius: {
+        "DEFAULT": "0.125rem",
+        "lg": "0.25rem",
+        "xl": "0.5rem",
+        "2xl": "0.75rem",
+        "full": "9999px"
+      },
+      fontFamily: {
+        "headline": ["Space Grotesk", "sans-serif"],
+        "body":     ["Inter", "sans-serif"],
+        "label":    ["Inter", "sans-serif"]
+      }
+    }
+  }
+}
+</script>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2d3449; border-radius: 10px; }
+  .field-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #8c90a1;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .field-input {
+    width: 100%;
+    margin-top: 0.35rem;
+    border-radius: 0.75rem;
+    background: #2d3449;
+    color: #dae2fd;
+    padding: 0.65rem 1rem;
+    font-size: 0.875rem;
+    outline: none;
+    border: none;
+    transition: background 0.15s, box-shadow 0.15s;
+  }
+  .field-input:focus {
+    background: #31394d;
+    box-shadow: 0 0 0 2px rgba(176, 198, 255, 0.2);
+  }
+  .field-input::placeholder { color: #414655; }
+</style>
+</head>
+<body class="bg-surface text-on-surface font-body overflow-x-hidden min-h-screen">
+
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 bg-surface-container-low">
+  <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
+  <nav class="hidden md:flex gap-8">
+    <a href="/" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Data Q&amp;A</a>
+    <a href="#" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all" aria-disabled="true">SHOP</a>
+    <a href="/leaderboard" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Fan Leaderboard</a>
+  </nav>
+  <button type="button" class="material-symbols-outlined text-[#0572FF]" aria-label="Account">account_circle</button>
+</header>
+
+<aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-low hidden md:flex flex-col py-8 px-4 gap-6 z-40">
+  <div class="mt-16 flex items-center gap-4 px-2">
+    <div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-primary">
+      <span class="material-symbols-outlined text-2xl" style="font-variation-settings:'FILL' 1">stadium</span>
+    </div>
+    <div>
+      <div class="font-headline font-bold text-on-surface text-base leading-tight">Stadium Nocturne</div>
+      <div class="text-[10px] text-primary opacity-80 uppercase tracking-widest">Configuration</div>
+    </div>
+  </div>
+  <nav class="flex flex-col gap-1 flex-1">
+    <a href="/" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+      <span class="material-symbols-outlined">chat</span>Current Match
+    </a>
+    <a href="#" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+      <span class="material-symbols-outlined">history</span>History
+    </a>
+    <a href="/player-stats" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+      <span class="material-symbols-outlined">compare_arrows</span>Player Stats
+    </a>
+    <a href="/settings" class="flex items-center gap-3 bg-surface-container-highest text-primary rounded-2xl px-4 py-3 text-sm font-medium" aria-current="page">
+      <span class="material-symbols-outlined">settings</span>Club Settings
+    </a>
+  </nav>
+  <div class="flex flex-col gap-1 border-t border-white/5 pt-4">
+    <a href="#" class="flex items-center gap-3 text-on-surface opacity-40 px-4 py-2 hover:opacity-80 transition-opacity text-xs font-medium">
+      <span class="material-symbols-outlined text-sm">help</span>Help
+    </a>
+  </div>
+</aside>
+
+<div class="ml-0 md:ml-64 pt-[72px] min-h-screen pb-24 md:pb-10">
+  <main class="max-w-3xl mx-auto px-4 md:px-8 py-10">
+
+    <div class="mb-10">
+      <p class="text-[10px] font-bold tracking-[0.25em] text-primary uppercase mb-2 font-headline">Infrastructure</p>
+      <h1 class="font-headline text-4xl md:text-5xl font-black italic tracking-tighter text-on-surface leading-tight">Club Settings</h1>
+      <p class="text-sm text-on-surface-variant mt-3 max-w-[60ch] leading-relaxed">Configure Ollama and OpenRouter for the Text-to-SQL assistant. Values are stored on the server and apply immediately after save.</p>
+      <p id="precedence-note" class="text-xs text-outline mt-4 max-w-[65ch] leading-relaxed"></p>
+    </div>
+
+    <p id="flash" class="hidden rounded-2xl px-4 py-3 text-sm mb-6" role="status"></p>
+
+    <form id="settings-form" class="flex flex-col gap-8">
+      <div class="bg-surface-container-high rounded-3xl p-6 md:p-8 flex flex-col gap-5">
+        <div>
+          <h2 class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary">Default provider</h2>
+          <p class="text-sm text-on-surface-variant mt-1">Used when the chat UI leaves the provider unchanged and for API calls without a provider field.</p>
+        </div>
+        <div>
+          <label class="field-label" for="default_provider">Provider</label>
+          <select id="default_provider" name="default_provider" class="field-input mt-2 cursor-pointer">
+            <option value="ollama">Ollama</option>
+            <option value="openrouter">OpenRouter</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="bg-surface-container-high rounded-3xl p-6 md:p-8 flex flex-col gap-5">
+        <h2 class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary">Ollama</h2>
+        <div>
+          <label class="field-label" for="ollama_url">Base URL</label>
+          <input id="ollama_url" name="ollama_url" type="url" class="field-input" required autocomplete="off" placeholder="http://localhost:11434"/>
+        </div>
+        <div>
+          <label class="field-label" for="ollama_model">Default model</label>
+          <input id="ollama_model" name="ollama_model" type="text" class="field-input" required autocomplete="off" placeholder="gemma4:e2b"/>
+        </div>
+        <div>
+          <label class="field-label" for="ollama_timeout">Timeout (seconds)</label>
+          <input id="ollama_timeout" name="ollama_timeout" type="number" min="1" max="600" class="field-input" required/>
+        </div>
+      </div>
+
+      <div class="bg-surface-container-high rounded-3xl p-6 md:p-8 flex flex-col gap-5">
+        <h2 class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary">OpenRouter</h2>
+        <div>
+          <label class="field-label" for="openrouter_base_url">API base URL</label>
+          <input id="openrouter_base_url" name="openrouter_base_url" type="url" class="field-input" required autocomplete="off"/>
+        </div>
+        <div>
+          <label class="field-label" for="openrouter_model">Default model</label>
+          <input id="openrouter_model" name="openrouter_model" type="text" class="field-input" required autocomplete="off"/>
+        </div>
+        <div>
+          <label class="field-label" for="openrouter_timeout">Timeout (seconds)</label>
+          <input id="openrouter_timeout" name="openrouter_timeout" type="number" min="1" max="600" class="field-input" required/>
+        </div>
+        <div>
+          <label class="field-label" for="openrouter_api_key">API key</label>
+          <p id="key-status" class="text-xs text-on-surface-variant mt-1 mb-1"></p>
+          <input id="openrouter_api_key" name="openrouter_api_key" type="password" class="field-input" autocomplete="off" placeholder="Enter a new key, or leave blank to keep the current key"/>
+        </div>
+        <label class="flex items-center gap-3 cursor-pointer select-none mt-1">
+          <input id="clear_openrouter_key" type="checkbox" class="rounded border-0 bg-surface-container-highest text-primary-container focus:ring-primary/30"/>
+          <span class="text-sm text-on-surface-variant">Remove stored OpenRouter API key from the server</span>
+        </label>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-4">
+        <button type="submit" id="btn-save"
+          class="px-8 py-3.5 rounded-2xl bg-primary-container text-on-primary font-headline font-bold text-sm uppercase tracking-wider hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+          Save settings
+        </button>
+        <span id="save-hint" class="text-xs text-outline"></span>
+      </div>
+    </form>
+  </main>
+</div>
+
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-surface/80 backdrop-blur-xl z-50 md:hidden" aria-label="Mobile navigation">
+  <a href="/" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+    <span class="material-symbols-outlined">forum</span>
+    <span class="text-[9px] uppercase font-bold tracking-widest">Chat</span>
+  </a>
+  <a href="#" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+    <span class="material-symbols-outlined">shopping_bag</span>
+    <span class="text-[9px] uppercase font-bold tracking-widest">Shop</span>
+  </a>
+  <a href="/leaderboard" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+    <span class="material-symbols-outlined">leaderboard</span>
+    <span class="text-[9px] uppercase font-bold tracking-widest">Data</span>
+  </a>
+  <a href="/settings" class="flex flex-col items-center gap-1 bg-[#0572FF] text-white rounded-xl p-2 scale-110">
+    <span class="material-symbols-outlined">settings</span>
+    <span class="text-[9px] uppercase font-bold tracking-widest">Settings</span>
+  </a>
+</nav>
+
+<script>
+(function () {
+  "use strict";
+  const form = document.getElementById("settings-form");
+  const flash = document.getElementById("flash");
+  const btnSave = document.getElementById("btn-save");
+  const precedenceEl = document.getElementById("precedence-note");
+  const keyStatus = document.getElementById("key-status");
+  const keyInput = document.getElementById("openrouter_api_key");
+  const clearKey = document.getElementById("clear_openrouter_key");
+
+  function showFlash(msg, ok) {
+    flash.textContent = msg;
+    flash.classList.remove("hidden", "bg-surface-container-highest", "text-error");
+    if (ok) {
+      flash.classList.add("bg-surface-container-highest", "text-on-surface");
+    } else {
+      flash.classList.add("bg-surface-container-lowest", "text-error");
+    }
+  }
+
+  async function loadConfig() {
+    const res = await fetch("/api/llm-config");
+    if (!res.ok) throw new Error("Failed to load settings");
+    const c = await res.json();
+    document.getElementById("default_provider").value = c.default_provider || "ollama";
+    document.getElementById("ollama_url").value = c.ollama_url || "";
+    document.getElementById("ollama_model").value = c.ollama_model || "";
+    document.getElementById("ollama_timeout").value = String(c.ollama_timeout ?? 120);
+    document.getElementById("openrouter_base_url").value = c.openrouter_base_url || "";
+    document.getElementById("openrouter_model").value = c.openrouter_model || "";
+    document.getElementById("openrouter_timeout").value = String(c.openrouter_timeout ?? 120);
+    keyInput.value = "";
+    if (c.precedence) precedenceEl.textContent = c.precedence;
+    if (c.config_file) {
+      document.getElementById("save-hint").textContent = "Config file: " + c.config_file;
+    }
+    if (c.openrouter_api_key_configured) {
+      keyStatus.textContent = "A key is stored (" + (c.openrouter_api_key_masked || "****") + "). Enter a new value to replace it.";
+    } else {
+      keyStatus.textContent = "No API key stored yet. Required for OpenRouter.";
+    }
+  }
+
+  form.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    btnSave.disabled = true;
+    flash.classList.add("hidden");
+    const payload = {
+      default_provider: document.getElementById("default_provider").value,
+      ollama_url: document.getElementById("ollama_url").value.trim(),
+      ollama_model: document.getElementById("ollama_model").value.trim(),
+      ollama_timeout: parseInt(document.getElementById("ollama_timeout").value, 10),
+      openrouter_base_url: document.getElementById("openrouter_base_url").value.trim(),
+      openrouter_model: document.getElementById("openrouter_model").value.trim(),
+      openrouter_timeout: parseInt(document.getElementById("openrouter_timeout").value, 10),
+    };
+    const newKey = keyInput.value.trim();
+    if (clearKey.checked) {
+      payload.openrouter_api_key = "";
+    } else if (newKey) {
+      payload.openrouter_api_key = newKey;
+    }
+    try {
+      const res = await fetch("/api/llm-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showFlash(data.error || "Save failed", false);
+        return;
+      }
+      showFlash("Settings saved. They apply immediately for new requests.", true);
+      clearKey.checked = false;
+      keyInput.value = "";
+      if (data.openrouter_api_key_configured) {
+        keyStatus.textContent = "A key is stored (" + (data.openrouter_api_key_masked || "****") + "). Enter a new value to replace it.";
+      } else {
+        keyStatus.textContent = "No API key stored. Required for OpenRouter.";
+      }
+    } catch (err) {
+      showFlash("Network error: " + err.message, false);
+    } finally {
+      btnSave.disabled = false;
+    }
+  });
+
+  loadConfig().catch(function () {
+    showFlash("Could not load settings from the server.", false);
+  });
+})();
+</script>
+</body>
+</html>

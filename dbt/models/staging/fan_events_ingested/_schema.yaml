@@ -6,11 +6,9 @@ models:
     description: >
       Staging pass-through over the `fan_pipeline.fan_events_ingested` source table for downstream
       intermediate and mart models. Add casts and renames here as the project grows.
+      Owner: pipeline; layer: staging.
     config:
       tags: [staging, fan_events, ingest]
-    meta:
-      owner: pipeline
-      layer: staging
     columns:
       - name: id
         description: Surrogate primary key from the ingest table (BIGSERIAL).

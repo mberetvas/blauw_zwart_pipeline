@@ -26,6 +26,13 @@ import requests
 import yaml
 from flask import Flask, jsonify, request, send_from_directory
 
+from .llm_runtime_config import (
+    apply_llm_config_update,
+    get_llm_settings,
+    init_llm_config,
+    to_public_config,
+)
+
 # ---------------------------------------------------------------------------
 # Configuration (environment variables)
 # ---------------------------------------------------------------------------
@@ -36,24 +43,6 @@ DATABASE_URL = (
     os.environ.get("LLM_READER_DATABASE_URL", "").strip()
     or os.environ.get("DATABASE_URL", "").strip()
 )
-
-# Ollama (local)
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://host.docker.internal:11434")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:e2b")
-OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", "120"))
-
-# OpenRouter (hosted — key is server-side only, never sent to clients)
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "").strip()
-OPENROUTER_BASE_URL = os.environ.get(
-    "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
-).rstrip("/")
-OPENROUTER_MODEL = os.environ.get(
-    "OPENROUTER_MODEL", "mistralai/mistral-7b-instruct:free"
-)
-OPENROUTER_TIMEOUT = int(os.environ.get("OPENROUTER_TIMEOUT", "120"))
-
-# Default provider; overridable per-request via the request body.
-LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "ollama").strip().lower()
 
 KNOWN_PROVIDERS: frozenset[str] = frozenset({"ollama", "openrouter"})
 _PROVIDER_DISPLAY = {"ollama": "Ollama", "openrouter": "OpenRouter"}
@@ -76,6 +65,7 @@ _MUTATING = re.compile(
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
+init_llm_config()
 
 
 # ---------------------------------------------------------------------------
@@ -110,10 +100,11 @@ def load_schema_context() -> str:
 
 def _call_ollama(prompt: str, model: str) -> str:
     """Send a prompt to Ollama /api/generate and return the response text."""
+    s = get_llm_settings()
     resp = requests.post(
-        f"{OLLAMA_URL}/api/generate",
+        f"{s['ollama_url']}/api/generate",
         json={"model": model, "prompt": prompt, "stream": False},
-        timeout=OLLAMA_TIMEOUT,
+        timeout=int(s["ollama_timeout"]),
     )
     resp.raise_for_status()
     return resp.json()["response"].strip()
@@ -121,14 +112,15 @@ def _call_ollama(prompt: str, model: str) -> str:
 
 def _call_openrouter(prompt: str, model: str) -> str:
     """Send a prompt to OpenRouter chat/completions and return the response text."""
+    s = get_llm_settings()
     resp = requests.post(
-        f"{OPENROUTER_BASE_URL}/chat/completions",
+        f"{s['openrouter_base_url']}/chat/completions",
         headers={
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Authorization": f"Bearer {s['openrouter_api_key']}",
             "Content-Type": "application/json",
         },
         json={"model": model, "messages": [{"role": "user", "content": prompt}]},
-        timeout=OPENROUTER_TIMEOUT,
+        timeout=int(s["openrouter_timeout"]),
     )
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"].strip()
@@ -139,6 +131,81 @@ def complete(prompt: str, provider: str, model: str) -> str:
     if provider == "openrouter":
         return _call_openrouter(prompt, model)
     return _call_ollama(prompt, model)
+
+
+def _llm_request_error(
+    provider_label: str,
+    stage: str,
+    exc: requests.exceptions.RequestException,
+) -> tuple[str, int]:
+    """Map provider request failures to clearer API responses."""
+    status_code = getattr(getattr(exc, "response", None), "status_code", None)
+    if status_code == 429:
+        return (
+            f"{provider_label} hit a rate limit during the {stage} step. "
+            "Wait a moment, switch model, or try the other provider.",
+            429,
+        )
+    if status_code in {401, 403}:
+        return (
+            f"{provider_label} rejected the request during the {stage} step. "
+            "Check the server-side API key and model access.",
+            503,
+        )
+    if isinstance(exc, requests.exceptions.Timeout):
+        return (
+            f"{provider_label} timed out during the {stage} step.",
+            504,
+        )
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        return (
+            f"{provider_label} is unreachable during the {stage} step. "
+            "Check the provider connection and try again.",
+            503,
+        )
+    return (f"{provider_label} request failed during the {stage} step: {exc}", 503)
+
+
+def _build_trace(
+    provider: str,
+    provider_label: str,
+    model: str,
+    *,
+    raw_sql: str | None = None,
+    sql: str | None = None,
+    row_count: int | None = None,
+    answered: bool = False,
+) -> dict[str, Any]:
+    """Return safe user-facing working notes for the request."""
+    notes = [
+        f"Used {provider_label} with model {model}.",
+        "Asked the model for one PostgreSQL SELECT query based on the schema and your question.",
+    ]
+    if raw_sql is not None:
+        if sql is not None and raw_sql.strip() != sql:
+            notes.append(
+                "Normalized the model output by removing markdown wrappers or trailing semicolons."
+            )
+        else:
+            notes.append("The model returned SQL directly without extra formatting.")
+    if sql is not None:
+        notes.append("Validated the SQL as read-only before sending it to Postgres.")
+    if row_count is not None:
+        notes.append(
+            f"Executed the query with a 10 second timeout and outer LIMIT 50, returning {row_count} row(s)."
+        )
+    elif sql is not None:
+        notes.append("Tried to execute the validated SQL against Postgres.")
+    if answered:
+        notes.append(
+            "Used the returned rows as context for the natural-language answer you see in chat."
+        )
+    return {
+        "provider": provider,
+        "provider_label": provider_label,
+        "model": model,
+        "notes": notes,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +221,10 @@ def _validate_sql(sql: str) -> None:
             "Generated SQL must begin with SELECT. "
             f"Received: {stripped[:120]!r}"
         )
+    if ";" in stripped:
+        raise ValueError(
+            "Generated SQL must contain exactly one SELECT statement and cannot include ';' inside the query."
+        )
     match = _MUTATING.search(stripped)
     if match:
         raise ValueError(
@@ -165,6 +236,7 @@ def _strip_fences(raw: str) -> str:
     """Remove markdown code fences that models sometimes wrap SQL in."""
     raw = re.sub(r"^```[a-z]*\n?", "", raw, flags=re.MULTILINE)
     raw = re.sub(r"```\s*$", "", raw, flags=re.MULTILINE)
+    raw = re.sub(r";+\s*$", "", raw.strip())
     return raw.strip()
 
 
@@ -219,6 +291,28 @@ def player_stats() -> Any:
     return send_from_directory(app.static_folder, "player-stats.html")
 
 
+@app.get("/settings")
+def settings_page() -> Any:
+    return send_from_directory(app.static_folder, "settings.html")
+
+
+@app.get("/api/llm-config")
+def llm_config_get() -> Any:
+    return jsonify(to_public_config())
+
+
+@app.put("/api/llm-config")
+def llm_config_put() -> Any:
+    body: dict[str, Any] = request.get_json(force=True) or {}
+    try:
+        return jsonify(apply_llm_config_update(body))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except OSError as exc:
+        log.exception("Failed to persist LLM config")
+        return jsonify({"error": str(exc)}), 500
+
+
 @app.get("/health")
 def health() -> Any:
     return jsonify({"status": "ok"})
@@ -231,8 +325,9 @@ def ask() -> Any:
     if not question:
         return jsonify({"error": "question is required"}), 400
 
+    s = get_llm_settings()
     # Resolve and validate provider.
-    provider = (body.get("provider") or LLM_PROVIDER).strip().lower()
+    provider = (body.get("provider") or s["default_provider"]).strip().lower()
     if provider not in KNOWN_PROVIDERS:
         return jsonify(
             {
@@ -243,18 +338,18 @@ def ask() -> Any:
             }
         ), 400
 
-    # Resolve model (request override -> env default for the provider).
+    # Resolve model (request override -> configured default for the provider).
     model = (body.get("model") or "").strip() or (
-        OLLAMA_MODEL if provider == "ollama" else OPENROUTER_MODEL
+        s["ollama_model"] if provider == "ollama" else s["openrouter_model"]
     )
 
     # Guard: OpenRouter requires a server-side API key.
-    if provider == "openrouter" and not OPENROUTER_API_KEY:
+    if provider == "openrouter" and not s["openrouter_api_key"]:
         return jsonify(
             {
                 "error": (
-                    "OpenRouter is not configured on this server. "
-                    "Set OPENROUTER_API_KEY in the environment and restart the service."
+                    "OpenRouter is not configured. "
+                    "Set the API key under Club Settings or OPENROUTER_API_KEY in the environment."
                 )
             }
         ), 503
@@ -281,16 +376,32 @@ def ask() -> Any:
         raw_sql = complete(sql_prompt, provider, model)
     except requests.exceptions.RequestException as exc:
         log.exception("%s unreachable (SQL step)", provider_label)
-        return jsonify({"error": f"{provider_label} request failed: {exc}"}), 503
+        error, status = _llm_request_error(provider_label, "SQL generation", exc)
+        return (
+            jsonify(
+                {
+                    "error": error,
+                    "trace": _build_trace(provider, provider_label, model),
+                }
+            ),
+            status,
+        )
 
     sql = _strip_fences(raw_sql)
     log.info("Generated SQL (%s/%s): %s", provider, model, sql)
+    trace = _build_trace(
+        provider,
+        provider_label,
+        model,
+        raw_sql=raw_sql,
+        sql=sql,
+    )
 
     # 3. Validate SQL.
     try:
         _validate_sql(sql)
     except ValueError as exc:
-        return jsonify({"error": str(exc), "raw_sql": raw_sql}), 422
+        return jsonify({"error": str(exc), "raw_sql": raw_sql, "trace": trace}), 422
 
     # 4. Execute against Postgres.
     try:
@@ -306,7 +417,16 @@ def ask() -> Any:
                 "ALTER ROLE llm_reader PASSWORD 'llm_reader_pass'; as a superuser, "
                 "or recreate the volume with docker compose down -v."
             )
-        return jsonify({"error": f"Query execution failed: {err}", "sql": sql}), 500
+        return (
+            jsonify(
+                {
+                    "error": f"Query execution failed: {err}",
+                    "sql": sql,
+                    "trace": trace,
+                }
+            ),
+            500,
+        )
 
     # 5. Prompt LLM for a natural-language answer.
     preview = json.loads(json.dumps(rows[:10], default=_json_default))
@@ -322,15 +442,39 @@ def ask() -> Any:
         answer = complete(answer_prompt, provider, model)
     except requests.exceptions.RequestException as exc:
         log.exception("%s unreachable (answer step)", provider_label)
-        return jsonify(
-            {"error": f"{provider_label} answer step failed: {exc}", "sql": sql}
-        ), 503
+        error, status = _llm_request_error(provider_label, "answer", exc)
+        return (
+            jsonify(
+                {
+                    "error": error,
+                    "sql": sql,
+                    "trace": _build_trace(
+                        provider,
+                        provider_label,
+                        model,
+                        raw_sql=raw_sql,
+                        sql=sql,
+                        row_count=len(rows),
+                    ),
+                }
+            ),
+            status,
+        )
 
     return jsonify(
         {
             "answer": answer,
             "sql": sql,
             "data_preview": json.loads(json.dumps(rows, default=_json_default)),
+            "trace": _build_trace(
+                provider,
+                provider_label,
+                model,
+                raw_sql=raw_sql,
+                sql=sql,
+                row_count=len(rows),
+                answered=True,
+            ),
         }
     )
 

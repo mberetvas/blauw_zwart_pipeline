@@ -87,6 +87,24 @@ services:
       timeout: 5s
       retries: 5
 
+  # ─── dbt scheduler (refresh mart_fan_loyalty + upstream parents on a fixed interval) ───
+  dbt-scheduler:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dbt
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DBT_PROFILES_DIR: /app/dbt
+      DBT_POSTGRES_HOST: postgres
+      DBT_POSTGRES_PORT: 5432
+      DBT_RUN_INTERVAL_MINUTES: ${DBT_RUN_INTERVAL_MINUTES:-5}
+      DBT_RUN_SELECTOR: ${DBT_RUN_SELECTOR:-+mart_fan_loyalty}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   pgadmin:
     # Pin: Docker Hub dpage/pgadmin4
     image: dpage/pgadmin4:9.14
@@ -163,7 +181,7 @@ services:
   # ─── Natural-language Q&A API (Flask + Ollama Text-to-SQL) ──────────────
   # Requires Ollama running on the host with `gemma4:e2b` pulled:
   #   ollama pull gemma4:e2b
-  # After the stack is up, run dbt to materialise the marts schema, then query:
+  # The dbt-scheduler service keeps the marts schema fresh in the background, then query:
   #   curl -s -X POST http://localhost:8080/api/ask \
   #     -H 'Content-Type: application/json' \
   #     -d '{"question": "Who are the top 5 fans by total spend?"}' | jq .
@@ -184,12 +202,16 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-mistralai/mistral-7b-instruct:free}
+      # Persist Ollama/OpenRouter settings from the Club Settings UI across container restarts.
+      LLM_CONFIG_PATH: ${LLM_CONFIG_PATH:-/data/llm_config.json}
     ports:
       - "${LLM_API_PORT:-8080}:8080"
     # `host-gateway` makes host.docker.internal resolve to the Docker bridge IP
     # on Linux hosts; Docker Desktop on Windows/macOS adds it automatically.
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - llm-api-config:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -203,3 +225,4 @@ services:
 volumes:
   kafka-data:
   postgres-data:
+  llm-api-config:
