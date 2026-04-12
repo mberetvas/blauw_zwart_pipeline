@@ -320,6 +320,30 @@ def iter_v2_records_merged_sorted(
     yield from heapq.merge(*per_match_iters, key=merge_key_tuple)
 
 
+def add_calendar_years_to_naive_local(naive: datetime, years: int) -> datetime:
+    """Add *years* to naive local datetime; Feb 29 clamps to Feb 28 in non-leap years."""
+    y = naive.year + years
+    m, d = naive.month, naive.day
+    if m == 2 and d == 29:
+        try:
+            date(y, 2, 29)
+        except ValueError:
+            d = 28
+    return naive.replace(year=y, month=m, day=d)
+
+
+def shift_match_context_calendar_years(ctx: MatchContext, cycle: int) -> MatchContext:
+    """Shift ``kickoff_local`` by *cycle* calendar years; suffix ``match_id`` with ``:c{cycle}``."""
+    if cycle < 1:
+        raise ValueError("cycle must be >= 1")
+    new_row = dict(ctx.row)
+    naive = datetime.fromisoformat(str(ctx.row["kickoff_local"]))
+    new_naive = add_calendar_years_to_naive_local(naive, cycle)
+    new_row["kickoff_local"] = new_naive.isoformat()
+    new_row["match_id"] = f"{ctx.row['match_id']}:c{cycle}"
+    return build_match_context(new_row)
+
+
 def shift_match_context(ctx: MatchContext, shift: timedelta, cycle: int) -> MatchContext:
     """Return a new MatchContext with all timestamps shifted by *shift* and match_id suffixed.
 
@@ -345,23 +369,17 @@ def iter_looped_v2_records(
     base_contexts: list[MatchContext],
     rng: random.Random,
     *,
-    shift: timedelta,
     scan_fraction: float = DEFAULT_SCAN_FRACTION,
     merch_factor: float = DEFAULT_MERCH_FACTOR,
     events_mode: str = "both",
     fan_pool_max: int | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """Yield v2 records indefinitely by cycling over *base_contexts* with shifted kickoffs.
+    """Yield v2 records indefinitely by cycling *base_contexts* with **+1 calendar year** per pass.
 
-    Cycle 0 uses the original contexts unmodified; cycle N ≥ 1 shifts all kickoff/window
-    timestamps by N × *shift* and appends ``:c{N}`` to each ``match_id`` for uniqueness.
+    Cycle 0 uses the original contexts; cycle N ≥ 1 applies ``shift_match_context_calendar_years``
+    (Feb 29 → Feb 28 when needed). A **single RNG** is shared across cycles.
 
-    A **single RNG instance** is shared across all cycles, producing a continuous stochastic
-    stream (fan assignments and timestamps within each window are not reproducible per cycle,
-    but the overall sequence is reproducible when the caller seeds the RNG before calling).
-
-    Stops only when the caller's consumer breaks out (e.g. via ``--max-events``, ``--max-duration``,
-    ``Ctrl+C``, or process exit).  If *base_contexts* is empty the generator returns immediately.
+    Stops when the consumer stops pulling (``--max-events``, ``--max-duration``, ``Ctrl+C``, etc.).
     """
     if not base_contexts:
         return
@@ -370,8 +388,9 @@ def iter_looped_v2_records(
         if cycle == 0:
             contexts = base_contexts
         else:
-            total_shift = shift * cycle
-            contexts = [shift_match_context(ctx, total_shift, cycle) for ctx in base_contexts]
+            contexts = [
+                shift_match_context_calendar_years(ctx, cycle) for ctx in base_contexts
+            ]
         yield from iter_v2_records_merged_sorted(
             contexts,
             rng,

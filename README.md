@@ -164,7 +164,7 @@ Normative detail and extra examples: [`specs/003-ndjson-v3-retail-sim/quickstart
 
 ### `stream` (unified NDJSON — v2 and/or v3)
 
-One UTF-8 **NDJSON line stream** in **non-decreasing synthetic time**: v2 match events (`ticket_scan` / `merch_purchase` with `match_id`) interleaved with v3 `retail_purchase` using `heapq.merge` (see [`orchestrated-stream.md`](specs/004-unified-synthetic-stream/contracts/orchestrated-stream.md)). Output is **stdout** when **`-o` / `--output` is omitted**; otherwise the path is opened in **append** mode (creates parent dirs; each line is a complete JSON object + LF). Use **`--kafka-topic`** to publish to a Kafka topic instead (mutually exclusive with `-o`).
+One UTF-8 **NDJSON line stream** in **non-decreasing synthetic time**: v2 match events (`ticket_scan` / `merch_purchase` with `match_id`) interleaved with v3 `retail_purchase` using `heapq.merge` (see [`orchestrated-stream.md`](specs/004-unified-synthetic-stream/contracts/orchestrated-stream.md)). With **`--calendar`**, the template season **recycles +1 calendar year** per pass by default; **`--max-duration`** uses a fixed **`t0`** anchor (`min` of configured retail epoch and earliest v2 window in pass 0 — see [006 supplement](specs/006-stream-three-event-kinds/contracts/cli-stream-006-supplement.md)); **match-day retail** Poisson scaling uses defaults grounded in Jan Breydel match-day lead times ([006 research §6](specs/006-stream-three-event-kinds/research.md)). Operator recipes: [006 quickstart](specs/006-stream-three-event-kinds/quickstart.md). Output is **stdout** when **`-o` / `--output` is omitted**; otherwise the path is opened in **append** mode (creates parent dirs; each line is a complete JSON object + LF). Use **`--kafka-topic`** to publish to a Kafka topic instead (mutually exclusive with `-o`).
 
 **Which sources run**
 
@@ -186,11 +186,20 @@ One UTF-8 **NDJSON line stream** in **non-decreasing synthetic time**: v2 match 
 | `--scan-fraction` | `0.85` when omitted | Same as `generate_events` v2 |
 | `--merch-factor` | `0.25` when omitted | Same as `generate_events` v2 |
 | `-e`, `--events` | `both` | v2 event filter: `both`, `ticket_scan`, or `merch_purchase` |
+| `--no-calendar-loop` | off | With `--calendar`: emit **one** template pass (no +1-year recycling) |
+| `--calendar-loop` | off | Explicit season loop (default is already **on** with `--calendar`; shift is **+1 calendar year**) |
+| `--calendar-loop-shift` | *(ignored)* | Deprecated on `stream`; validation only — use calendar-year recycling |
+| `--retail-home-match-day-multiplier` | `2.0` | Merged mode: Poisson intensity on home match days (see [FR-006](specs/006-stream-three-event-kinds/contracts/cli-match-day-flags-006.md)) |
+| `--retail-home-kickoff-pre-minutes` | `90` | Home kickoff **pre** window for extra retail boost |
+| `--retail-home-kickoff-post-minutes` | `120` | Home kickoff **post** window |
+| `--retail-home-kickoff-extra-multiplier` | `1.5` | Extra factor **inside** the kickoff window |
+| `--retail-away-match-day-enable` | off | If set, scale retail on **away-only** fixture days |
+| `--retail-away-match-day-multiplier` | `1.75` | Used only when away boost is enabled |
 | `--max-events` | *(none)* | **Post-merge**: stop after N complete lines |
-| `--max-duration` | *(none)* | **Post-merge**: max simulated **seconds** from the **first emitted** timestamp |
+| `--max-duration` | *(none)* | **Post-merge**: max simulated **seconds** from stream **`t0`** (see [006 supplement](specs/006-stream-three-event-kinds/contracts/cli-stream-006-supplement.md)) |
 | `--retail-max-events` | *(none)* | **Retail iterator**: event count cap before merge (no implied **200** when both retail limits omitted—unbounded retail until merge caps or Ctrl+C) |
 | `--retail-max-duration` | *(none)* | **Retail iterator**: max simulated seconds from retail epoch |
-| `-E`, `--epoch` | `2026-01-01T00:00:00Z` when omitted | Retail timeline start (ISO-8601 UTC) |
+| `-E`, `--epoch` | `2026-01-01T00:00:00Z` when omitted | Retail timeline start (ISO-8601 UTC). **Merged + `--calendar`**: if omitted, emission aligns to the **earliest v2 window** so retail does not precede the calendar on the master clock |
 | `--shop-weights` `W1` `W2` `W3` | equal **1/3** per shop when omitted | Same order as `generate_retail` |
 | `--arrival-mode` | `poisson` | `poisson`, `fixed`, or `weighted_gap` |
 | `--poisson-rate` | `0.1` | Used when `poisson` |

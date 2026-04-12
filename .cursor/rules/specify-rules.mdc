@@ -1,11 +1,11 @@
----
+﻿---
 description: Project Development Guidelines
 globs: ["**/*"]
 alwaysApply: true
 ---
 # blauw_zwart_fan_sim_pipeline Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-04-11
+Auto-generated from all feature plans. Last updated: 2026-04-12
 
 ## Active Technologies
 - Python 3.12+ (`pyproject.toml`) + **None** at runtime for generator (stdlib only per spec/constitution); dev: **pytest**, **ruff** (existing groups). (002-match-calendar-events)
@@ -15,6 +15,8 @@ Auto-generated from all feature plans. Last updated: 2026-04-11
 - **`fan_events stream`** (004): Python **3.12+**, **stdlib** + **`tzdata`**; merged v2+v3 NDJSON (`heapq.merge` / sorted iterators); **stdout** or append-only file — `specs/004-unified-synthetic-stream/`
 - Python **3.12+** (`pyproject.toml` `requires-python`). + Existing **`confluent-kafka`** (optional extra `kafka`) for producer; ingestion adds **`confluent-kafka`** (consumer) + **`asyncpg`** (or **psycopg[binary,pool]** with async API) — chosen stack documented in `research.md`. **tzdata** remains for generator; ingestion uses UTC timestamps in DB. (005-compose-kafka-pipeline)
 - **PostgreSQL** (official image), named volume **`postgres-data`** (or equivalent), init SQL under **`docker/postgres/init/`**. (005-compose-kafka-pipeline)
+- Python **3.12+** (`pyproject.toml` `requires-python`) + **stdlib** runtime for generator/CLI; optional **`confluent-kafka`** for Kafka extra (existing **004** pattern) (006-stream-three-event-kinds)
+- NDJSON **stdout**, **append-only file**, or **Kafka** (optional) (006-stream-three-event-kinds)
 
 - Python 3.12+ (matches `pyproject.toml` `requires-python`) + **None** beyond the Python standard library for the generator script (001-synthetic-fan-events)
 
@@ -34,9 +36,9 @@ cd src; pytest; ruff check .
 Python 3.12+ (matches `pyproject.toml` `requires-python`): Follow standard conventions
 
 ## Recent Changes
+- 006-stream-three-event-kinds: Added Python **3.12+** (`pyproject.toml` `requires-python`) + **stdlib** runtime for generator/CLI; optional **`confluent-kafka`** for Kafka extra (existing **004** pattern)
 - 005-compose-kafka-pipeline: Added Python **3.12+** (`pyproject.toml` `requires-python`). + Existing **`confluent-kafka`** (optional extra `kafka`) for producer; ingestion adds **`confluent-kafka`** (consumer) + **`asyncpg`** (or **psycopg[binary,pool]** with async API) — chosen stack documented in `research.md`. **tzdata** remains for generator; ingestion uses UTC timestamps in DB.
 - 004-unified-synthetic-stream: **`stream`** — unified NDJSON merge (v2 + v3), iterator-based merge, stdlib-only runtime
-- 003-ndjson-v3-retail-sim: Added Python **3.12+** (`pyproject.toml` `requires-python`) + **stdlib only** for generator/runtime logic (constitution VI); **`tzdata`** may remain as existing timezone support for v2 (unchanged for v3)
 
 
 <!-- MANUAL ADDITIONS START -->

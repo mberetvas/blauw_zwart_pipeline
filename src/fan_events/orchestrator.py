@@ -6,13 +6,22 @@ import heapq
 import random
 import time
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TextIO
 
 from fan_events.domain import JAN_BREYDEL_MAX_CAPACITY, RETAIL_PURCHASE
 from fan_events.merge_keys import merge_key_tuple, parse_timestamp_utc_z
 from fan_events.ndjson_io import format_line_v2, format_line_v3
+
+
+def compute_stream_t0(retail_epoch_utc: datetime, v2_contexts_pass0: list[Any]) -> datetime:
+    """Anchor for merged ``--max-duration``: min(retail epoch, earliest v2 window start pass 0)."""
+    re = retail_epoch_utc.astimezone(timezone.utc)
+    if not v2_contexts_pass0:
+        return re
+    earliest_v2 = min(c.window_start for c in v2_contexts_pass0)
+    return min(re, earliest_v2.astimezone(timezone.utc))
 
 
 def default_unified_fan_pool_max(contexts: list[Any]) -> int:
@@ -43,6 +52,7 @@ def write_merged_stream(
     *,
     max_events: int | None = None,
     max_duration_seconds: float | None = None,
+    t0_anchor: datetime | None = None,
     pacing_rng: random.Random | None = None,
     emit_wall_clock_min: float | None = None,
     emit_wall_clock_max: float | None = None,
@@ -50,8 +60,8 @@ def write_merged_stream(
     """
     Write LF-terminated NDJSON lines; return number of lines written.
 
-    ``max_duration_seconds``: span from **first emitted** timestamp (anchor); drop events that would
-    exceed the window (not emitted).
+    ``max_duration_seconds``: if ``t0_anchor`` is set (006), span from that fixed UTC instant;
+    otherwise legacy anchor is the **first emitted** timestamp.
 
     Pacing: if min/max set, sleep between lines (after first) like ``generate_retail --stream``.
     """
@@ -70,7 +80,8 @@ def write_merged_stream(
         if t_anchor is None:
             t_anchor = ts
         if max_duration_seconds is not None:
-            if (ts - t_anchor).total_seconds() > max_duration_seconds:
+            dur_ref = t0_anchor if t0_anchor is not None else t_anchor
+            if (ts - dur_ref).total_seconds() > max_duration_seconds:
                 break
         if use_pacing and not first_line:
             time.sleep(pacing_rng.uniform(emit_wall_clock_min, emit_wall_clock_max))  # type: ignore[union-attr]

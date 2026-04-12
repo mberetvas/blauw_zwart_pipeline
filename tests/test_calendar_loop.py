@@ -79,15 +79,13 @@ def test_shift_match_context_kickoff_local_updated() -> None:
 
 def test_looped_records_cycle1_timestamps_later_than_cycle0() -> None:
     contexts = _base_contexts()
-    # Use default 365-day shift: cycle 1 kickoffs are a full year later than cycle 0,
-    # so window_start of cycle 1 > window_end of cycle 0 (no overlap possible).
-    shift = timedelta(days=365)
+    # Calendar-year shift: cycle 1 kickoffs are ~1 year later than cycle 0.
     rng = random.Random(42)
 
     cycle0 = list(iter_v2_records_merged_sorted(contexts, rng))
     rng2 = random.Random(42)
 
-    gen = iter_looped_v2_records(contexts, rng2, shift=shift)
+    gen = iter_looped_v2_records(contexts, rng2)
     c0_recs = [next(gen) for _ in range(len(cycle0))]
 
     c1_first = next(gen)
@@ -103,9 +101,8 @@ def test_looped_records_monotonically_non_decreasing_per_cycle() -> None:
 
     contexts = _base_contexts()
     rng = random.Random(7)
-    shift = timedelta(days=365)
 
-    gen = iter_looped_v2_records(contexts, rng, shift=shift)
+    gen = iter_looped_v2_records(contexts, rng)
 
     # Check two complete cycles
     for _cycle in range(2):
@@ -126,8 +123,7 @@ def test_looped_records_monotonically_non_decreasing_per_cycle() -> None:
 def test_looped_records_match_ids_unique_across_two_cycles() -> None:
     contexts = _base_contexts()
     rng = random.Random(1)
-    shift = timedelta(days=365)
-    gen = iter_looped_v2_records(contexts, rng, shift=shift)
+    gen = iter_looped_v2_records(contexts, rng)
 
     # Determine cycle size
     rng2 = random.Random(1)
@@ -168,7 +164,6 @@ def test_stream_calendar_loop_max_events_stops_at_cap(
             "42",
             "--max-events",
             "5",
-            "--calendar-loop",
         ]
     )
     run_stream(ns)
@@ -197,7 +192,6 @@ def test_stream_calendar_loop_produces_more_than_one_season(
             "42",
             "--max-events",
             str(target),
-            "--calendar-loop",
         ]
     )
     run_stream(ns)
@@ -212,7 +206,7 @@ def test_stream_calendar_loop_produces_more_than_one_season(
 
 
 def test_stream_without_loop_unchanged(capsys: pytest.CaptureFixture[str]) -> None:
-    """Default stream (no --calendar-loop) stops after one pass over the calendar."""
+    """--no-calendar-loop stops after one pass over the calendar."""
     contexts = _base_contexts()
     rng_size = random.Random(42)
     expected_count = len(list(iter_v2_records_merged_sorted(contexts, rng_size)))
@@ -222,6 +216,7 @@ def test_stream_without_loop_unchanged(capsys: pytest.CaptureFixture[str]) -> No
             SUBCOMMAND_STREAM,
             "--calendar",
             str(_FIX),
+            "--no-calendar-loop",
             "--no-retail",
             "--seed",
             "42",

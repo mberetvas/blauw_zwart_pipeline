@@ -40,6 +40,13 @@ These apply to the **merged** NDJSON line stream **after** interleaving v2 and v
 
 When **both** `--max-events` and `--max-duration` are **absent**, the run is **unbounded** until interrupt, failure, or generator exhaustion (see spec FR-008). **Help** must warn about resource use.
 
+## Feature 006 (continuous calendar + `t0` + match-day retail)
+
+Calendar **season recycling** (default with `--calendar`), **`t0`** anchor semantics for **`--max-duration`**, **match-day retail** tuning flags, and **merged** default retail epoch alignment are specified in:
+
+- [`specs/006-stream-three-event-kinds/contracts/cli-stream-006-supplement.md`](../../006-stream-three-event-kinds/contracts/cli-stream-006-supplement.md)
+- [`specs/006-stream-three-event-kinds/quickstart.md`](../../006-stream-three-event-kinds/quickstart.md)
+
 ## Shared flags (non-exhaustive)
 
 - **`-s` / `--seed`**: optional; feeds RNG for v2, retail, and pacing (where applicable).
