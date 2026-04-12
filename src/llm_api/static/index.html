@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Club Brugge Fan Q&amp;A</title>
+<style>
+/* ─── Reset & base ─────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:       #0d1117;
+  --surface:  #161b22;
+  --surface2: #1c2129;
+  --border:   #30363d;
+  --text:     #e6edf3;
+  --text-dim: #8b949e;
+  --blue:     #005BA6;
+  --blue-dim: #1a3a5c;
+  --blue-glow:#0070d0;
+  --red:      #f85149;
+  --red-bg:   #3d1518;
+  --mono:     'Consolas','SFMono-Regular','Menlo',monospace;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5}
+
+/* ─── App shell ────────────────────────────────────────────────── */
+#app{display:flex;flex-direction:column;height:100%;max-width:860px;margin:0 auto}
+
+/* Header */
+header{flex-shrink:0;display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-bottom:1px solid var(--border)}
+header .logo{font-size:1.25rem;font-weight:700;color:var(--blue)}
+header .subtitle{font-size:.85rem;color:var(--text-dim)}
+
+/* Message list */
+#messages{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:1rem}
+
+/* Composer */
+#composer{flex-shrink:0;display:flex;gap:.5rem;padding:.75rem 1rem;border-top:1px solid var(--border);background:var(--surface)}
+#question{flex:1;resize:none;rows:1;min-height:42px;max-height:160px;padding:.6rem .8rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:15px;font-family:inherit;line-height:1.45;outline:none;transition:border-color .15s}
+#question:focus-visible{border-color:var(--blue-glow);box-shadow:0 0 0 2px rgba(0,91,166,.35)}
+#question::placeholder{color:var(--text-dim)}
+#send{flex-shrink:0;padding:.55rem 1.2rem;border:none;border-radius:8px;background:var(--blue);color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:background .15s,opacity .15s}
+#send:hover{background:var(--blue-glow)}
+#send:focus-visible{outline:2px solid var(--blue-glow);outline-offset:2px}
+#send:disabled{opacity:.45;cursor:not-allowed}
+
+/* ─── Message bubbles ──────────────────────────────────────────── */
+.msg{max-width:85%;padding:.7rem 1rem;border-radius:12px;word-wrap:break-word;white-space:pre-wrap}
+.msg.user{align-self:flex-end;background:var(--blue-dim);border-bottom-right-radius:3px}
+.msg.assistant{align-self:flex-start;background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:3px}
+.msg.error{align-self:flex-start;background:var(--red-bg);border:1px solid var(--red);border-bottom-left-radius:3px}
+.msg.error .err-label{color:var(--red);font-weight:600;margin-bottom:.25rem}
+
+/* Thinking indicator */
+.msg.thinking{display:flex;align-items:center;gap:.35rem;color:var(--text-dim)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--text-dim);animation:pulse 1.2s ease-in-out infinite}
+.dot:nth-child(2){animation-delay:.2s}
+.dot:nth-child(3){animation-delay:.4s}
+@keyframes pulse{0%,80%,100%{opacity:.3;transform:scale(.85)}40%{opacity:1;transform:scale(1)}}
+
+/* Answer text */
+.answer-text{margin-bottom:.5rem}
+
+/* Collapsible sections */
+details{margin-top:.5rem;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+details summary{cursor:pointer;padding:.4rem .7rem;background:var(--surface2);font-size:.85rem;color:var(--text-dim);user-select:none}
+details summary:hover{color:var(--text)}
+details summary:focus-visible{outline:2px solid var(--blue-glow);outline-offset:-2px}
+details[open] summary{border-bottom:1px solid var(--border)}
+
+/* SQL block */
+.sql-block{padding:.6rem .8rem;overflow-x:auto;font-family:var(--mono);font-size:.82rem;line-height:1.55;color:#79c0ff;background:var(--bg)}
+
+/* Data table */
+.data-wrap{overflow-x:auto;max-height:340px;overflow-y:auto}
+.data-wrap table{border-collapse:collapse;font-size:.8rem;white-space:nowrap}
+.data-wrap th,.data-wrap td{padding:.35rem .65rem;border:1px solid var(--border);text-align:left}
+.data-wrap th{position:sticky;top:0;background:var(--surface2);color:var(--text-dim);font-weight:600}
+.data-wrap td{color:var(--text);max-width:220px;overflow:hidden;text-overflow:ellipsis}
+.data-wrap tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+
+/* Welcome placeholder */
+.welcome{text-align:center;color:var(--text-dim);margin:auto;padding:2rem 1rem}
+.welcome h2{color:var(--blue);margin-bottom:.5rem;font-size:1.2rem}
+.welcome p{font-size:.9rem}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <span class="logo">⚽ Club Brugge Fan Q&amp;A</span>
+    <span class="subtitle">Ask anything about fan data</span>
+  </header>
+
+  <div id="messages">
+    <div class="welcome">
+      <h2>Welcome</h2>
+      <p>Ask a question about fan behaviour — spending, merchandise, match attendance, and more.<br>
+      Answers are generated from the dbt analytics layer via Ollama.</p>
+    </div>
+  </div>
+
+  <form id="composer" autocomplete="off">
+    <textarea id="question" placeholder="Ask a question…" aria-label="Your question" rows="1"></textarea>
+    <button id="send" type="submit" aria-label="Send question">Send</button>
+  </form>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const messagesEl = document.getElementById("messages");
+  const questionEl = document.getElementById("question");
+  const sendBtn    = document.getElementById("send");
+  const form       = document.getElementById("composer");
+  let busy = false;
+
+  /* ── Auto-resize textarea ─────────────────────────────────────── */
+  questionEl.addEventListener("input", () => {
+    questionEl.style.height = "auto";
+    questionEl.style.height = Math.min(questionEl.scrollHeight, 160) + "px";
+  });
+
+  /* ── Submit on Enter (Shift+Enter for newline) ────────────────── */
+  questionEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
+  /* ── Form submit handler ──────────────────────────────────────── */
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (busy) return;
+
+    const q = questionEl.value.trim();
+    if (!q) return;
+
+    // Remove welcome screen on first message.
+    const welcome = messagesEl.querySelector(".welcome");
+    if (welcome) welcome.remove();
+
+    // User bubble.
+    appendMsg("user", escHtml(q));
+    questionEl.value = "";
+    questionEl.style.height = "auto";
+    setBusy(true);
+
+    // Thinking indicator.
+    const thinking = appendMsg(
+      "thinking assistant",
+      '<span class="dot"></span><span class="dot"></span><span class="dot"></span>'
+    );
+
+    try {
+      const res  = await fetch("/api/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: q }),
+      });
+      const data = await res.json();
+      thinking.remove();
+
+      if (!res.ok) {
+        showError(data);
+      } else {
+        showAnswer(data);
+      }
+    } catch (err) {
+      thinking.remove();
+      showError({ error: "Network error — is the server running? " + err.message });
+    } finally {
+      setBusy(false);
+      questionEl.focus();
+    }
+  });
+
+  /* ── Helpers ──────────────────────────────────────────────────── */
+  function setBusy(v) {
+    busy = v;
+    sendBtn.disabled = v;
+    questionEl.disabled = v;
+  }
+
+  function appendMsg(cls, html) {
+    const div = document.createElement("div");
+    div.className = "msg " + cls;
+    div.innerHTML = html;
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return div;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  /* ── Render success answer ─────────────────────────────────────── */
+  function showAnswer(data) {
+    let html = '<div class="answer-text">' + escHtml(data.answer) + "</div>";
+
+    // Collapsible SQL section.
+    if (data.sql) {
+      html += "<details><summary>SQL query</summary>"
+            + '<div class="sql-block">' + escHtml(data.sql) + "</div></details>";
+    }
+
+    // Collapsible data preview table.
+    if (data.data_preview && data.data_preview.length) {
+      html += "<details><summary>Data preview (" + data.data_preview.length + " rows)</summary>"
+            + '<div class="data-wrap">' + buildTable(data.data_preview) + "</div></details>";
+    }
+
+    appendMsg("assistant", html);
+  }
+
+  /* ── Render error ──────────────────────────────────────────────── */
+  function showError(data) {
+    let html = '<div class="err-label">Error</div>' + escHtml(data.error || "Unknown error");
+    if (data.sql) {
+      html += "<details><summary>SQL query</summary>"
+            + '<div class="sql-block">' + escHtml(data.sql) + "</div></details>";
+    }
+    if (data.raw_sql) {
+      html += "<details><summary>Raw model output</summary>"
+            + '<div class="sql-block">' + escHtml(data.raw_sql) + "</div></details>";
+    }
+    appendMsg("error", html);
+  }
+
+  /* ── Build HTML table from array of objects ─────────────────────── */
+  function buildTable(rows) {
+    const display = rows.slice(0, 10);
+    const cols = Object.keys(display[0]);
+    let t = "<table><thead><tr>";
+    cols.forEach((c) => (t += "<th>" + escHtml(c) + "</th>"));
+    t += "</tr></thead><tbody>";
+    display.forEach((r) => {
+      t += "<tr>";
+      cols.forEach((c) => {
+        const v = r[c];
+        t += "<td>" + escHtml(v == null ? "" : String(v)) + "</td>";
+      });
+      t += "</tr>";
+    });
+    t += "</tbody></table>";
+    if (rows.length > 10) {
+      t += '<div style="padding:.4rem .7rem;font-size:.8rem;color:var(--text-dim)">Showing 10 of '
+         + rows.length + " rows</div>";
+    }
+    return t;
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# UV-based image for the Ollama Q&A Flask API (llm_api).
+FROM python:3.12-slim-bookworm
+
+# Pin uv to the same version used by Dockerfile.ingest for consistency.
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
+
+WORKDIR /app
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+
+# Install Python dependencies first (layer-cached until pyproject/lock change).
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+RUN uv sync --frozen --no-dev --extra api
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Bake the marts schema into the image so the container needs no volume mount.
+# Rebuild the image whenever schema.yml changes.
+COPY dbt/models/marts/schema.yml /app/schema.yml
+ENV SCHEMA_FILE=/app/schema.yml
+
+EXPOSE 8080
+CMD ["python", "-m", "llm_api.app"]

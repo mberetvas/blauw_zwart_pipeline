@@ -160,6 +160,38 @@ services:
       kafka-init:
         condition: service_completed_successfully
 
+  # ─── Natural-language Q&A API (Flask + Ollama Text-to-SQL) ──────────────
+  # Requires Ollama running on the host with `gemma4:e2b` pulled:
+  #   ollama pull gemma4:e2b
+  # After the stack is up, run dbt to materialise the marts schema, then query:
+  #   curl -s -X POST http://localhost:8080/api/ask \
+  #     -H 'Content-Type: application/json' \
+  #     -d '{"question": "Who are the top 5 fans by total spend?"}' | jq .
+  llm-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    env_file: .env
+    environment:
+      DATABASE_URL: ${LLM_READER_DATABASE_URL:-postgresql://llm_reader:llm_reader_pass@postgres:5432/fan_pipeline}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
+    ports:
+      - "${LLM_API_PORT:-8080}:8080"
+    # `host-gateway` makes host.docker.internal resolve to the Docker bridge IP
+    # on Linux hosts; Docker Desktop on Windows/macOS adds it automatically.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 volumes:
   kafka-data:
   postgres-data:

@@ -16,6 +16,13 @@ ingest = [
     "asyncpg>=0.29",
     "confluent-kafka>=2.3",
 ]
+# Natural-language Q&A API backed by Ollama + Postgres marts: `uv sync --extra api`
+api = [
+    "flask>=3.0",
+    "psycopg2-binary>=2.9",
+    "requests>=2.31",
+    "pyyaml>=6.0",
+]
 
 [project.scripts]
 fan_events = "fan_events.cli:main"

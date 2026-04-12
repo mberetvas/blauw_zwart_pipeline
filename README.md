@@ -2,7 +2,7 @@
 
 # Blauw zwart - Mock-up data creator
 
-Synthetic fan events generator for Club Brugge KV simulations. PyPI / `pyproject.toml` name: **`blauw-zwart-fan-sim-pipeline`**. The `fan_events` package (`src/fan_events/`) exposes a CLI with three subcommands: **`generate_events`** (match-related **v1** rolling window or **v2** calendar), **`generate_retail`** (**v3** match-independent retail purchases), and **`stream`** (one time-ordered NDJSON stream mixing **v2** and **v3**, with optional native Kafka output). A separate entry point, **`fan_ingest`**, consumes that NDJSON from Kafka into Postgres (used by Docker Compose; optional on the host).
+Synthetic fan events generator for Club Brugge KV simulations. PyPI / `pyproject.toml` name: **`blauw-zwart-fan-sim-pipeline`**. The `fan_events` package (`src/fan_events/`) exposes a CLI with three subcommands: **`generate_events`** (match-related **v1** rolling window or **v2** calendar), **`generate_retail`** (**v3** match-independent retail purchases), and **`stream`** (one time-ordered NDJSON stream mixing **v2** and **v3**, with optional native Kafka output). A separate entry point, **`fan_ingest`**, consumes that NDJSON from Kafka into Postgres (used by Docker Compose; optional on the host). A **Natural-language Q&A API** (`src/llm_api/`) wraps the dbt analytics layer with a Text-to-SQL pipeline powered by **Ollama** (`gemma4:e2b`).
 
 ## Prerequisites
 
@@ -10,8 +10,9 @@ Synthetic fan events generator for Club Brugge KV simulations. PyPI / `pyproject
 |-------------|---------|-------|
 | Python | ≥ 3.12 | Required by `pyproject.toml` |
 | [uv](https://docs.astral.sh/uv/) | any recent | Package manager; used for all dev commands |
-| Docker | any | Kafka + Postgres + ingest via `docker-compose.yml` (see **Full local pipeline** below) |
+| Docker | any | Kafka + Postgres + pgAdmin + LLM API via `docker-compose.yml` |
 | [just](https://just.systems/) | any | Optional task runner; see [`justfile`](justfile) (e.g. `just kafka-up`, `just stream`, `just stream-kafka`) |
+| [Ollama](https://ollama.com/) | any recent | Required for the Q&A API; run on the host, not in Docker |
 
 ## Installation
 
@@ -42,6 +43,8 @@ After a global install, use `fan_events` / `fan_ingest` directly (drop the `uv r
 
 > **Ingest extra**: The **`fan_ingest`** CLI (Kafka → Postgres) needs the **`ingest`** optional dependency group (`asyncpg` + `confluent-kafka`). For the normal Compose workflow you do **not** need it on the host—the **`ingest`** service runs in Docker. Install **`ingest`** only if you run `uv run fan_ingest` locally.
 
+> **API extra**: The **`llm_api`** Flask service (`src/llm_api/`) needs the **`api`** optional dependency group (`flask`, `psycopg2-binary`, `requests`, `pyyaml`). It runs in Docker via Compose; install locally only if you develop or debug it outside the container: `uv sync --extra api`.
+
 ### Full local pipeline (Kafka → Postgres)
 
 End-to-end demo: Docker Compose now starts Kafka KRaft, Postgres, pgAdmin, the Kafka ingest worker, and a long-running `fan_events stream` producer. Step-by-step guide, ports, and acceptance checks: [`specs/005-compose-kafka-pipeline/quickstart.md`](specs/005-compose-kafka-pipeline/quickstart.md).
@@ -51,6 +54,7 @@ End-to-end demo: Docker Compose now starts Kafka KRaft, Postgres, pgAdmin, the K
 | **9092** | Kafka (host clients: `localhost:9092`; Compose services use `broker:29092`) |
 | **5432** | Postgres (override with `POSTGRES_PORT` if in use) |
 | **5050** | pgAdmin |
+| **8080** | LLM Q&A API (override with `LLM_API_PORT` if in use) |
 
 ```bash
 cp .env.example .env && docker compose up -d
@@ -65,6 +69,127 @@ uv run fan_ingest --help
 ```
 
 Adjust credentials and port to match your `.env`. Topic and consumer group default to the same values as `.env.example` when unset.
+
+## Natural-language Q&A API
+
+The `llm-api` Compose service (`src/llm_api/`) exposes a **Text-to-SQL REST API** powered by [Ollama](https://ollama.com/) (`gemma4:e2b`) and the dbt analytics layer. Ask questions about fan behaviour in plain English and get a structured JSON response with a natural language answer, the generated SQL, and a data preview.
+
+### Architecture
+
+```
+Browser  →  GET /          →  Flask (Docker :8080) → Chat UI (static HTML)
+Browser  →  POST /api/ask  →  Flask (Docker :8080)
+                                │ 1. load schema.yml context
+                                ↓
+                            Ollama gemma4:e2b (host :11434)
+                                │ 2. generate SQL
+                                ↓
+                            Postgres dbt_dev.mart_fan_loyalty (Docker)
+                                │ 3. execute (LIMIT 50, timeout 10 s)
+                                ↓
+                            Ollama gemma4:e2b (host :11434)
+                                │ 4. generate natural answer
+                                ↓
+                            JSON { answer, sql, data_preview }
+```
+
+### Quickstart
+
+**1. Pull the model on the host (once):**
+
+```bash
+ollama pull gemma4:e2b
+```
+
+**2. Start the full stack:**
+
+```bash
+cp .env.example .env
+docker compose up -d
+```
+
+**3. Materialise the dbt marts** (requires the `dbt` dependency group; copy `dbt/profiles.yml.example` → `dbt/profiles.yml` first):
+
+```bash
+uv sync --group dbt
+uv run dbt run --select marts
+```
+
+**4. Open the chat UI or use curl:**
+
+Open [**http://localhost:8080**](http://localhost:8080) in a browser for the ChatGPT-style interface, or query the API directly:
+
+```bash
+curl -s -X POST http://localhost:8080/api/ask \
+  -H 'Content-Type: application/json' \
+  -d '{"question": "Who are the top 5 fans by total spend?"}' | python -m json.tool
+```
+
+Example response:
+
+```json
+{
+  "answer": "The top 5 fans by total spend are fan_00312 (€2,840.50), fan_00087 (€2,610.00), ...",
+  "sql": "SELECT fan_id, total_spend FROM mart_fan_loyalty ORDER BY total_spend DESC LIMIT 5",
+  "data_preview": [
+    {"fan_id": "fan_00312", "total_spend": 2840.5},
+    ...
+  ]
+}
+```
+
+### Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Browser chat UI (dark theme, Club Brugge accents) |
+| `GET` | `/health` | Liveness check; returns `{"status": "ok"}` |
+| `POST` | `/api/ask` | Natural language question → SQL → answer |
+
+### Browser UI
+
+The chat interface is a single-page app served from the same Flask container at [**http://localhost:8080**](http://localhost:8080). No separate front-end service or build step is required.
+
+- **Dark theme** with Club Brugge deep-blue accents.
+- **ChatGPT-style** conversation layout: user messages right-aligned, assistant answers left-aligned.
+- **Thinking indicator** while waiting for Ollama.
+- **Collapsible sections** for the generated SQL and a compact data preview table.
+- **Error display** for 4xx/5xx responses (surfaces the error message from the API JSON).
+
+**Prerequisites:** Ollama must be running on the host with `gemma4:e2b` pulled, and the dbt `mart_fan_loyalty` table must be materialised (`uv run dbt run --select marts`) for meaningful answers.
+
+### Guardrails
+
+The API enforces strict read-only access at every layer:
+
+| Layer | Measure |
+|-------|---------|
+| **Postgres role** | `llm_reader` has `SELECT`-only on `dbt_dev`; provisioned by `docker/postgres/init/002_llm_reader.sql` |
+| **SQL validation** | Generated SQL must start with `SELECT`; mutating keywords (`INSERT`, `UPDATE`, `DROP`, etc.) are rejected with HTTP 422 |
+| **Row cap** | SQL is wrapped in `SELECT * FROM (...) AS llm_query LIMIT 50` before execution |
+| **Statement timeout** | `SET statement_timeout = '10s'` is issued on every connection |
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LLM_READER_DATABASE_URL` | `postgresql://llm_reader:llm_reader_pass@postgres:5432/fan_pipeline` | Postgres connection for the API |
+| `OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama endpoint reachable from the container |
+| `OLLAMA_MODEL` | `gemma4:e2b` | Ollama model tag |
+| `OLLAMA_TIMEOUT` | `120` | Seconds to wait for Ollama responses |
+| `LLM_API_PORT` | `8080` | Host port published for the Flask service |
+
+### dbt analytics layer
+
+The API uses the `dbt_dev.mart_fan_loyalty` table (materialised by `dbt/models/marts/mart_fan_loyalty.sql`). The mart aggregates three intermediate models:
+
+| Source | What it captures |
+|--------|-----------------|
+| `merch_purchase` | Stadium merchandise purchases (item, amount, match_id) |
+| `retail_purchase` | Non-match retail purchases (item, amount, shop) |
+| `match_events` | Ticket scans and match-day events (fan attendance) |
+
+The schema is documented with LLM-friendly column descriptions in `dbt/models/marts/schema.yml` and baked into the Docker image at build time (`/app/schema.yml`).
 
 ## CLI overview
 
