@@ -3,108 +3,330 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Club Brugge Fan Q&amp;A</title>
+<title>Club Brugge Fan Q&A</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet">
 <style>
 /* ─── Reset & base ─────────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:       #0d1117;
-  --surface:  #161b22;
-  --surface2: #1c2129;
-  --border:   #30363d;
-  --text:     #e6edf3;
-  --text-dim: #8b949e;
-  --blue:     #005BA6;
-  --blue-dim: #1a3a5c;
-  --blue-glow:#0070d0;
-  --red:      #f85149;
-  --red-bg:   #3d1518;
-  --mono:     'Consolas','SFMono-Regular','Menlo',monospace;
+  /* Club Brugge — blauw & zwart */
+  --bg:         #07090f;
+  --surface:    #0d1320;
+  --surface2:   #111829;
+  --border:     #1d2d44;
+  --text:       #e8ecf4;
+  --text-dim:   #6b7d99;
+  --blue:       #004C97;
+  --blue-vivid: #2b81e8;
+  --blue-dim:   #081e3d;
+  --blue-hover: #005bb8;
+  --gold:       #d4a017;
+  --red:        #e85348;
+  --red-bg:     #2a0f0d;
+  --mono:       'Consolas','SFMono-Regular','Menlo',monospace;
+  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
 }
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Barlow',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;line-height:1.5}
+
+/* ─── Entrance animations ──────────────────────────────────────── */
+@keyframes fadeUp{
+  from{opacity:0;transform:translateY(14px)}
+  to  {opacity:1;transform:none}
+}
+@keyframes msgIn{
+  from{opacity:0;transform:translateY(7px)}
+  to  {opacity:1;transform:none}
+}
+@keyframes blink{
+  0%,70%,100%{opacity:.2;transform:scaleY(.7)}
+  35%{opacity:1;transform:scaleY(1)}
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
 
 /* ─── App shell ────────────────────────────────────────────────── */
-#app{display:flex;flex-direction:column;height:100%;max-width:860px;margin:0 auto}
+#app{
+  display:flex;flex-direction:column;height:100%;max-width:860px;margin:0 auto;
+  border-top:3px solid var(--blue);
+}
 
 /* Header */
-header{flex-shrink:0;display:flex;align-items:center;gap:.6rem;padding:.75rem 1rem;border-bottom:1px solid var(--border)}
-header .logo{font-size:1.25rem;font-weight:700;color:var(--blue)}
-header .subtitle{font-size:.85rem;color:var(--text-dim)}
+header{
+  flex-shrink:0;display:flex;align-items:center;gap:.75rem;
+  padding:.8rem 1.25rem;border-bottom:1px solid var(--border);
+  background:var(--surface);
+}
+.logo{
+  font-size:clamp(.95rem,1.6vw,1.2rem);font-weight:800;
+  letter-spacing:.1em;line-height:1;color:var(--gold);
+  text-transform:uppercase;
+}
+.logo-tag{
+  color:var(--text-dim);font-size:.75em;font-weight:400;
+  letter-spacing:.04em;margin-left:.4em;vertical-align:middle;text-transform:none;
+}
+.subtitle{flex:1;font-size:.8rem;color:var(--text-dim)}
+.btn-clear{
+  flex-shrink:0;padding:.3rem .65rem;font-size:.75rem;font-family:inherit;font-weight:700;
+  border:1px solid var(--border);border-radius:2px;background:transparent;
+  color:var(--text-dim);cursor:pointer;text-transform:uppercase;letter-spacing:.06em;
+  transition:color .15s,border-color .15s;
+}
+.btn-clear:hover{color:var(--text);border-color:var(--text-dim)}
+.btn-clear:focus-visible{outline:2px solid var(--blue-hover);outline-offset:2px}
 
-/* Message list */
-#messages{flex:1;overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:1rem}
+/* ─── Message list ─────────────────────────────────────────────── */
+#messages{
+  flex:1;overflow-y:auto;padding:1.25rem;
+  display:flex;flex-direction:column;gap:1rem;
+  background-image:radial-gradient(ellipse 100% 30% at 50% 0%,oklch(18% .06 245 / .55),transparent);
+}
 
-/* Composer */
-#composer{flex-shrink:0;display:flex;gap:.5rem;padding:.75rem 1rem;border-top:1px solid var(--border);background:var(--surface)}
-#question{flex:1;resize:none;rows:1;min-height:42px;max-height:160px;padding:.6rem .8rem;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:15px;font-family:inherit;line-height:1.45;outline:none;transition:border-color .15s}
-#question:focus-visible{border-color:var(--blue-glow);box-shadow:0 0 0 2px rgba(0,91,166,.35)}
+/* ─── Composer ─────────────────────────────────────────────────── */
+#composer{
+  flex-shrink:0;display:flex;flex-direction:column;gap:0;
+  border-top:1px solid var(--border);background:var(--surface);
+}
+#llm-settings{
+  display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;
+  padding:.35rem .85rem;border-bottom:1px solid var(--border);
+}
+.settings-label{font-size:.72rem;color:var(--text-dim);user-select:none}
+#provider-sel{
+  font-family:inherit;font-size:.75rem;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;background:var(--surface2);color:var(--text);
+  border:1px solid var(--border);border-radius:2px;padding:.25rem .55rem;
+  outline:none;cursor:pointer;
+}
+#provider-sel:focus-visible{border-color:var(--blue-hover)}
+#model-input{
+  width:15rem;font-family:var(--mono);font-size:.75rem;
+  background:var(--surface2);color:var(--text);
+  border:1px solid var(--border);border-radius:2px;
+  padding:.25rem .55rem;outline:none;transition:border-color .15s;
+}
+#model-input:focus-visible{border-color:var(--blue-vivid);box-shadow:0 0 0 2px rgba(43,129,232,.2)}
+#model-input::placeholder{color:var(--text-dim)}
+#composer-row{display:flex;gap:.5rem;padding:.85rem 1.25rem}
+#question{
+  flex:1;resize:none;height:42px;max-height:160px;
+  padding:.6rem .85rem;border:1px solid var(--border);border-radius:2px;
+  background:var(--surface2);color:var(--text);font-size:15px;font-family:inherit;
+  line-height:1.45;outline:none;transition:border-color .15s,box-shadow .15s;
+}
+#question:focus-visible{
+  border-color:var(--blue-vivid);
+  box-shadow:0 0 0 2px rgba(43,129,232,.25);
+}
 #question::placeholder{color:var(--text-dim)}
-#send{flex-shrink:0;padding:.55rem 1.2rem;border:none;border-radius:8px;background:var(--blue);color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:background .15s,opacity .15s}
-#send:hover{background:var(--blue-glow)}
-#send:focus-visible{outline:2px solid var(--blue-glow);outline-offset:2px}
-#send:disabled{opacity:.45;cursor:not-allowed}
+#send{
+  flex-shrink:0;padding:.55rem 1.4rem;border:none;border-radius:2px;
+  background:var(--blue);color:#fff;font-size:.85rem;font-weight:700;
+  font-family:inherit;cursor:pointer;letter-spacing:.1em;text-transform:uppercase;
+  transition:background .15s,transform .1s,box-shadow .15s;
+}
+#send:hover{
+  background:var(--blue-hover);transform:translateY(-2px);
+  box-shadow:0 6px 20px rgba(0,76,151,.45);
+}
+#send:active{transform:translateY(0);box-shadow:none}
+#send:focus-visible{outline:2px solid var(--blue-vivid);outline-offset:2px}
+#send:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+#cancel{
+  flex-shrink:0;padding:.55rem .9rem;border:1px solid var(--border);border-radius:2px;
+  background:transparent;color:var(--text-dim);font-size:.8rem;font-family:inherit;
+  font-weight:700;cursor:pointer;letter-spacing:.06em;text-transform:uppercase;
+  transition:color .15s,border-color .15s;display:none;
+}
+#cancel.visible{display:block}
+#cancel:hover{color:var(--text);border-color:var(--text-dim)}
+#cancel:focus-visible{outline:2px solid var(--blue-hover);outline-offset:2px}
 
 /* ─── Message bubbles ──────────────────────────────────────────── */
-.msg{max-width:85%;padding:.7rem 1rem;border-radius:12px;word-wrap:break-word;white-space:pre-wrap}
-.msg.user{align-self:flex-end;background:var(--blue-dim);border-bottom-right-radius:3px}
-.msg.assistant{align-self:flex-start;background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:3px}
-.msg.error{align-self:flex-start;background:var(--red-bg);border:1px solid var(--red);border-bottom-left-radius:3px}
-.msg.error .err-label{color:var(--red);font-weight:600;margin-bottom:.25rem}
+.msg-wrap{
+  display:flex;flex-direction:column;gap:.2rem;
+  animation:msgIn .22s var(--ease-out) both;
+}
+.msg-wrap.user{align-items:flex-end}
+.msg-wrap.assistant,.msg-wrap.error{align-items:flex-start}
+.msg-meta{font-size:.7rem;color:var(--text-dim);padding:0 .4rem}
+.msg{
+  max-width:85%;padding:.75rem 1rem;border-radius:2px;
+  word-wrap:break-word;white-space:pre-wrap;position:relative;
+}
+.msg.user{background:var(--blue-dim);border:1px solid rgba(0,76,151,.5);border-bottom-right-radius:0}
+.msg.assistant{background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:0}
+.msg.error{background:var(--red-bg);border:1px solid var(--red);border-bottom-left-radius:0}
+.msg.error .err-label{
+  color:var(--red);font-weight:700;font-size:.75rem;
+  text-transform:uppercase;letter-spacing:.1em;margin-bottom:.35rem;
+}
+
+/* Copy button */
+.copy-btn{
+  position:absolute;top:.45rem;right:.45rem;padding:.2rem .5rem;
+  font-size:.7rem;font-family:inherit;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  border:1px solid var(--border);border-radius:2px;background:var(--surface2);
+  color:var(--text-dim);cursor:pointer;opacity:0;
+  transition:opacity .15s,color .15s;
+}
+.msg.assistant:hover .copy-btn,.msg.assistant:focus-within .copy-btn{opacity:1}
+.copy-btn:hover{color:var(--text)}
+.copy-btn:focus-visible{opacity:1;outline:2px solid var(--blue-hover);outline-offset:2px}
+.copy-btn.copied{color:var(--gold)}
 
 /* Thinking indicator */
-.msg.thinking{display:flex;align-items:center;gap:.35rem;color:var(--text-dim)}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--text-dim);animation:pulse 1.2s ease-in-out infinite}
-.dot:nth-child(2){animation-delay:.2s}
-.dot:nth-child(3){animation-delay:.4s}
-@keyframes pulse{0%,80%,100%{opacity:.3;transform:scale(.85)}40%{opacity:1;transform:scale(1)}}
+.msg.thinking{display:flex;align-items:center;gap:.4rem;padding:.8rem 1rem}
+.dot{
+  width:7px;height:9px;border-radius:1px;
+  background:var(--blue-vivid);animation:blink 1.4s ease-in-out infinite;
+}
+.dot:nth-child(2){animation-delay:.18s}
+.dot:nth-child(3){animation-delay:.36s}
 
 /* Answer text */
-.answer-text{margin-bottom:.5rem}
+.answer-text{margin-bottom:.5rem;padding-right:2.5rem}
 
 /* Collapsible sections */
-details{margin-top:.5rem;border:1px solid var(--border);border-radius:6px;overflow:hidden}
-details summary{cursor:pointer;padding:.4rem .7rem;background:var(--surface2);font-size:.85rem;color:var(--text-dim);user-select:none}
+details{margin-top:.5rem;border:1px solid var(--border);border-radius:2px;overflow:hidden}
+details summary{
+  cursor:pointer;list-style:none;padding:.4rem .75rem;background:var(--surface2);
+  font-size:.78rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--text-dim);user-select:none;display:flex;align-items:center;gap:.45rem;
+}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:'▶';font-size:.55rem;transition:transform .15s;flex-shrink:0}
+details[open] summary::before{transform:rotate(90deg)}
 details summary:hover{color:var(--text)}
-details summary:focus-visible{outline:2px solid var(--blue-glow);outline-offset:-2px}
+details summary:focus-visible{outline:2px solid var(--blue-hover);outline-offset:-2px}
 details[open] summary{border-bottom:1px solid var(--border)}
 
 /* SQL block */
-.sql-block{padding:.6rem .8rem;overflow-x:auto;font-family:var(--mono);font-size:.82rem;line-height:1.55;color:#79c0ff;background:var(--bg)}
+.sql-block{
+  padding:.7rem .85rem;overflow-x:auto;font-family:var(--mono);
+  font-size:.8rem;line-height:1.6;color:#6ab0f5;background:var(--bg);
+}
 
 /* Data table */
 .data-wrap{overflow-x:auto;max-height:340px;overflow-y:auto}
-.data-wrap table{border-collapse:collapse;font-size:.8rem;white-space:nowrap}
+.data-wrap table{border-collapse:collapse;font-size:.78rem;white-space:nowrap;min-width:100%}
 .data-wrap th,.data-wrap td{padding:.35rem .65rem;border:1px solid var(--border);text-align:left}
-.data-wrap th{position:sticky;top:0;background:var(--surface2);color:var(--text-dim);font-weight:600}
+.data-wrap th{
+  position:sticky;top:0;background:var(--surface2);color:var(--text-dim);
+  font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;
+}
 .data-wrap td{color:var(--text);max-width:220px;overflow:hidden;text-overflow:ellipsis}
 .data-wrap tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+.table-notice{padding:.4rem .75rem;font-size:.78rem;color:var(--text-dim)}
 
-/* Welcome placeholder */
-.welcome{text-align:center;color:var(--text-dim);margin:auto;padding:2rem 1rem}
-.welcome h2{color:var(--blue);margin-bottom:.5rem;font-size:1.2rem}
-.welcome p{font-size:.9rem}
+/* ─── Welcome screen ───────────────────────────────────────────── */
+.welcome{padding:3rem 1.5rem 2.5rem;max-width:680px}
+.welcome-pre{
+  font-size:.7rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--blue-vivid);margin-bottom:1rem;
+  animation:fadeUp .4s var(--ease-out) .05s both;
+}
+.welcome-heading{
+  font-family:'Barlow Condensed','Barlow',sans-serif;
+  font-size:clamp(2.25rem,7vw,4rem);font-weight:800;
+  text-transform:uppercase;letter-spacing:.03em;line-height:1.0;
+  display:flex;flex-direction:column;gap:.05em;margin-bottom:1.25rem;
+  animation:fadeUp .5s var(--ease-out) .12s both;
+}
+.hline-text{color:var(--text)}
+.hline-blue{color:var(--blue-vivid)}
+.hline-gold{color:var(--gold)}
+.welcome p{
+  font-size:.92rem;line-height:1.65;color:var(--text-dim);
+  max-width:55ch;margin-bottom:1.75rem;
+  animation:fadeUp .5s var(--ease-out) .22s both;
+}
+.example-chips{display:flex;flex-wrap:wrap;gap:.5rem;animation:fadeUp .5s var(--ease-out) .32s both}
+.chip{
+  padding:.5rem 1rem;border:1px solid var(--border);border-radius:2px;
+  font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  font-family:inherit;color:var(--text-dim);background:transparent;cursor:pointer;
+  display:flex;align-items:center;gap:0;overflow:hidden;
+  transition:color .15s,border-color .15s,background .15s,transform .12s;
+}
+.chip::before{
+  content:'\2192';font-size:.85em;opacity:0;
+  max-width:0;overflow:hidden;margin-right:0;
+  transition:opacity .15s,max-width .15s,margin-right .12s;
+}
+.chip:hover{
+  color:var(--text);border-color:var(--blue-vivid);
+  background:var(--blue-dim);transform:translateX(3px);
+}
+.chip:hover::before{opacity:1;max-width:1.2em;margin-right:.4em}
+.chip:focus-visible{outline:2px solid var(--blue-hover);outline-offset:2px;color:var(--text)}
+
+/* Screen-reader only */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 </style>
 </head>
 <body>
 <div id="app">
   <header>
-    <span class="logo">⚽ Club Brugge Fan Q&amp;A</span>
+    <span class="logo">Club Brugge<span class="logo-tag">Fan Q&amp;A</span></span>
     <span class="subtitle">Ask anything about fan data</span>
+    <button class="btn-clear" id="btn-clear" type="button" aria-label="Clear conversation">Clear</button>
   </header>
 
-  <div id="messages">
-    <div class="welcome">
-      <h2>Welcome</h2>
-      <p>Ask a question about fan behaviour — spending, merchandise, match attendance, and more.<br>
-      Answers are generated from the dbt analytics layer via Ollama.</p>
+  <main id="messages" aria-label="Conversation history">
+    <div class="welcome" id="welcome">
+      <p class="welcome-pre">Club Brugge Analytics</p>
+      <h2 class="welcome-heading">
+        <span class="hline hline-text">What do</span>
+        <span class="hline hline-blue">you want</span>
+        <span class="hline hline-gold">to know?</span>
+      </h2>
+      <p>Ask a question about fan behaviour &mdash; match attendance, merchandise, spending by segment, and more.</p>
+      <div class="example-chips" aria-label="Example questions">
+        <button class="chip" type="button">Which matches had the highest attendance?</button>
+        <button class="chip" type="button">What are the top merchandise categories?</button>
+        <button class="chip" type="button">Show fan spending by segment</button>
+        <button class="chip" type="button">Highest revenue matches this season</button>
+      </div>
     </div>
-  </div>
+  </main>
 
   <form id="composer" autocomplete="off">
-    <textarea id="question" placeholder="Ask a question…" aria-label="Your question" rows="1"></textarea>
-    <button id="send" type="submit" aria-label="Send question">Send</button>
+    <div id="llm-settings" aria-label="LLM settings">
+      <span class="settings-label">via</span>
+      <select id="provider-sel" aria-label="LLM provider">
+        <option value="ollama">Ollama</option>
+        <option value="openrouter">OpenRouter</option>
+      </select>
+      <input id="model-input" type="text" list="ollama-models"
+             placeholder="model…" autocomplete="off" spellcheck="false"
+             aria-label="Model override (leave blank for server default)">
+    </div>
+    <div id="composer-row">
+      <textarea id="question" placeholder="Ask a question…" aria-label="Your question"></textarea>
+      <button id="cancel" type="button" aria-label="Cancel request">Cancel</button>
+      <button id="send" type="submit" aria-label="Send question">Send</button>
+    </div>
+    <datalist id="ollama-models">
+      <option value="gemma4:e2b">
+      <option value="llama3.2">
+      <option value="qwen2.5-coder:7b">
+      <option value="mistral">
+    </datalist>
+    <datalist id="openrouter-models">
+      <option value="mistralai/mistral-7b-instruct:free">
+      <option value="meta-llama/llama-3.2-3b-instruct:free">
+      <option value="google/gemma-3-4b-it:free">
+      <option value="qwen/qwen-2.5-7b-instruct:free">
+      <option value="microsoft/phi-3-mini-128k-instruct:free">
+    </datalist>
   </form>
 </div>
+
+<div class="sr-only" id="status" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script>
 (function () {
@@ -113,8 +335,55 @@ details[open] summary{border-bottom:1px solid var(--border)}
   const messagesEl = document.getElementById("messages");
   const questionEl = document.getElementById("question");
   const sendBtn    = document.getElementById("send");
+  const cancelBtn  = document.getElementById("cancel");
+  const clearBtn   = document.getElementById("btn-clear");
+  const providerEl = document.getElementById("provider-sel");
+  const modelEl    = document.getElementById("model-input");
+  const statusEl   = document.getElementById("status");
   const form       = document.getElementById("composer");
   let busy = false;
+  let abortCtrl = null;
+  let cancelTimer = null;
+  const TIMEOUT_MS = 120_000;
+
+  // Restore and persist provider/model preference.
+  (function initPrefs() {
+    try {
+      const p = JSON.parse(localStorage.getItem("llm_pref") || "{}");
+      if (p.provider) providerEl.value = p.provider;
+      if (p.model)    modelEl.value    = p.model;
+    } catch (_) {}
+    modelEl.setAttribute("list", providerEl.value === "openrouter" ? "openrouter-models" : "ollama-models");
+  })();
+
+  function savePrefs() {
+    try {
+      localStorage.setItem("llm_pref", JSON.stringify({ provider: providerEl.value, model: modelEl.value }));
+    } catch (_) {}
+  }
+
+  providerEl.addEventListener("change", () => {
+    modelEl.setAttribute("list", providerEl.value === "openrouter" ? "openrouter-models" : "ollama-models");
+    savePrefs();
+  });
+  modelEl.addEventListener("change", savePrefs);
+
+  const WELCOME_HTML = `
+    <div class="welcome" id="welcome">
+      <p class="welcome-pre">Club Brugge Analytics</p>
+      <h2 class="welcome-heading">
+        <span class="hline hline-text">What do</span>
+        <span class="hline hline-blue">you want</span>
+        <span class="hline hline-gold">to know?</span>
+      </h2>
+      <p>Ask a question about fan behaviour &mdash; match attendance, merchandise, spending by segment, and more.</p>
+      <div class="example-chips" aria-label="Example questions">
+        <button class="chip" type="button">Which matches had the highest attendance?</button>
+        <button class="chip" type="button">What are the top merchandise categories?</button>
+        <button class="chip" type="button">Show fan spending by segment</button>
+        <button class="chip" type="button">Highest revenue matches this season</button>
+      </div>
+    </div>`;
 
   /* ── Auto-resize textarea ─────────────────────────────────────── */
   questionEl.addEventListener("input", () => {
@@ -130,6 +399,27 @@ details[open] summary{border-bottom:1px solid var(--border)}
     }
   });
 
+  /* ── Example chips via event delegation ────────────────────────── */
+  messagesEl.addEventListener("click", (e) => {
+    if (!e.target.classList.contains("chip")) return;
+    questionEl.value = e.target.textContent.trim();
+    questionEl.style.height = "auto";
+    questionEl.style.height = Math.min(questionEl.scrollHeight, 160) + "px";
+    questionEl.focus();
+  });
+
+  /* ── Clear conversation ─────────────────────────────────────────── */
+  clearBtn.addEventListener("click", () => {
+    if (busy) return;
+    messagesEl.innerHTML = WELCOME_HTML;
+    questionEl.focus();
+  });
+
+  /* ── Cancel in-flight request ───────────────────────────────────── */
+  cancelBtn.addEventListener("click", () => {
+    if (abortCtrl) abortCtrl.abort();
+  });
+
   /* ── Form submit handler ──────────────────────────────────────── */
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -138,28 +428,28 @@ details[open] summary{border-bottom:1px solid var(--border)}
     const q = questionEl.value.trim();
     if (!q) return;
 
-    // Remove welcome screen on first message.
-    const welcome = messagesEl.querySelector(".welcome");
+    const welcome = document.getElementById("welcome");
     if (welcome) welcome.remove();
 
-    // User bubble.
     appendMsg("user", escHtml(q));
     questionEl.value = "";
     questionEl.style.height = "auto";
     setBusy(true);
+    announce("Thinking\u2026");
 
-    // Thinking indicator.
-    const thinking = appendMsg(
-      "thinking assistant",
-      '<span class="dot"></span><span class="dot"></span><span class="dot"></span>'
-    );
+    const thinking = appendThinking();
+    abortCtrl = new AbortController();
+    const timeoutId = setTimeout(() => abortCtrl.abort(), TIMEOUT_MS);
+    cancelTimer = setTimeout(() => cancelBtn.classList.add("visible"), 3000);
 
     try {
       const res  = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q }),
+        body: JSON.stringify({ question: q, provider: providerEl.value, model: modelEl.value.trim() }),
+        signal: abortCtrl.signal,
       });
+      clearTimeout(timeoutId);
       const data = await res.json();
       thinking.remove();
 
@@ -167,11 +457,23 @@ details[open] summary{border-bottom:1px solid var(--border)}
         showError(data);
       } else {
         showAnswer(data);
+        announce("Answer received.");
       }
     } catch (err) {
+      clearTimeout(timeoutId);
       thinking.remove();
-      showError({ error: "Network error — is the server running? " + err.message });
+      if (err.name === "AbortError") {
+        const pLabel = providerEl.value === "openrouter" ? "OpenRouter" : "Ollama";
+        showError({ error: "Request cancelled or timed out. Try a shorter question, or check that " + pLabel + " is reachable." });
+        announce("Request cancelled.");
+      } else {
+        showError({ error: "Network error \u2014 is the server running? " + err.message });
+        announce("Network error.");
+      }
     } finally {
+      clearTimeout(cancelTimer);
+      cancelBtn.classList.remove("visible");
+      abortCtrl = null;
       setBusy(false);
       questionEl.focus();
     }
@@ -184,10 +486,42 @@ details[open] summary{border-bottom:1px solid var(--border)}
     questionEl.disabled = v;
   }
 
-  function appendMsg(cls, html) {
+  function announce(msg) {
+    statusEl.textContent = "";
+    requestAnimationFrame(() => { statusEl.textContent = msg; });
+  }
+
+  function timestamp() {
+    return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function appendMsg(type, html) {
+    const wrap = document.createElement("div");
+    wrap.className = "msg-wrap " + type;
+    const meta = document.createElement("div");
+    meta.className = "msg-meta";
+    meta.textContent = timestamp();
+    meta.setAttribute("aria-hidden", "true");
     const div = document.createElement("div");
-    div.className = "msg " + cls;
+    div.className = "msg " + type;
     div.innerHTML = html;
+    if (type === "user") {
+      wrap.appendChild(div);
+      wrap.appendChild(meta);
+    } else {
+      wrap.appendChild(meta);
+      wrap.appendChild(div);
+    }
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return div;
+  }
+
+  function appendThinking() {
+    const div = document.createElement("div");
+    div.className = "msg thinking assistant";
+    div.setAttribute("aria-label", "Generating answer");
+    div.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
     messagesEl.appendChild(div);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     return div;
@@ -197,23 +531,39 @@ details[open] summary{border-bottom:1px solid var(--border)}
     return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
   }
 
-  /* ── Render success answer ─────────────────────────────────────── */
+  /* ── Render answer ─────────────────────────────────────────────── */
   function showAnswer(data) {
-    let html = '<div class="answer-text">' + escHtml(data.answer) + "</div>";
+    const answerText = data.answer || "";
+    let html = '<div class="answer-text">' + escHtml(answerText) + "</div>";
 
-    // Collapsible SQL section.
     if (data.sql) {
       html += "<details><summary>SQL query</summary>"
             + '<div class="sql-block">' + escHtml(data.sql) + "</div></details>";
     }
 
-    // Collapsible data preview table.
     if (data.data_preview && data.data_preview.length) {
       html += "<details><summary>Data preview (" + data.data_preview.length + " rows)</summary>"
             + '<div class="data-wrap">' + buildTable(data.data_preview) + "</div></details>";
     }
 
-    appendMsg("assistant", html);
+    html += '<button class="copy-btn" type="button" aria-label="Copy answer">Copy</button>';
+
+    const msgEl = appendMsg("assistant", html);
+    const copyBtn = msgEl.querySelector(".copy-btn");
+    if (copyBtn && navigator.clipboard) {
+      copyBtn.addEventListener("click", () => {
+        navigator.clipboard.writeText(answerText).then(() => {
+          copyBtn.textContent = "Copied!";
+          copyBtn.classList.add("copied");
+          setTimeout(() => {
+            copyBtn.textContent = "Copy";
+            copyBtn.classList.remove("copied");
+          }, 1500);
+        });
+      });
+    } else if (copyBtn) {
+      copyBtn.remove();
+    }
   }
 
   /* ── Render error ──────────────────────────────────────────────── */
@@ -227,7 +577,8 @@ details[open] summary{border-bottom:1px solid var(--border)}
       html += "<details><summary>Raw model output</summary>"
             + '<div class="sql-block">' + escHtml(data.raw_sql) + "</div></details>";
     }
-    appendMsg("error", html);
+    const msgEl = appendMsg("error", html);
+    msgEl.setAttribute("role", "alert");
   }
 
   /* ── Build HTML table from array of objects ─────────────────────── */
@@ -247,8 +598,7 @@ details[open] summary{border-bottom:1px solid var(--border)}
     });
     t += "</tbody></table>";
     if (rows.length > 10) {
-      t += '<div style="padding:.4rem .7rem;font-size:.8rem;color:var(--text-dim)">Showing 10 of '
-         + rows.length + " rows</div>";
+      t += '<div class="table-notice">Showing 10 of ' + rows.length + " rows</div>";
     }
     return t;
   }

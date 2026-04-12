@@ -1,13 +1,13 @@
-"""Flask Text-to-SQL API backed by Ollama (gemma4:e2b) and Postgres dbt marts.
+"""Flask Text-to-SQL API backed by Ollama or OpenRouter and Postgres dbt marts.
 
 Flow
 ----
-1. POST /api/ask {"question": "..."}
+1. POST /api/ask {"question": "...", "provider": "ollama"|"openrouter", "model": "..."}
 2. Load schema.yml context (dbt marts column descriptions).
-3. Prompt Ollama → raw SQL.
+3. Prompt the selected LLM provider -> raw SQL.
 4. Validate: must be SELECT-only; no mutating keywords.
 5. Execute wrapped SQL (LIMIT 50, statement_timeout 10 s) as llm_reader.
-6. Prompt Ollama again with the result rows → natural language answer.
+6. Prompt the LLM again with the result rows -> natural language answer.
 7. Return {"answer", "sql", "data_preview"}.
 """
 
@@ -31,10 +31,32 @@ from flask import Flask, jsonify, request, send_from_directory
 # ---------------------------------------------------------------------------
 
 SCHEMA_FILE = Path(os.environ.get("SCHEMA_FILE", Path(__file__).parent / "schema.yml"))
-DATABASE_URL = os.environ.get("DATABASE_URL", "")
+# Prefer read-only role URL; Compose maps LLM_READER_DATABASE_URL -> DATABASE_URL for this service.
+DATABASE_URL = (
+    os.environ.get("LLM_READER_DATABASE_URL", "").strip()
+    or os.environ.get("DATABASE_URL", "").strip()
+)
+
+# Ollama (local)
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://host.docker.internal:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma4:e2b")
 OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", "120"))
+
+# OpenRouter (hosted — key is server-side only, never sent to clients)
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "").strip()
+OPENROUTER_BASE_URL = os.environ.get(
+    "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
+).rstrip("/")
+OPENROUTER_MODEL = os.environ.get(
+    "OPENROUTER_MODEL", "mistralai/mistral-7b-instruct:free"
+)
+OPENROUTER_TIMEOUT = int(os.environ.get("OPENROUTER_TIMEOUT", "120"))
+
+# Default provider; overridable per-request via the request body.
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "ollama").strip().lower()
+
+KNOWN_PROVIDERS: frozenset[str] = frozenset({"ollama", "openrouter"})
+_PROVIDER_DISPLAY = {"ollama": "Ollama", "openrouter": "OpenRouter"}
 
 # ---------------------------------------------------------------------------
 # Security: forbidden SQL keywords that would mutate state
@@ -82,19 +104,41 @@ def load_schema_context() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Ollama helper
+# LLM provider helpers
 # ---------------------------------------------------------------------------
 
 
-def _call_ollama(prompt: str) -> str:
-    """Send a prompt to Ollama and return the response text."""
+def _call_ollama(prompt: str, model: str) -> str:
+    """Send a prompt to Ollama /api/generate and return the response text."""
     resp = requests.post(
         f"{OLLAMA_URL}/api/generate",
-        json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
+        json={"model": model, "prompt": prompt, "stream": False},
         timeout=OLLAMA_TIMEOUT,
     )
     resp.raise_for_status()
     return resp.json()["response"].strip()
+
+
+def _call_openrouter(prompt: str, model: str) -> str:
+    """Send a prompt to OpenRouter chat/completions and return the response text."""
+    resp = requests.post(
+        f"{OPENROUTER_BASE_URL}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={"model": model, "messages": [{"role": "user", "content": prompt}]},
+        timeout=OPENROUTER_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"].strip()
+
+
+def complete(prompt: str, provider: str, model: str) -> str:
+    """Call the selected LLM provider and return the plain-text response."""
+    if provider == "openrouter":
+        return _call_openrouter(prompt, model)
+    return _call_ollama(prompt, model)
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +182,11 @@ def _json_default(obj: Any) -> Any:
 
 def _execute_sql(sql: str) -> list[dict[str, Any]]:
     """Wrap sql in a LIMIT guard and execute it as the llm_reader role."""
+    if not DATABASE_URL:
+        raise psycopg2.OperationalError(
+            "No database URL: set LLM_READER_DATABASE_URL or DATABASE_URL "
+            "(see .env.example and docker/postgres/init/002_llm_reader.sql)."
+        )
     wrapped = f"SELECT * FROM (\n{sql}\n) AS llm_query LIMIT 50"
     conn = psycopg2.connect(DATABASE_URL)
     try:
@@ -172,6 +221,36 @@ def ask() -> Any:
     if not question:
         return jsonify({"error": "question is required"}), 400
 
+    # Resolve and validate provider.
+    provider = (body.get("provider") or LLM_PROVIDER).strip().lower()
+    if provider not in KNOWN_PROVIDERS:
+        return jsonify(
+            {
+                "error": (
+                    f"Unknown provider '{provider}'. "
+                    f"Valid values: {sorted(KNOWN_PROVIDERS)}"
+                )
+            }
+        ), 400
+
+    # Resolve model (request override -> env default for the provider).
+    model = (body.get("model") or "").strip() or (
+        OLLAMA_MODEL if provider == "ollama" else OPENROUTER_MODEL
+    )
+
+    # Guard: OpenRouter requires a server-side API key.
+    if provider == "openrouter" and not OPENROUTER_API_KEY:
+        return jsonify(
+            {
+                "error": (
+                    "OpenRouter is not configured on this server. "
+                    "Set OPENROUTER_API_KEY in the environment and restart the service."
+                )
+            }
+        ), 503
+
+    provider_label = _PROVIDER_DISPLAY.get(provider, provider)
+
     # 1. Load schema context.
     try:
         schema_context = load_schema_context()
@@ -179,7 +258,7 @@ def ask() -> Any:
         log.exception("Failed to load schema")
         return jsonify({"error": f"Schema load failed: {exc}"}), 500
 
-    # 2. Prompt Ollama for SQL.
+    # 2. Prompt LLM for SQL.
     sql_prompt = (
         "You are a PostgreSQL expert. Given the schema below, write a single "
         "SELECT query that answers the question. Return ONLY the SQL — no "
@@ -189,13 +268,13 @@ def ask() -> Any:
         "SQL:"
     )
     try:
-        raw_sql = _call_ollama(sql_prompt)
+        raw_sql = complete(sql_prompt, provider, model)
     except requests.exceptions.RequestException as exc:
-        log.exception("Ollama unreachable")
-        return jsonify({"error": f"Ollama request failed: {exc}"}), 503
+        log.exception("%s unreachable (SQL step)", provider_label)
+        return jsonify({"error": f"{provider_label} request failed: {exc}"}), 503
 
     sql = _strip_fences(raw_sql)
-    log.info("Generated SQL: %s", sql)
+    log.info("Generated SQL (%s/%s): %s", provider, model, sql)
 
     # 3. Validate SQL.
     try:
@@ -208,9 +287,18 @@ def ask() -> Any:
         rows = _execute_sql(sql)
     except psycopg2.Error as exc:
         log.exception("Query execution failed")
-        return jsonify({"error": f"Query execution failed: {exc}", "sql": sql}), 500
+        err = str(exc)
+        if "password authentication failed" in err.lower():
+            err += (
+                " — check LLM_READER_DATABASE_URL matches the password in "
+                "docker/postgres/init/002_llm_reader.sql (default llm_reader_pass). "
+                "If Postgres was created before that init script existed, run: "
+                "ALTER ROLE llm_reader PASSWORD 'llm_reader_pass'; as a superuser, "
+                "or recreate the volume with docker compose down -v."
+            )
+        return jsonify({"error": f"Query execution failed: {err}", "sql": sql}), 500
 
-    # 5. Prompt Ollama for a natural-language answer.
+    # 5. Prompt LLM for a natural-language answer.
     preview = json.loads(json.dumps(rows[:10], default=_json_default))
     answer_prompt = (
         "You are a helpful data analyst for a football club. "
@@ -221,10 +309,12 @@ def ask() -> Any:
         "Answer:"
     )
     try:
-        answer = _call_ollama(answer_prompt)
+        answer = complete(answer_prompt, provider, model)
     except requests.exceptions.RequestException as exc:
-        log.exception("Ollama unreachable for answer step")
-        return jsonify({"error": f"Ollama answer step failed: {exc}", "sql": sql}), 503
+        log.exception("%s unreachable (answer step)", provider_label)
+        return jsonify(
+            {"error": f"{provider_label} answer step failed: {exc}", "sql": sql}
+        ), 503
 
     return jsonify(
         {

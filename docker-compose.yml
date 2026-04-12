@@ -173,9 +173,17 @@ services:
       dockerfile: docker/Dockerfile.api
     env_file: .env
     environment:
+      # Same interpolation for both so the API and Compose stay aligned (overrides env_file).
+      LLM_READER_DATABASE_URL: ${LLM_READER_DATABASE_URL:-postgresql://llm_reader:llm_reader_pass@postgres:5432/fan_pipeline}
       DATABASE_URL: ${LLM_READER_DATABASE_URL:-postgresql://llm_reader:llm_reader_pass@postgres:5432/fan_pipeline}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
+      # LLM provider selection: ollama (default) or openrouter.
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      # OpenRouter — only used when LLM_PROVIDER=openrouter. Key is server-side only.
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-mistralai/mistral-7b-instruct:free}
     ports:
       - "${LLM_API_PORT:-8080}:8080"
     # `host-gateway` makes host.docker.internal resolve to the Docker bridge IP
