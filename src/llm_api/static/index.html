@@ -1,332 +1,296 @@
 <!DOCTYPE html>
-<html lang="en">
+<html class="dark" lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Club Brugge Fan Q&A</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&family=Barlow+Condensed:wght@700;800&display=swap" rel="stylesheet">
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Club Brugge AI — Fan Analytics</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "surface-container-low":     "#131b2e",
+        "surface-container":         "#171f33",
+        "surface-container-high":    "#222a3d",
+        "surface-container-highest": "#2d3449",
+        "surface-container-lowest":  "#060e20",
+        "surface-bright":            "#31394d",
+        "surface":                   "#0b1326",
+        "background":                "#0b1326",
+        "primary":                   "#b0c6ff",
+        "primary-container":         "#548dff",
+        "on-primary":                "#002d6e",
+        "on-primary-container":      "#002761",
+        "secondary-container":       "#3f465c",
+        "on-secondary-container":    "#adb4ce",
+        "on-surface":                "#dae2fd",
+        "on-surface-variant":        "#c2c6d8",
+        "outline":                   "#8c90a1",
+        "outline-variant":           "#414655",
+        "error":                     "#ffb4ab",
+        "surface-variant":           "#2d3449",
+        "inverse-surface":           "#dae2fd",
+        "secondary":                 "#bec6e0"
+      },
+      borderRadius: {
+        "DEFAULT": "0.125rem",
+        "lg": "0.25rem",
+        "xl": "0.5rem",
+        "2xl": "0.75rem",
+        "full": "9999px"
+      },
+      fontFamily: {
+        "headline": ["Space Grotesk", "sans-serif"],
+        "body":     ["Inter", "sans-serif"],
+        "label":    ["Inter", "sans-serif"]
+      }
+    }
+  }
+}
+</script>
 <style>
-/* ─── Reset & base ─────────────────────────────────────────────── */
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  /* Club Brugge — blauw & zwart */
-  --bg:         #07090f;
-  --surface:    #0d1320;
-  --surface2:   #111829;
-  --border:     #1d2d44;
-  --text:       #e8ecf4;
-  --text-dim:   #6b7d99;
-  --blue:       #004C97;
-  --blue-vivid: #2b81e8;
-  --blue-dim:   #081e3d;
-  --blue-hover: #005bb8;
-  --gold:       #d4a017;
-  --red:        #e85348;
-  --red-bg:     #2a0f0d;
-  --mono:       'Consolas','SFMono-Regular','Menlo',monospace;
-  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
-}
-html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Barlow',-apple-system,BlinkMacSystemFont,sans-serif;font-size:15px;line-height:1.5}
-
-/* ─── Entrance animations ──────────────────────────────────────── */
-@keyframes fadeUp{
-  from{opacity:0;transform:translateY(14px)}
-  to  {opacity:1;transform:none}
-}
-@keyframes msgIn{
-  from{opacity:0;transform:translateY(7px)}
-  to  {opacity:1;transform:none}
-}
-@keyframes blink{
-  0%,70%,100%{opacity:.2;transform:scaleY(.7)}
-  35%{opacity:1;transform:scaleY(1)}
-}
-@media (prefers-reduced-motion: reduce){
-  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
-}
-
-/* ─── App shell ────────────────────────────────────────────────── */
-#app{
-  display:flex;flex-direction:column;height:100%;max-width:860px;margin:0 auto;
-  border-top:3px solid var(--blue);
-}
-
-/* Header */
-header{
-  flex-shrink:0;display:flex;align-items:center;gap:.75rem;
-  padding:.8rem 1.25rem;border-bottom:1px solid var(--border);
-  background:var(--surface);
-}
-.logo{
-  font-size:clamp(.95rem,1.6vw,1.2rem);font-weight:800;
-  letter-spacing:.1em;line-height:1;color:var(--gold);
-  text-transform:uppercase;
-}
-.logo-tag{
-  color:var(--text-dim);font-size:.75em;font-weight:400;
-  letter-spacing:.04em;margin-left:.4em;vertical-align:middle;text-transform:none;
-}
-.subtitle{flex:1;font-size:.8rem;color:var(--text-dim)}
-.btn-clear{
-  flex-shrink:0;padding:.3rem .65rem;font-size:.75rem;font-family:inherit;font-weight:700;
-  border:1px solid var(--border);border-radius:2px;background:transparent;
-  color:var(--text-dim);cursor:pointer;text-transform:uppercase;letter-spacing:.06em;
-  transition:color .15s,border-color .15s;
-}
-.btn-clear:hover{color:var(--text);border-color:var(--text-dim)}
-.btn-clear:focus-visible{outline:2px solid var(--blue-hover);outline-offset:2px}
-
-/* ─── Message list ─────────────────────────────────────────────── */
-#messages{
-  flex:1;overflow-y:auto;padding:1.25rem;
-  display:flex;flex-direction:column;gap:1rem;
-  background-image:radial-gradient(ellipse 100% 30% at 50% 0%,oklch(18% .06 245 / .55),transparent);
-}
-
-/* ─── Composer ─────────────────────────────────────────────────── */
-#composer{
-  flex-shrink:0;display:flex;flex-direction:column;gap:0;
-  border-top:1px solid var(--border);background:var(--surface);
-}
-#llm-settings{
-  display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;
-  padding:.35rem .85rem;border-bottom:1px solid var(--border);
-}
-.settings-label{font-size:.72rem;color:var(--text-dim);user-select:none}
-#provider-sel{
-  font-family:inherit;font-size:.75rem;font-weight:700;letter-spacing:.06em;
-  text-transform:uppercase;background:var(--surface2);color:var(--text);
-  border:1px solid var(--border);border-radius:2px;padding:.25rem .55rem;
-  outline:none;cursor:pointer;
-}
-#provider-sel:focus-visible{border-color:var(--blue-hover)}
-#model-input{
-  width:15rem;font-family:var(--mono);font-size:.75rem;
-  background:var(--surface2);color:var(--text);
-  border:1px solid var(--border);border-radius:2px;
-  padding:.25rem .55rem;outline:none;transition:border-color .15s;
-}
-#model-input:focus-visible{border-color:var(--blue-vivid);box-shadow:0 0 0 2px rgba(43,129,232,.2)}
-#model-input::placeholder{color:var(--text-dim)}
-#composer-row{display:flex;gap:.5rem;padding:.85rem 1.25rem}
-#question{
-  flex:1;resize:none;height:42px;max-height:160px;
-  padding:.6rem .85rem;border:1px solid var(--border);border-radius:2px;
-  background:var(--surface2);color:var(--text);font-size:15px;font-family:inherit;
-  line-height:1.45;outline:none;transition:border-color .15s,box-shadow .15s;
-}
-#question:focus-visible{
-  border-color:var(--blue-vivid);
-  box-shadow:0 0 0 2px rgba(43,129,232,.25);
-}
-#question::placeholder{color:var(--text-dim)}
-#send{
-  flex-shrink:0;padding:.55rem 1.4rem;border:none;border-radius:2px;
-  background:var(--blue);color:#fff;font-size:.85rem;font-weight:700;
-  font-family:inherit;cursor:pointer;letter-spacing:.1em;text-transform:uppercase;
-  transition:background .15s,transform .1s,box-shadow .15s;
-}
-#send:hover{
-  background:var(--blue-hover);transform:translateY(-2px);
-  box-shadow:0 6px 20px rgba(0,76,151,.45);
-}
-#send:active{transform:translateY(0);box-shadow:none}
-#send:focus-visible{outline:2px solid var(--blue-vivid);outline-offset:2px}
-#send:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
-#cancel{
-  flex-shrink:0;padding:.55rem .9rem;border:1px solid var(--border);border-radius:2px;
-  background:transparent;color:var(--text-dim);font-size:.8rem;font-family:inherit;
-  font-weight:700;cursor:pointer;letter-spacing:.06em;text-transform:uppercase;
-  transition:color .15s,border-color .15s;display:none;
-}
-#cancel.visible{display:block}
-#cancel:hover{color:var(--text);border-color:var(--text-dim)}
-#cancel:focus-visible{outline:2px solid var(--blue-hover);outline-offset:2px}
-
-/* ─── Message bubbles ──────────────────────────────────────────── */
-.msg-wrap{
-  display:flex;flex-direction:column;gap:.2rem;
-  animation:msgIn .22s var(--ease-out) both;
-}
-.msg-wrap.user{align-items:flex-end}
-.msg-wrap.assistant,.msg-wrap.error{align-items:flex-start}
-.msg-meta{font-size:.7rem;color:var(--text-dim);padding:0 .4rem}
-.msg{
-  max-width:85%;padding:.75rem 1rem;border-radius:2px;
-  word-wrap:break-word;white-space:pre-wrap;position:relative;
-}
-.msg.user{background:var(--blue-dim);border:1px solid rgba(0,76,151,.5);border-bottom-right-radius:0}
-.msg.assistant{background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:0}
-.msg.error{background:var(--red-bg);border:1px solid var(--red);border-bottom-left-radius:0}
-.msg.error .err-label{
-  color:var(--red);font-weight:700;font-size:.75rem;
-  text-transform:uppercase;letter-spacing:.1em;margin-bottom:.35rem;
-}
-
-/* Copy button */
-.copy-btn{
-  position:absolute;top:.45rem;right:.45rem;padding:.2rem .5rem;
-  font-size:.7rem;font-family:inherit;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
-  border:1px solid var(--border);border-radius:2px;background:var(--surface2);
-  color:var(--text-dim);cursor:pointer;opacity:0;
-  transition:opacity .15s,color .15s;
-}
-.msg.assistant:hover .copy-btn,.msg.assistant:focus-within .copy-btn{opacity:1}
-.copy-btn:hover{color:var(--text)}
-.copy-btn:focus-visible{opacity:1;outline:2px solid var(--blue-hover);outline-offset:2px}
-.copy-btn.copied{color:var(--gold)}
-
-/* Thinking indicator */
-.msg.thinking{display:flex;align-items:center;gap:.4rem;padding:.8rem 1rem}
-.dot{
-  width:7px;height:9px;border-radius:1px;
-  background:var(--blue-vivid);animation:blink 1.4s ease-in-out infinite;
-}
-.dot:nth-child(2){animation-delay:.18s}
-.dot:nth-child(3){animation-delay:.36s}
-
-/* Answer text */
-.answer-text{margin-bottom:.5rem;padding-right:2.5rem}
-
-/* Collapsible sections */
-details{margin-top:.5rem;border:1px solid var(--border);border-radius:2px;overflow:hidden}
-details summary{
-  cursor:pointer;list-style:none;padding:.4rem .75rem;background:var(--surface2);
-  font-size:.78rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
-  color:var(--text-dim);user-select:none;display:flex;align-items:center;gap:.45rem;
-}
-details summary::-webkit-details-marker{display:none}
-details summary::before{content:'▶';font-size:.55rem;transition:transform .15s;flex-shrink:0}
-details[open] summary::before{transform:rotate(90deg)}
-details summary:hover{color:var(--text)}
-details summary:focus-visible{outline:2px solid var(--blue-hover);outline-offset:-2px}
-details[open] summary{border-bottom:1px solid var(--border)}
-
-/* SQL block */
-.sql-block{
-  padding:.7rem .85rem;overflow-x:auto;font-family:var(--mono);
-  font-size:.8rem;line-height:1.6;color:#6ab0f5;background:var(--bg);
-}
-
-/* Data table */
-.data-wrap{overflow-x:auto;max-height:340px;overflow-y:auto}
-.data-wrap table{border-collapse:collapse;font-size:.78rem;white-space:nowrap;min-width:100%}
-.data-wrap th,.data-wrap td{padding:.35rem .65rem;border:1px solid var(--border);text-align:left}
-.data-wrap th{
-  position:sticky;top:0;background:var(--surface2);color:var(--text-dim);
-  font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;
-}
-.data-wrap td{color:var(--text);max-width:220px;overflow:hidden;text-overflow:ellipsis}
-.data-wrap tr:nth-child(even) td{background:rgba(255,255,255,.02)}
-.table-notice{padding:.4rem .75rem;font-size:.78rem;color:var(--text-dim)}
-
-/* ─── Welcome screen ───────────────────────────────────────────── */
-.welcome{padding:3rem 1.5rem 2.5rem;max-width:680px}
-.welcome-pre{
-  font-size:.7rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;
-  color:var(--blue-vivid);margin-bottom:1rem;
-  animation:fadeUp .4s var(--ease-out) .05s both;
-}
-.welcome-heading{
-  font-family:'Barlow Condensed','Barlow',sans-serif;
-  font-size:clamp(2.25rem,7vw,4rem);font-weight:800;
-  text-transform:uppercase;letter-spacing:.03em;line-height:1.0;
-  display:flex;flex-direction:column;gap:.05em;margin-bottom:1.25rem;
-  animation:fadeUp .5s var(--ease-out) .12s both;
-}
-.hline-text{color:var(--text)}
-.hline-blue{color:var(--blue-vivid)}
-.hline-gold{color:var(--gold)}
-.welcome p{
-  font-size:.92rem;line-height:1.65;color:var(--text-dim);
-  max-width:55ch;margin-bottom:1.75rem;
-  animation:fadeUp .5s var(--ease-out) .22s both;
-}
-.example-chips{display:flex;flex-wrap:wrap;gap:.5rem;animation:fadeUp .5s var(--ease-out) .32s both}
-.chip{
-  padding:.5rem 1rem;border:1px solid var(--border);border-radius:2px;
-  font-size:.78rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-  font-family:inherit;color:var(--text-dim);background:transparent;cursor:pointer;
-  display:flex;align-items:center;gap:0;overflow:hidden;
-  transition:color .15s,border-color .15s,background .15s,transform .12s;
-}
-.chip::before{
-  content:'\2192';font-size:.85em;opacity:0;
-  max-width:0;overflow:hidden;margin-right:0;
-  transition:opacity .15s,max-width .15s,margin-right .12s;
-}
-.chip:hover{
-  color:var(--text);border-color:var(--blue-vivid);
-  background:var(--blue-dim);transform:translateX(3px);
-}
-.chip:hover::before{opacity:1;max-width:1.2em;margin-right:.4em}
-.chip:focus-visible{outline:2px solid var(--blue-hover);outline-offset:2px;color:var(--text)}
-
-/* Screen-reader only */
-.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  .material-symbols-outlined {
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  }
+  /* ── Screen reader only ─────────────────────────────── */
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  /* ── Scrollbar ──────────────────────────────────────── */
+  ::-webkit-scrollbar{width:4px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#2d3449;border-radius:10px}
+  .no-scrollbar::-webkit-scrollbar{display:none}
+  .no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
+  /* ── Entrance animation ─────────────────────────────── */
+  @keyframes msgIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @keyframes blink{0%,70%,100%{opacity:.2;transform:scaleY(.7)}35%{opacity:1;transform:scaleY(1)}}
+  @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+  /* ── Message wrappers ───────────────────────────────── */
+  .msg-wrap{display:flex;flex-direction:column;gap:.5rem;animation:msgIn .22s ease-out both}
+  .msg-wrap.user{align-items:flex-end}
+  .msg-wrap.assistant,.msg-wrap.error{align-items:flex-start}
+  /* ── AI header (avatar + label) ─────────────────────── */
+  .msg-ai-hdr{display:flex;align-items:center;gap:.65rem}
+  .msg-avatar{width:2rem;height:2rem;border-radius:50%;background:#0572FF;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .msg-label{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:.6rem;text-transform:uppercase;letter-spacing:.15em;color:#b0c6ff}
+  /* ── Timestamp ──────────────────────────────────────── */
+  .msg-meta{font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#414655;padding:0 .25rem;opacity:0;transition:opacity .2s}
+  .msg-wrap:hover .msg-meta{opacity:1}
+  /* ── Bubble base ────────────────────────────────────── */
+  .msg{word-wrap:break-word;white-space:pre-wrap;position:relative;line-height:1.65;font-size:.9rem}
+  .msg.user{background:#548dff;color:#002761;border-radius:.5rem;border-bottom-right-radius:.125rem;max-width:80%;padding:1rem 1.25rem;box-shadow:0 4px 20px rgba(84,141,255,.2)}
+  .msg.assistant{background:#222a3d;color:#dae2fd;border-radius:.5rem;border-bottom-left-radius:.125rem;max-width:90%;padding:1.25rem 1.5rem}
+  .msg.error{background:rgba(147,0,10,.35);color:#ffb4ab;border-radius:.5rem;border-bottom-left-radius:.125rem;max-width:90%;padding:1rem 1.25rem}
+  .msg.error .err-label{color:#ffb4ab;font-weight:700;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.35rem}
+  /* ── Thinking dots ──────────────────────────────────── */
+  .msg.thinking{display:flex;align-items:center;gap:.4rem;background:#222a3d;border-radius:.5rem;border-bottom-left-radius:.125rem;padding:.85rem 1.25rem;width:fit-content}
+  .dot{width:6px;height:8px;border-radius:1px;background:#b0c6ff;animation:blink 1.4s ease-in-out infinite}
+  .dot:nth-child(2){animation-delay:.18s}
+  .dot:nth-child(3){animation-delay:.36s}
+  /* ── Answer elements ────────────────────────────────── */
+  .answer-text{margin-bottom:.5rem;padding-right:2.5rem}
+  details{margin-top:.5rem;border-radius:.5rem;overflow:hidden;background:#171f33}
+  details summary{cursor:pointer;list-style:none;padding:.4rem .75rem;background:#222a3d;font-size:.72rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8c90a1;user-select:none;display:flex;align-items:center;gap:.4rem}
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{content:'▶';font-size:.5rem;transition:transform .15s;flex-shrink:0}
+  details[open] summary::before{transform:rotate(90deg)}
+  details summary:hover{color:#dae2fd}
+  details[open] summary{border-bottom:1px solid rgba(255,255,255,.04)}
+  .sql-block{padding:.75rem 1rem;overflow-x:auto;font-family:'Consolas','Menlo',monospace;font-size:.78rem;line-height:1.6;color:#6ab0f5;background:#060e20}
+  .data-wrap{overflow-x:auto;max-height:320px;overflow-y:auto}
+  .data-wrap table{border-collapse:collapse;font-size:.75rem;white-space:nowrap;min-width:100%}
+  .data-wrap th,.data-wrap td{padding:.3rem .65rem;border-bottom:1px solid rgba(255,255,255,.04);text-align:left}
+  .data-wrap th{position:sticky;top:0;background:#171f33;color:#8c90a1;font-weight:700;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-family:'Space Grotesk',sans-serif}
+  .data-wrap td{color:#dae2fd;max-width:220px;overflow:hidden;text-overflow:ellipsis}
+  .data-wrap tr:nth-child(even) td{background:rgba(255,255,255,.02)}
+  .table-notice{padding:.35rem .65rem;font-size:.75rem;color:#8c90a1}
+  /* ── Copy button ────────────────────────────────────── */
+  .copy-btn{position:absolute;top:.5rem;right:.5rem;padding:.2rem .5rem;font-size:.62rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border:1px solid rgba(255,255,255,.1);border-radius:.25rem;background:#171f33;color:#414655;cursor:pointer;opacity:0;transition:opacity .15s,color .15s}
+  .msg.assistant:hover .copy-btn,.msg.assistant:focus-within .copy-btn{opacity:1}
+  .copy-btn:hover{color:#dae2fd}
+  .copy-btn.copied{color:#b0c6ff}
+  /* ── Cancel button ──────────────────────────────────── */
+  #cancel{display:none}
+  #cancel.visible{display:flex}
+  /* ── LLM provider row ───────────────────────────────── */
+  #provider-sel{font-family:'Inter',sans-serif;font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;background:#222a3d;color:#c2c6d8;border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.22rem .65rem;outline:none;cursor:pointer;transition:border-color .15s}
+  #provider-sel:focus-visible{border-color:rgba(176,198,255,.4)}
+  #model-input{font-family:'Consolas','Menlo',monospace;font-size:.68rem;background:#222a3d;color:#dae2fd;border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.22rem .75rem;width:13rem;outline:none;transition:border-color .15s}
+  #model-input:focus-visible{border-color:rgba(176,198,255,.4)}
+  #model-input::placeholder{color:#414655}
+  /* ── No-line rule ───────────────────────────────────── */
+  .no-line-rule{border:none!important}
 </style>
 </head>
-<body>
-<div id="app">
-  <header>
-    <span class="logo">Club Brugge<span class="logo-tag">Fan Q&amp;A</span></span>
-    <span class="subtitle">Ask anything about fan data</span>
-    <button class="btn-clear" id="btn-clear" type="button" aria-label="Clear conversation">Clear</button>
-  </header>
+<body class="bg-surface text-on-surface font-body overflow-hidden">
 
-  <main id="messages" aria-label="Conversation history">
-    <div class="welcome" id="welcome">
-      <p class="welcome-pre">Club Brugge Analytics</p>
-      <h2 class="welcome-heading">
-        <span class="hline hline-text">What do</span>
-        <span class="hline hline-blue">you want</span>
-        <span class="hline hline-gold">to know?</span>
-      </h2>
-      <p>Ask a question about fan behaviour &mdash; match attendance, merchandise, spending by segment, and more.</p>
-      <div class="example-chips" aria-label="Example questions">
-        <button class="chip" type="button">Which matches had the highest attendance?</button>
-        <button class="chip" type="button">What are the top merchandise categories?</button>
-        <button class="chip" type="button">Show fan spending by segment</button>
-        <button class="chip" type="button">Highest revenue matches this season</button>
+<!-- ── Top Navigation ─────────────────────────────────────────── -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 bg-surface-container-low no-line-rule">
+  <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
+  <nav class="hidden md:flex gap-8">
+    <a href="/" class="font-headline tracking-wide uppercase font-bold text-primary border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors">MATCHES</a>
+    <a href="#" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all" aria-disabled="true">SHOP</a>
+    <a href="/leaderboard" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">STATS</a>
+  </nav>
+  <button class="material-symbols-outlined text-[#0572FF]" aria-label="Account">account_circle</button>
+</header>
+
+<!-- ── Sidebar (desktop) ──────────────────────────────────────── -->
+<aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-low hidden md:flex flex-col py-8 px-4 gap-6 z-40 no-line-rule">
+  <div class="mt-16 flex items-center gap-4 px-2">
+    <div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-primary">
+      <span class="material-symbols-outlined text-2xl" style="font-variation-settings:'FILL' 1">stadium</span>
+    </div>
+    <div>
+      <div class="font-headline font-bold text-on-surface text-base leading-tight">Stadium Nocturne</div>
+      <div class="text-[10px] text-primary opacity-80 uppercase tracking-widest">AI Assistant</div>
+    </div>
+  </div>
+  <button id="btn-clear" type="button"
+    class="w-full py-3 px-4 bg-primary-container text-on-primary font-headline font-bold uppercase tracking-wider rounded-2xl hover:opacity-90 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
+    aria-label="Clear conversation">
+    <span class="material-symbols-outlined text-xl">add</span>New Chat
+  </button>
+  <nav class="flex flex-col gap-1 flex-1">
+    <a href="/" class="flex items-center gap-3 bg-surface-container-highest text-primary rounded-2xl px-4 py-3 text-sm font-medium">
+      <span class="material-symbols-outlined">chat</span>Current Match
+    </a>
+    <a href="#" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+      <span class="material-symbols-outlined">history</span>History
+    </a>
+    <a href="/leaderboard" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+      <span class="material-symbols-outlined">analytics</span>Saved Analysis
+    </a>
+    <a href="/player-stats" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+      <span class="material-symbols-outlined">compare_arrows</span>Player Stats
+    </a>
+    <a href="#" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+      <span class="material-symbols-outlined">settings</span>Club Settings
+    </a>
+  </nav>
+  <div class="flex flex-col gap-1 border-t border-white/5 pt-4">
+    <a href="#" class="flex items-center gap-3 text-on-surface opacity-40 px-4 py-2 hover:opacity-80 transition-opacity text-xs font-medium">
+      <span class="material-symbols-outlined text-sm">help</span>Help
+    </a>
+    <a href="#" class="flex items-center gap-3 text-on-surface opacity-40 px-4 py-2 hover:opacity-80 transition-opacity text-xs font-medium">
+      <span class="material-symbols-outlined text-sm">shield</span>Privacy
+    </a>
+  </div>
+</aside>
+
+<!-- ── Main Layout ────────────────────────────────────────────── -->
+<div class="flex h-screen pt-[72px]">
+  <main class="flex-1 ml-0 md:ml-64 flex flex-col bg-surface relative overflow-hidden" aria-label="Chat interface">
+
+    <!-- ── Message thread ──────────────────────────────────────── -->
+    <div id="messages"
+      class="flex-1 overflow-y-auto px-4 md:px-6 py-8 flex flex-col gap-10 max-w-4xl mx-auto w-full pb-56 md:pb-52"
+      role="main" aria-label="Conversation history">
+
+      <!-- Static welcome (mirrored in WELCOME_HTML JS template) -->
+      <div id="welcome" class="flex flex-col gap-6 py-4 max-w-2xl">
+        <div>
+          <p class="text-[10px] font-bold tracking-[0.2em] text-primary uppercase mb-3 font-headline">Club Brugge Analytics</p>
+          <h2 class="font-headline text-4xl md:text-5xl font-black italic tracking-tighter text-on-surface leading-none">Ask anything<br>about fan data.</h2>
+          <p class="text-sm text-on-surface-variant mt-4 max-w-[52ch] leading-relaxed">Match attendance, merchandise spend, fan segmentation &mdash; powered by AI analysis of the live dbt pipeline.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Which matches had the highest attendance?</button>
+          <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Top merchandise categories</button>
+          <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Fan spending by segment</button>
+          <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Highest revenue matches</button>
+        </div>
       </div>
-    </div>
-  </main>
 
-  <form id="composer" autocomplete="off">
-    <div id="llm-settings" aria-label="LLM settings">
-      <span class="settings-label">via</span>
-      <select id="provider-sel" aria-label="LLM provider">
-        <option value="ollama">Ollama</option>
-        <option value="openrouter">OpenRouter</option>
-      </select>
-      <input id="model-input" type="text" list="ollama-models"
-             placeholder="model…" autocomplete="off" spellcheck="false"
-             aria-label="Model override (leave blank for server default)">
-    </div>
-    <div id="composer-row">
-      <textarea id="question" placeholder="Ask a question…" aria-label="Your question"></textarea>
-      <button id="cancel" type="button" aria-label="Cancel request">Cancel</button>
-      <button id="send" type="submit" aria-label="Send question">Send</button>
-    </div>
-    <datalist id="ollama-models">
-      <option value="gemma4:e2b">
-      <option value="llama3.2">
-      <option value="qwen2.5-coder:7b">
-      <option value="mistral">
-    </datalist>
-    <datalist id="openrouter-models">
-      <option value="mistralai/mistral-7b-instruct:free">
-      <option value="meta-llama/llama-3.2-3b-instruct:free">
-      <option value="google/gemma-3-4b-it:free">
-      <option value="qwen/qwen-2.5-7b-instruct:free">
-      <option value="microsoft/phi-3-mini-128k-instruct:free">
-    </datalist>
-  </form>
+    </div><!-- /messages -->
+
+    <!-- ── Fixed input area ────────────────────────────────────── -->
+    <div class="absolute bottom-0 left-0 w-full pb-16 md:pb-0 bg-gradient-to-t from-surface via-surface to-transparent">
+      <div class="max-w-4xl mx-auto px-4 md:px-6 pt-8 pb-4">
+
+        <!-- LLM provider / model row -->
+        <div id="llm-settings" class="flex items-center gap-2 flex-wrap mb-3">
+          <span class="text-[10px] text-outline-variant font-medium tracking-widest uppercase select-none">via</span>
+          <select id="provider-sel" aria-label="LLM provider">
+            <option value="ollama">Ollama</option>
+            <option value="openrouter">OpenRouter</option>
+          </select>
+          <input id="model-input" type="text" list="ollama-models"
+            placeholder="model…" autocomplete="off" spellcheck="false"
+            aria-label="Model override (leave blank for server default)">
+          <datalist id="ollama-models">
+            <option value="gemma4:e2b">
+            <option value="llama3.2">
+            <option value="qwen2.5-coder:7b">
+            <option value="mistral">
+          </datalist>
+          <datalist id="openrouter-models">
+            <option value="mistralai/mistral-7b-instruct:free">
+            <option value="meta-llama/llama-3.2-3b-instruct:free">
+            <option value="google/gemma-3-4b-it:free">
+            <option value="qwen/qwen-2.5-7b-instruct:free">
+            <option value="microsoft/phi-3-mini-128k-instruct:free">
+          </datalist>
+        </div>
+
+        <!-- Input form -->
+        <form id="composer" autocomplete="off">
+          <div class="relative group">
+            <textarea id="question" rows="1"
+              class="w-full bg-surface-container-highest text-on-surface rounded-2xl px-6 py-4 pr-28 focus:ring-2 focus:ring-primary/20 focus:bg-surface-bright transition-all placeholder:text-outline/50 resize-none outline-none no-line-rule text-sm md:text-base"
+              placeholder="Ask about fan data, match stats, or attendance…"
+              aria-label="Your question"></textarea>
+            <!-- Cancel button (appears after 3s during a request) -->
+            <button id="cancel" type="button"
+              class="absolute right-[52px] top-1/2 -translate-y-1/2 px-3 py-1 rounded-full bg-surface-container text-on-surface-variant text-[10px] font-bold uppercase tracking-wider hover:text-on-surface transition-colors items-center gap-1"
+              aria-label="Cancel request">Cancel</button>
+            <!-- Send button -->
+            <button id="send" type="submit"
+              class="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-primary-container rounded-xl flex items-center justify-center text-on-primary hover:scale-105 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:scale-100"
+              aria-label="Send question">
+              <span class="material-symbols-outlined text-[20px]">send</span>
+            </button>
+          </div>
+          <!-- Quick suggestion chips (always visible) -->
+          <div class="flex gap-2 mt-4 overflow-x-auto pb-1 no-scrollbar" id="bottom-chips">
+            <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="Who are the top 5 fans by total spend?">Top fans</button>
+            <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="Which matches had the highest attendance this season?">Attendance</button>
+            <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="Show total revenue by fan segment">Revenue</button>
+            <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="What are the top merchandise categories by units sold?">Merchandise</button>
+          </div>
+        </form>
+
+      </div>
+    </div><!-- /input area -->
+
+  </main>
 </div>
 
-<div class="sr-only" id="status" role="status" aria-live="polite" aria-atomic="true"></div>
+<!-- ── Mobile Bottom Navigation ───────────────────────────────── -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-surface/80 backdrop-blur-xl z-50 md:hidden no-line-rule" aria-label="Mobile navigation">
+  <a href="/" class="flex flex-col items-center gap-1 bg-[#0572FF] text-white rounded-xl p-2 scale-110">
+    <span class="material-symbols-outlined">forum</span>
+    <span class="text-[9px] uppercase font-bold tracking-widest">Chat</span>
+  </a>
+  <a href="#" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+    <span class="material-symbols-outlined">shopping_bag</span>
+    <span class="text-[9px] uppercase font-bold tracking-widest">Shop</span>
+  </a>
+  <a href="/leaderboard" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+    <span class="material-symbols-outlined">leaderboard</span>
+    <span class="text-[9px] uppercase font-bold tracking-widest">Data</span>
+  </a>
+  <a href="#" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+    <span class="material-symbols-outlined">person</span>
+    <span class="text-[9px] uppercase font-bold tracking-widest">Profile</span>
+  </a>
+</nav>
+
+<!-- ── Screen-reader live region ──────────────────────────────── -->
+<div id="status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <script>
 (function () {
@@ -341,12 +305,14 @@ details[open] summary{border-bottom:1px solid var(--border)}
   const modelEl    = document.getElementById("model-input");
   const statusEl   = document.getElementById("status");
   const form       = document.getElementById("composer");
+  const bottomChips = document.getElementById("bottom-chips");
+
   let busy = false;
   let abortCtrl = null;
   let cancelTimer = null;
   const TIMEOUT_MS = 120_000;
 
-  // Restore and persist provider/model preference.
+  // ── Restore + persist provider/model preference ──────────────
   (function initPrefs() {
     try {
       const p = JSON.parse(localStorage.getItem("llm_pref") || "{}");
@@ -368,30 +334,29 @@ details[open] summary{border-bottom:1px solid var(--border)}
   });
   modelEl.addEventListener("change", savePrefs);
 
+  // ── Welcome HTML template (must mirror static HTML above) ────
   const WELCOME_HTML = `
-    <div class="welcome" id="welcome">
-      <p class="welcome-pre">Club Brugge Analytics</p>
-      <h2 class="welcome-heading">
-        <span class="hline hline-text">What do</span>
-        <span class="hline hline-blue">you want</span>
-        <span class="hline hline-gold">to know?</span>
-      </h2>
-      <p>Ask a question about fan behaviour &mdash; match attendance, merchandise, spending by segment, and more.</p>
-      <div class="example-chips" aria-label="Example questions">
-        <button class="chip" type="button">Which matches had the highest attendance?</button>
-        <button class="chip" type="button">What are the top merchandise categories?</button>
-        <button class="chip" type="button">Show fan spending by segment</button>
-        <button class="chip" type="button">Highest revenue matches this season</button>
+    <div id="welcome" class="flex flex-col gap-6 py-4 max-w-2xl">
+      <div>
+        <p class="text-[10px] font-bold tracking-[0.2em] text-primary uppercase mb-3 font-headline">Club Brugge Analytics</p>
+        <h2 class="font-headline text-4xl md:text-5xl font-black italic tracking-tighter text-on-surface leading-none">Ask anything<br>about fan data.</h2>
+        <p class="text-sm text-on-surface-variant mt-4 max-w-[52ch] leading-relaxed">Match attendance, merchandise spend, fan segmentation &mdash; powered by AI analysis of the live dbt pipeline.</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Which matches had the highest attendance?</button>
+        <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Top merchandise categories</button>
+        <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Fan spending by segment</button>
+        <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Highest revenue matches</button>
       </div>
     </div>`;
 
-  /* ── Auto-resize textarea ─────────────────────────────────────── */
+  // ── Auto-resize textarea ─────────────────────────────────────
   questionEl.addEventListener("input", () => {
     questionEl.style.height = "auto";
     questionEl.style.height = Math.min(questionEl.scrollHeight, 160) + "px";
   });
 
-  /* ── Submit on Enter (Shift+Enter for newline) ────────────────── */
+  // ── Submit on Enter (Shift+Enter for newline) ────────────────
   questionEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -399,7 +364,7 @@ details[open] summary{border-bottom:1px solid var(--border)}
     }
   });
 
-  /* ── Example chips via event delegation ────────────────────────── */
+  // ── Welcome chips (event delegation on messages area) ────────
   messagesEl.addEventListener("click", (e) => {
     if (!e.target.classList.contains("chip")) return;
     questionEl.value = e.target.textContent.trim();
@@ -408,19 +373,29 @@ details[open] summary{border-bottom:1px solid var(--border)}
     questionEl.focus();
   });
 
-  /* ── Clear conversation ─────────────────────────────────────────── */
+  // ── Bottom suggestion chips ───────────────────────────────────
+  bottomChips.addEventListener("click", (e) => {
+    const chip = e.target.closest(".bchip");
+    if (!chip) return;
+    questionEl.value = chip.dataset.q || chip.textContent.trim();
+    questionEl.style.height = "auto";
+    questionEl.style.height = Math.min(questionEl.scrollHeight, 160) + "px";
+    questionEl.focus();
+  });
+
+  // ── Clear conversation ────────────────────────────────────────
   clearBtn.addEventListener("click", () => {
     if (busy) return;
     messagesEl.innerHTML = WELCOME_HTML;
     questionEl.focus();
   });
 
-  /* ── Cancel in-flight request ───────────────────────────────────── */
+  // ── Cancel in-flight request ──────────────────────────────────
   cancelBtn.addEventListener("click", () => {
     if (abortCtrl) abortCtrl.abort();
   });
 
-  /* ── Form submit handler ──────────────────────────────────────── */
+  // ── Form submit handler ───────────────────────────────────────
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (busy) return;
@@ -443,7 +418,7 @@ details[open] summary{border-bottom:1px solid var(--border)}
     cancelTimer = setTimeout(() => cancelBtn.classList.add("visible"), 3000);
 
     try {
-      const res  = await fetch("/api/ask", {
+      const res = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: q, provider: providerEl.value, model: modelEl.value.trim() }),
@@ -479,7 +454,7 @@ details[open] summary{border-bottom:1px solid var(--border)}
     }
   });
 
-  /* ── Helpers ──────────────────────────────────────────────────── */
+  // ── Helpers ───────────────────────────────────────────────────
   function setBusy(v) {
     busy = v;
     sendBtn.disabled = v;
@@ -498,40 +473,61 @@ details[open] summary{border-bottom:1px solid var(--border)}
   function appendMsg(type, html) {
     const wrap = document.createElement("div");
     wrap.className = "msg-wrap " + type;
-    const meta = document.createElement("div");
-    meta.className = "msg-meta";
-    meta.textContent = timestamp();
-    meta.setAttribute("aria-hidden", "true");
+
+    if (type === "assistant" || type === "error") {
+      const hdr = document.createElement("div");
+      hdr.className = "msg-ai-hdr";
+      hdr.setAttribute("aria-hidden", "true");
+      const icon = type === "error" ? "error" : "smart_toy";
+      const label = type === "error" ? "Error" : "Assistant";
+      hdr.innerHTML = '<div class="msg-avatar"><span class="material-symbols-outlined" style="font-size:18px;font-variation-settings:\'FILL\' 1">' + icon + '</span></div><span class="msg-label">' + label + '</span>';
+      wrap.appendChild(hdr);
+    }
+
     const div = document.createElement("div");
     div.className = "msg " + type;
     div.innerHTML = html;
+    wrap.appendChild(div);
+
     if (type === "user") {
-      wrap.appendChild(div);
+      const meta = document.createElement("span");
+      meta.className = "msg-meta";
+      meta.textContent = timestamp();
+      meta.setAttribute("aria-hidden", "true");
       wrap.appendChild(meta);
-    } else {
-      wrap.appendChild(meta);
-      wrap.appendChild(div);
     }
+
     messagesEl.appendChild(wrap);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     return div;
   }
 
   function appendThinking() {
+    const wrap = document.createElement("div");
+    wrap.className = "msg-wrap assistant";
+
+    const hdr = document.createElement("div");
+    hdr.className = "msg-ai-hdr";
+    hdr.setAttribute("aria-hidden", "true");
+    hdr.innerHTML = '<div class="msg-avatar"><span class="material-symbols-outlined" style="font-size:18px;font-variation-settings:\'FILL\' 1">smart_toy</span></div><span class="msg-label">Assistant</span>';
+    wrap.appendChild(hdr);
+
     const div = document.createElement("div");
-    div.className = "msg thinking assistant";
+    div.className = "msg assistant thinking";
     div.setAttribute("aria-label", "Generating answer");
     div.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
-    messagesEl.appendChild(div);
+    wrap.appendChild(div);
+
+    messagesEl.appendChild(wrap);
     messagesEl.scrollTop = messagesEl.scrollHeight;
-    return div;
+    return wrap;
   }
 
   function escHtml(s) {
-    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
-  /* ── Render answer ─────────────────────────────────────────────── */
+  // ── Render answer ─────────────────────────────────────────────
   function showAnswer(data) {
     const answerText = data.answer || "";
     let html = '<div class="answer-text">' + escHtml(answerText) + "</div>";
@@ -566,7 +562,7 @@ details[open] summary{border-bottom:1px solid var(--border)}
     }
   }
 
-  /* ── Render error ──────────────────────────────────────────────── */
+  // ── Render error ──────────────────────────────────────────────
   function showError(data) {
     let html = '<div class="err-label">Error</div>' + escHtml(data.error || "Unknown error");
     if (data.sql) {
@@ -581,7 +577,7 @@ details[open] summary{border-bottom:1px solid var(--border)}
     msgEl.setAttribute("role", "alert");
   }
 
-  /* ── Build HTML table from array of objects ─────────────────────── */
+  // ── Build HTML table from array of objects ────────────────────
   function buildTable(rows) {
     const display = rows.slice(0, 10);
     const cols = Object.keys(display[0]);
@@ -602,6 +598,7 @@ details[open] summary{border-bottom:1px solid var(--border)}
     }
     return t;
   }
+
 })();
 </script>
 </body>

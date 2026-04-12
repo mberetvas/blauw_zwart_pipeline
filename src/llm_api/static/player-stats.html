@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Player Stats Comparison — Club Brugge AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "surface-container-low":     "#131b2e",
+        "surface-container":         "#171f33",
+        "surface-container-high":    "#222a3d",
+        "surface-container-highest": "#2d3449",
+        "surface-container-lowest":  "#060e20",
+        "surface-bright":            "#31394d",
+        "surface":                   "#0b1326",
+        "background":                "#0b1326",
+        "primary":                   "#b0c6ff",
+        "primary-container":         "#548dff",
+        "on-primary":                "#002d6e",
+        "on-primary-container":      "#002761",
+        "secondary-container":       "#3f465c",
+        "on-secondary-container":    "#adb4ce",
+        "on-surface":                "#dae2fd",
+        "on-surface-variant":        "#c2c6d8",
+        "outline":                   "#8c90a1",
+        "outline-variant":           "#414655",
+        "error":                     "#ffb4ab",
+        "surface-variant":           "#2d3449",
+        "secondary":                 "#bec6e0"
+      },
+      borderRadius: {
+        "DEFAULT": "0.125rem",
+        "lg": "0.25rem",
+        "xl": "0.5rem",
+        "2xl": "0.75rem",
+        "full": "9999px"
+      },
+      fontFamily: {
+        "headline": ["Space Grotesk", "sans-serif"],
+        "body":     ["Inter", "sans-serif"],
+        "label":    ["Inter", "sans-serif"]
+      }
+    }
+  }
+}
+</script>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2d3449; border-radius: 10px; }
+  /* Stadium gradient for hero section */
+  .stadium-gradient {
+    background: linear-gradient(180deg, transparent 0%, #0b1326 100%);
+  }
+  /* Player image hover effect */
+  .player-img { filter: grayscale(30%) saturate(1.2); transition: filter .3s; }
+  .player-img:hover { filter: grayscale(0%) saturate(1.6); }
+  /* Stat bar container */
+  .stat-bar-track { height: 6px; background: #222a3d; border-radius: 9999px; overflow: hidden; }
+  .stat-bar-fill  { height: 100%; border-radius: 9999px; transition: width .8s cubic-bezier(.22,1,.36,1); }
+  /* Form badge */
+  .form-W { background: #166534; color: #86efac; }
+  .form-D { background: #854d0e; color: #fde68a; }
+  .form-L { background: #7f1d1d; color: #fca5a5; }
+  @media (prefers-reduced-motion: reduce) { .stat-bar-fill { transition: none; } }
+</style>
+</head>
+<body class="bg-surface text-on-surface font-body overflow-x-hidden min-h-screen">
+
+<!-- ── Top Navigation ─────────────────────────────────────────── -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 bg-surface-container-low">
+  <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
+  <nav class="hidden md:flex gap-8">
+    <a href="/" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">MATCHES</a>
+    <a href="#" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all" aria-disabled="true">SHOP</a>
+    <a href="/leaderboard" class="font-headline tracking-wide uppercase font-bold text-primary border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors">STATS</a>
+  </nav>
+  <button class="material-symbols-outlined text-[#0572FF]" aria-label="Account">account_circle</button>
+</header>
+
+<!-- ── Sidebar (desktop) ──────────────────────────────────────── -->
+<aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-low hidden md:flex flex-col py-8 px-4 gap-6 z-40">
+  <div class="mt-16 flex items-center gap-4 px-2">
+    <div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-primary">
+      <span class="material-symbols-outlined text-2xl" style="font-variation-settings:'FILL' 1">stadium</span>
+    </div>
+    <div>
+      <div class="font-headline font-bold text-on-surface text-base leading-tight">Stadium Nocturne</div>
+      <div class="text-[10px] text-primary opacity-80 uppercase tracking-widest">Player Analytics</div>
+    </div>
+  </div>
+  <nav class="flex flex-col gap-1 flex-1">
+    <a href="/" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+      <span class="material-symbols-outlined">chat</span>Current Match
+    </a>
+    <a href="#" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+      <span class="material-symbols-outlined">history</span>History
+    </a>
+    <a href="/leaderboard" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+      <span class="material-symbols-outlined">analytics</span>Saved Analysis
+    </a>
+    <a href="/player-stats" class="flex items-center gap-3 bg-surface-container-highest text-primary rounded-2xl px-4 py-3 text-sm font-medium">
+      <span class="material-symbols-outlined">compare_arrows</span>Player Stats
+    </a>
+    <a href="#" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+      <span class="material-symbols-outlined">settings</span>Club Settings
+    </a>
+  </nav>
+  <div class="flex flex-col gap-1 border-t border-white/5 pt-4">
+    <a href="#" class="flex items-center gap-3 text-on-surface opacity-40 px-4 py-2 hover:opacity-80 transition-opacity text-xs font-medium">
+      <span class="material-symbols-outlined text-sm">help</span>Help
+    </a>
+  </div>
+</aside>
+
+<!-- ── Main Content ───────────────────────────────────────────── -->
+<div class="ml-0 md:ml-64 pt-[72px] min-h-screen pb-20 md:pb-8">
+  <main class="max-w-7xl mx-auto px-4 md:px-8 py-10">
+
+    <!-- ── Page header ─────────────────────────────────────────── -->
+    <!-- MOCK DATA: player stats — no live endpoint; replace with API when available -->
+    <div class="mb-10 flex flex-col sm:flex-row sm:items-end gap-4">
+      <div>
+        <p class="text-[10px] font-bold tracking-[0.25em] text-primary uppercase mb-2 font-headline">Performance Center</p>
+        <h1 class="font-headline text-5xl md:text-6xl font-black italic tracking-tighter uppercase text-on-surface leading-none">
+          Player<br>Comparison
+        </h1>
+      </div>
+      <div class="sm:ml-auto flex gap-3 items-center">
+        <span class="flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-[10px] font-bold uppercase tracking-widest text-primary">
+          <span class="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse inline-block"></span>
+          Live Season Stats
+        </span>
+        <a href="/" class="px-4 py-2 rounded-2xl bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors">Ask AI</a>
+      </div>
+    </div>
+
+    <!-- ── 3-col grid: Player 1 | Attribute Duel | Player 2 ─────── -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+
+      <!-- ── Player 1 card ────────────────────────────────────── -->
+      <div class="lg:col-span-4">
+        <div class="rounded-3xl overflow-hidden bg-surface-container-high">
+          <!-- Hero image -->
+          <div class="relative aspect-[4/5] overflow-hidden">
+            <img
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuDK5a-TFPRiEJP2qOqr9A9p3X5qrIBJ8pnXgCpVmTxMC3Y3dJwHYLnhqPpFT7G3ySZ0v6j8TY1qrmBcvh2nVNr4Y-h10IfYLUi8=s1024"
+              alt="Hans Vanaken"
+              class="player-img w-full h-full object-cover object-top"
+              onerror="this.parentElement.style.background='#222a3d'"
+            />
+            <div class="stadium-gradient absolute inset-0"></div>
+            <div class="absolute bottom-0 left-0 p-6">
+              <p class="font-headline font-black text-on-surface text-3xl italic leading-tight">Hans<br>Vanaken</p>
+              <p class="text-xs text-on-surface-variant mt-1 uppercase tracking-wider font-bold">Midfielder · #6</p>
+            </div>
+            <div class="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-primary-container text-on-primary text-[10px] font-bold tracking-widest">STARTER</div>
+          </div>
+          <!-- Stat mini-cards -->
+          <div class="p-5 grid grid-cols-2 gap-3">
+            <div class="bg-surface-container rounded-xl p-3 text-center">
+              <p class="font-headline font-black text-primary text-2xl">9</p>
+              <p class="text-[9px] text-outline uppercase tracking-wider mt-0.5">Goals</p>
+            </div>
+            <div class="bg-surface-container rounded-xl p-3 text-center">
+              <p class="font-headline font-black text-primary text-2xl">14</p>
+              <p class="text-[9px] text-outline uppercase tracking-wider mt-0.5">Assists</p>
+            </div>
+            <div class="bg-surface-container rounded-xl p-3 text-center">
+              <p class="font-headline font-black text-primary text-2xl">91%</p>
+              <p class="text-[9px] text-outline uppercase tracking-wider mt-0.5">Pass Acc.</p>
+            </div>
+            <div class="bg-surface-container rounded-xl p-3 text-center">
+              <p class="font-headline font-black text-primary text-2xl">87</p>
+              <p class="text-[9px] text-outline uppercase tracking-wider mt-0.5">Rating</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Attribute Duel ────────────────────────────────────── -->
+      <div class="lg:col-span-4 flex flex-col gap-4">
+        <div class="bg-surface-container-high rounded-3xl p-6 flex-1">
+          <p class="text-[10px] font-bold tracking-[0.2em] text-primary uppercase mb-6 font-headline text-center">Attribute Duel</p>
+
+          <!-- Each stat row: left value | bar | right value -->
+          <div class="flex flex-col gap-5" id="duel-rows">
+            <!-- Shooting -->
+            <div>
+              <div class="flex justify-between items-center mb-1.5">
+                <span class="font-headline font-black text-on-surface text-lg leading-none">82</span>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-outline">Shooting</span>
+                <span class="font-headline font-black text-on-surface text-lg leading-none">78</span>
+              </div>
+              <div class="relative flex items-center gap-1">
+                <div class="flex-1 stat-bar-track">
+                  <div class="stat-bar-fill bg-primary-container ml-auto" style="width:82%"></div>
+                </div>
+                <div class="flex-1 stat-bar-track">
+                  <div class="stat-bar-fill bg-secondary-container" style="width:78%"></div>
+                </div>
+              </div>
+            </div>
+            <!-- Passing -->
+            <div>
+              <div class="flex justify-between items-center mb-1.5">
+                <span class="font-headline font-black text-on-surface text-lg leading-none">91</span>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-outline">Passing</span>
+                <span class="font-headline font-black text-on-surface text-lg leading-none">84</span>
+              </div>
+              <div class="relative flex items-center gap-1">
+                <div class="flex-1 stat-bar-track">
+                  <div class="stat-bar-fill bg-primary-container ml-auto" style="width:91%"></div>
+                </div>
+                <div class="flex-1 stat-bar-track">
+                  <div class="stat-bar-fill bg-secondary-container" style="width:84%"></div>
+                </div>
+              </div>
+            </div>
+            <!-- Speed -->
+            <div>
+              <div class="flex justify-between items-center mb-1.5">
+                <span class="font-headline font-black text-on-surface text-lg leading-none">71</span>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-outline">Speed</span>
+                <span class="font-headline font-black text-on-surface text-lg leading-none">93</span>
+              </div>
+              <div class="relative flex items-center gap-1">
+                <div class="flex-1 stat-bar-track">
+                  <div class="stat-bar-fill bg-primary-container ml-auto" style="width:71%"></div>
+                </div>
+                <div class="flex-1 stat-bar-track">
+                  <div class="stat-bar-fill bg-secondary-container" style="width:93%"></div>
+                </div>
+              </div>
+            </div>
+            <!-- Defense -->
+            <div>
+              <div class="flex justify-between items-center mb-1.5">
+                <span class="font-headline font-black text-on-surface text-lg leading-none">74</span>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-outline">Defense</span>
+                <span class="font-headline font-black text-on-surface text-lg leading-none">65</span>
+              </div>
+              <div class="relative flex items-center gap-1">
+                <div class="flex-1 stat-bar-track">
+                  <div class="stat-bar-fill bg-primary-container ml-auto" style="width:74%"></div>
+                </div>
+                <div class="flex-1 stat-bar-track">
+                  <div class="stat-bar-fill bg-secondary-container" style="width:65%"></div>
+                </div>
+              </div>
+            </div>
+            <!-- Dribbling -->
+            <div>
+              <div class="flex justify-between items-center mb-1.5">
+                <span class="font-headline font-black text-on-surface text-lg leading-none">83</span>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-outline">Dribbling</span>
+                <span class="font-headline font-black text-on-surface text-lg leading-none">88</span>
+              </div>
+              <div class="relative flex items-center gap-1">
+                <div class="flex-1 stat-bar-track">
+                  <div class="stat-bar-fill bg-primary-container ml-auto" style="width:83%"></div>
+                </div>
+                <div class="flex-1 stat-bar-track">
+                  <div class="stat-bar-fill bg-secondary-container" style="width:88%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Legend -->
+          <div class="flex justify-between mt-6 text-[9px] font-bold uppercase tracking-widest">
+            <span class="flex items-center gap-1.5 text-primary"><span class="w-3 h-1.5 rounded-full bg-primary-container inline-block"></span>Vanaken</span>
+            <span class="flex items-center gap-1.5 text-on-surface-variant"><span class="w-3 h-1.5 rounded-full bg-secondary-container inline-block"></span>Skov Olsen</span>
+          </div>
+        </div>
+
+        <!-- Overall verdict chip -->
+        <div class="bg-surface-container-high rounded-3xl p-5 text-center">
+          <p class="text-[10px] font-bold uppercase tracking-widest text-outline mb-2">Overall Winner</p>
+          <p class="font-headline font-black text-primary text-2xl italic">Vanaken</p>
+          <p class="text-xs text-on-surface-variant mt-1">Higher composite score (80.2 vs 81.6 pace-adjusted)</p>
+        </div>
+      </div>
+
+      <!-- ── Player 2 card ────────────────────────────────────── -->
+      <div class="lg:col-span-4">
+        <div class="rounded-3xl overflow-hidden bg-surface-container-high">
+          <div class="relative aspect-[4/5] overflow-hidden">
+            <img
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuCV_bW9VJSMKiw-P0t0RvxYuIhaqx2NLvkJKJgMEJLH9Dq_5vlPwgJt0YRxSF_FE0eM1E3Ox-f1iiWNnp4pWMVHYtmvhxM1MvE=s1024"
+              alt="Andreas Skov Olsen"
+              class="player-img w-full h-full object-cover object-top"
+              onerror="this.parentElement.style.background='#222a3d'"
+            />
+            <div class="stadium-gradient absolute inset-0"></div>
+            <div class="absolute bottom-0 left-0 p-6">
+              <p class="font-headline font-black text-on-surface text-3xl italic leading-tight">Andreas<br>Skov Olsen</p>
+              <p class="text-xs text-on-surface-variant mt-1 uppercase tracking-wider font-bold">Winger · #10</p>
+            </div>
+            <div class="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold tracking-widest">STARTER</div>
+          </div>
+          <div class="p-5 grid grid-cols-2 gap-3">
+            <div class="bg-surface-container rounded-xl p-3 text-center">
+              <p class="font-headline font-black text-on-surface text-2xl">11</p>
+              <p class="text-[9px] text-outline uppercase tracking-wider mt-0.5">Goals</p>
+            </div>
+            <div class="bg-surface-container rounded-xl p-3 text-center">
+              <p class="font-headline font-black text-on-surface text-2xl">8</p>
+              <p class="text-[9px] text-outline uppercase tracking-wider mt-0.5">Assists</p>
+            </div>
+            <div class="bg-surface-container rounded-xl p-3 text-center">
+              <p class="font-headline font-black text-on-surface text-2xl">84%</p>
+              <p class="text-[9px] text-outline uppercase tracking-wider mt-0.5">Pass Acc.</p>
+            </div>
+            <div class="bg-surface-container rounded-xl p-3 text-center">
+              <p class="font-headline font-black text-on-surface text-2xl">85</p>
+              <p class="text-[9px] text-outline uppercase tracking-wider mt-0.5">Rating</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /3-col grid -->
+
+    <!-- ── AI Verdict card ─────────────────────────────────────── -->
+    <div class="bg-surface-container-high rounded-3xl p-6 mb-8 flex gap-5 items-start">
+      <div class="w-12 h-12 rounded-xl bg-[#0572FF] flex items-center justify-center flex-shrink-0 mt-0.5">
+        <span class="material-symbols-outlined text-white" style="font-variation-settings:'FILL' 1">psychology</span>
+      </div>
+      <div>
+        <p class="text-[10px] font-bold uppercase tracking-widest text-primary font-headline mb-2">AI Verdict</p>
+        <p class="text-on-surface text-sm leading-relaxed max-w-3xl">
+          Vanaken dominates the midfield with elite passing accuracy (91%) and creative vision — the highest in the squad. Skov Olsen counters with explosive pace (93) and a clinical goal record. For a possession-based system, Vanaken is the cornerstone. In a counter-attacking setup, Skov Olsen's speed differential is decisive.
+        </p>
+        <a href="/" class="inline-flex items-center gap-2 mt-3 text-[10px] font-bold uppercase tracking-widest text-primary hover:text-on-surface transition-colors">
+          <span class="material-symbols-outlined text-sm">forum</span>Ask AI for more analysis
+        </a>
+      </div>
+    </div>
+
+    <!-- ── Secondary analysis row ─────────────────────────────── -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+      <!-- Heatmap placeholder -->
+      <div class="bg-surface-container-high rounded-3xl p-6">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-primary font-headline mb-4">Position Heatmap</p>
+        <div class="aspect-[3/2] rounded-xl bg-surface-container flex items-center justify-center">
+          <div class="text-center">
+            <span class="material-symbols-outlined text-4xl text-outline opacity-40" style="font-variation-settings:'FILL' 1">grid_on</span>
+            <p class="text-[10px] text-outline mt-2 uppercase tracking-wider">Live data<br>not yet available</p>
+          </div>
+        </div>
+        <p class="text-[10px] text-outline mt-3">Positional data integration planned for next sprint.</p>
+      </div>
+
+      <!-- Recent form -->
+      <div class="bg-surface-container-high rounded-3xl p-6">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-primary font-headline mb-4">Recent Form (last 5)</p>
+        <div class="flex flex-col gap-4">
+          <div>
+            <p class="text-xs font-bold text-on-surface mb-2">Vanaken</p>
+            <div class="flex gap-1.5">
+              <span class="form-W px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">W</span>
+              <span class="form-W px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">W</span>
+              <span class="form-D px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">D</span>
+              <span class="form-W px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">W</span>
+              <span class="form-L px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">L</span>
+            </div>
+          </div>
+          <div>
+            <p class="text-xs font-bold text-on-surface mb-2">Skov Olsen</p>
+            <div class="flex gap-1.5">
+              <span class="form-W px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">W</span>
+              <span class="form-D px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">D</span>
+              <span class="form-W px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">W</span>
+              <span class="form-W px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">W</span>
+              <span class="form-D px-2.5 py-1 rounded-full text-[10px] font-bold uppercase">D</span>
+            </div>
+          </div>
+        </div>
+        <p class="text-[10px] text-outline mt-4">Team match results. Individual performance ratings pending.</p>
+      </div>
+
+      <!-- Add third player -->
+      <div class="bg-surface-container-high rounded-3xl p-6 flex flex-col items-center justify-center gap-4 text-center">
+        <div class="w-14 h-14 rounded-2xl bg-surface-container-highest flex items-center justify-center">
+          <span class="material-symbols-outlined text-2xl text-outline">person_add</span>
+        </div>
+        <div>
+          <p class="font-headline font-bold text-on-surface">Add Third Player</p>
+          <p class="text-xs text-on-surface-variant mt-1 max-w-[28ch]">Compare up to three players side-by-side. Three-way duel coming in v2.</p>
+        </div>
+        <button class="px-5 py-2.5 rounded-2xl bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors opacity-50 cursor-not-allowed" disabled aria-disabled="true">Coming Soon</button>
+      </div>
+
+    </div>
+
+  </main>
+</div>
+
+<!-- ── Mobile Bottom Navigation ───────────────────────────────── -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-surface/80 backdrop-blur-xl z-50 md:hidden" aria-label="Mobile navigation">
+  <a href="/" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+    <span class="material-symbols-outlined">forum</span>
+    <span class="text-[9px] uppercase font-bold tracking-widest">Chat</span>
+  </a>
+  <a href="#" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+    <span class="material-symbols-outlined">shopping_bag</span>
+    <span class="text-[9px] uppercase font-bold tracking-widest">Shop</span>
+  </a>
+  <a href="/leaderboard" class="flex flex-col items-center gap-1 bg-[#0572FF] text-white rounded-xl p-2 scale-110">
+    <span class="material-symbols-outlined">leaderboard</span>
+    <span class="text-[9px] uppercase font-bold tracking-widest">Data</span>
+  </a>
+  <a href="#" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+    <span class="material-symbols-outlined">person</span>
+    <span class="text-[9px] uppercase font-bold tracking-widest">Profile</span>
+  </a>
+</nav>
+
+</body>
+</html>
