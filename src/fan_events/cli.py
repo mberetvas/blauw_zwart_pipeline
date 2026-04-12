@@ -16,7 +16,7 @@ import os
 import random
 import sys
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from fan_events.domain import (
@@ -34,11 +34,13 @@ from fan_events.ndjson_io import (
     write_atomic_text,
 )
 from fan_events.orchestrator import (
+    compute_stream_t0,
     default_unified_fan_pool_max,
     iter_merged_records,
     open_append_sink,
     write_merged_stream,
 )
+from fan_events.retail_intensity import build_retail_rate_factor_fn
 from fan_events.term_style import ColoredArgumentParser, ColoredHelpFormatter
 from fan_events.v1_batch import FIXED_NOW_UTC, generate_batch
 from fan_events.v2_calendar import (
@@ -137,6 +139,11 @@ _EX_KAFKA_FLAGS = (
 )
 
 EPILOG_STREAM = (
+    "With --calendar, the season recycles +1 calendar year per pass by default; "
+    "use --no-calendar-loop for a single pass.\n"
+    "Match-day retail: --retail-home-match-day-multiplier, --retail-home-kickoff-*-minutes, "
+    "--retail-home-kickoff-extra-multiplier, --retail-away-match-day-enable, "
+    "--retail-away-match-day-multiplier (defaults in --help).\n"
     "Without --max-events or --max-duration the stream runs until Ctrl+C or exhaustion.\n"
     "Start a local Kafka broker: just kafka\n\n"
     "Examples:\n\n"
@@ -145,6 +152,7 @@ EPILOG_STREAM = (
             _EX_HELP_STREAM,
             _EX_STREAM_MERGED,
             "fan_events stream -c cal.json --no-retail -s 42",
+            "fan_events stream -c cal.json --no-calendar-loop --no-retail -s 42",
             _EX_STREAM_RETAIL_ONLY,
             "",
             "# Kafka via env vars:",
@@ -339,6 +347,8 @@ def _validate_stream(
         p.error("--no-retail requires --calendar (calendar-only mode)")
     if ns.calendar_loop and not ns.calendar:
         p.error("--calendar-loop requires --calendar")
+    if getattr(ns, "calendar_loop", False) and getattr(ns, "no_calendar_loop", False):
+        p.error("--calendar-loop and --no-calendar-loop are mutually exclusive")
     if ns.calendar_loop_shift is not None and ns.calendar_loop_shift <= 0:
         p.error("--calendar-loop-shift must be > 0")
     tok = _tokens_after_subcommand(argv, SUBCOMMAND_STREAM)
@@ -398,6 +408,25 @@ def _validate_stream(
     if emit_min is not None and emit_min > emit_max:
         p.error("--emit-wall-clock-min must be <= --emit-wall-clock-max")
 
+    hmd = getattr(ns, "retail_home_match_day_multiplier", 2.0)
+    hpre = getattr(ns, "retail_home_kickoff_pre_minutes", 90)
+    hpost = getattr(ns, "retail_home_kickoff_post_minutes", 120)
+    hextra = getattr(ns, "retail_home_kickoff_extra_multiplier", 1.5)
+    amult = getattr(ns, "retail_away_match_day_multiplier", 1.75)
+    for name, v in (
+        ("--retail-home-match-day-multiplier", hmd),
+        ("--retail-home-kickoff-extra-multiplier", hextra),
+        ("--retail-away-match-day-multiplier", amult),
+    ):
+        if v <= 0:
+            p.error(f"{name} must be > 0")
+    for name, v in (
+        ("--retail-home-kickoff-pre-minutes", hpre),
+        ("--retail-home-kickoff-post-minutes", hpost),
+    ):
+        if v < 0:
+            p.error(f"{name} must be >= 0")
+
     _validate_stream_kafka(p, ns)
 
 
@@ -443,6 +472,11 @@ _OPTS_WITH_FOLLOWING_VALUE = frozenset({
     "--kafka-compression",
     "--kafka-acks",
     "--calendar-loop-shift",
+    "--retail-home-match-day-multiplier",
+    "--retail-home-kickoff-pre-minutes",
+    "--retail-home-kickoff-post-minutes",
+    "--retail-home-kickoff-extra-multiplier",
+    "--retail-away-match-day-multiplier",
 })
 
 
@@ -823,16 +857,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Event types for v2 calendar side (default: both)",
     )
     cal_s.add_argument(
+        "--no-calendar-loop",
+        action="store_true",
+        default=False,
+        dest="no_calendar_loop",
+        help=(
+            "Emit only one pass over the calendar (no +1-year recycling). "
+            "Default is to loop when --calendar is set (see specs/006-stream-three-event-kinds)."
+        ),
+    )
+    cal_s.add_argument(
         "--calendar-loop",
         action="store_true",
         default=False,
         dest="calendar_loop",
         help=(
-            "Repeat the calendar season on a loop: after the last match in the file is emitted, "
-            "restart from cycle 1 with all kickoff timestamps shifted forward by "
-            "--calendar-loop-shift days.  Requires --calendar.  "
-            "Runs indefinitely until stopped by --max-events, --max-duration, Ctrl+C, "
-            "or process exit."
+            "Explicit opt-in to season recycling (default is already on with --calendar). "
+            "Shifts use +1 calendar year per pass (not --calendar-loop-shift). "
+            "Requires --calendar."
         ),
     )
     cal_s.add_argument(
@@ -842,11 +884,63 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="DAYS",
         dest="calendar_loop_shift",
         help=(
-            f"Number of days to shift kickoff timestamps forward per cycle when --calendar-loop "
-            f"is active (default: {DEFAULT_CALENDAR_LOOP_SHIFT_DAYS} days — one full year, "
-            f"so a season replay lands roughly on the same calendar dates one year later). "
-            f"Use fractional values for sub-day shifts."
+            "Deprecated for stream: loop shift is +1 calendar year per pass (006). "
+            "If set, must be > 0 (legacy validation only; value is ignored)."
         ),
+    )
+    md = st.add_argument_group(
+        "Match-day retail (merged --calendar without --no-retail)",
+        description=(
+            "Poisson rate scales as R_base × F(t). Default windows echo Jan Breydel match-day "
+            "lead times (see specs/006-stream-three-event-kinds/research.md §6)."
+        ),
+    )
+    md.add_argument(
+        "--retail-home-match-day-multiplier",
+        type=float,
+        default=2.0,
+        metavar="H",
+        dest="retail_home_match_day_multiplier",
+        help="F(t) on home match days outside kickoff windows (default: 2.0)",
+    )
+    md.add_argument(
+        "--retail-home-kickoff-pre-minutes",
+        type=int,
+        default=90,
+        metavar="M",
+        dest="retail_home_kickoff_pre_minutes",
+        help="Minutes before home kickoff for extra retail boost window (default: 90)",
+    )
+    md.add_argument(
+        "--retail-home-kickoff-post-minutes",
+        type=int,
+        default=120,
+        metavar="M",
+        dest="retail_home_kickoff_post_minutes",
+        help="Minutes after home kickoff for extra retail boost window (default: 120)",
+    )
+    md.add_argument(
+        "--retail-home-kickoff-extra-multiplier",
+        type=float,
+        default=1.5,
+        metavar="E",
+        dest="retail_home_kickoff_extra_multiplier",
+        help="Extra factor inside home kickoff windows (default: 1.5)",
+    )
+    md.add_argument(
+        "--retail-away-match-day-enable",
+        action="store_true",
+        default=False,
+        dest="retail_away_match_day_enable",
+        help="Scale retail on away-only fixture days (default: off)",
+    )
+    md.add_argument(
+        "--retail-away-match-day-multiplier",
+        type=float,
+        default=1.75,
+        metavar="A",
+        dest="retail_away_match_day_multiplier",
+        help="F(t) on away-only days when --retail-away-match-day-enable (default: 1.75)",
     )
     lim = st.add_argument_group("Post-merge limits (merged NDJSON line stream)")
     lim.add_argument(
@@ -1156,6 +1250,47 @@ def run_v3(args: argparse.Namespace) -> None:
         _write_fans_sidecar(Path(args.fans_out), fan_ids, args.seed)
 
 
+def _stream_t0_anchor_and_retail_epoch(
+    args: argparse.Namespace,
+    contexts: list,
+    *,
+    include_v2: bool,
+    include_retail: bool,
+) -> tuple[datetime | None, datetime]:
+    """``--max-duration`` anchor uses the effective retail emission epoch in ``compute_stream_t0``;
+    emission start follows research §3 (no backward retail vs first v2 window when calendar is
+    present). When ``--epoch`` is omitted, both emission and the t0 anchor use ``earliest_v2``
+    so that duration semantics are aligned with the master-clock start actually used."""
+    retail_epoch_cli = (
+        _parse_epoch_utc(args.epoch) if args.epoch is not None else DEFAULT_RETAIL_SIM_EPOCH_UTC
+    )
+    retail_epoch_cli = retail_epoch_cli.astimezone(timezone.utc)
+    earliest_v2: datetime | None = None
+    if contexts:
+        earliest_v2 = min(c.window_start for c in contexts).astimezone(timezone.utc)
+
+    if include_retail and include_v2 and contexts and earliest_v2 is not None:
+        if args.epoch is None:
+            retail_emission = earliest_v2
+        else:
+            retail_emission = max(retail_epoch_cli, earliest_v2)
+    elif include_retail:
+        retail_emission = retail_epoch_cli
+    else:
+        retail_emission = retail_epoch_cli
+
+    t0_anchor: datetime | None = None
+    if args.max_duration is not None:
+        if include_v2 and contexts:
+            if include_retail:
+                t0_anchor = compute_stream_t0(retail_emission, contexts)
+            else:
+                t0_anchor = earliest_v2
+        elif include_retail:
+            t0_anchor = retail_epoch_cli
+    return (t0_anchor, retail_emission)
+
+
 def run_stream(args: argparse.Namespace) -> None:
     v2_rng = random.Random(f"v2:{args.seed}") if args.seed is not None else random.Random()
     retail_rng = random.Random(f"retail:{args.seed}") if args.seed is not None else random.Random()
@@ -1163,7 +1298,7 @@ def run_stream(args: argparse.Namespace) -> None:
         random.Random(f"pacing:{args.seed}") if args.seed is not None else random.Random()
     )
 
-    contexts = []
+    contexts: list = []
     if args.calendar:
         path = Path(args.calendar)
         doc = load_calendar_json(path)
@@ -1174,6 +1309,7 @@ def run_stream(args: argparse.Namespace) -> None:
 
     include_v2 = args.calendar is not None
     include_retail = args.calendar is None or not args.no_retail
+    use_calendar_loop = bool(args.calendar) and not getattr(args, "no_calendar_loop", False)
 
     unified: int | None = None
     if include_v2 and include_retail:
@@ -1188,17 +1324,10 @@ def run_stream(args: argparse.Namespace) -> None:
     events_mode = args.events
 
     if include_v2:
-        loop_shift_days = (
-            args.calendar_loop_shift
-            if args.calendar_loop_shift is not None
-            else DEFAULT_CALENDAR_LOOP_SHIFT_DAYS
-        )
-        loop_shift = timedelta(days=loop_shift_days)
-        if getattr(args, "calendar_loop", False):
+        if use_calendar_loop:
             v2_iter = iter_looped_v2_records(
                 contexts,
                 v2_rng,
-                shift=loop_shift,
                 scan_fraction=sf,
                 merch_factor=mf,
                 events_mode=events_mode,
@@ -1216,7 +1345,22 @@ def run_stream(args: argparse.Namespace) -> None:
     else:
         v2_iter = iter(())
 
+    t0_anchor, retail_epoch_eff = _stream_t0_anchor_and_retail_epoch(
+        args, contexts, include_v2=include_v2, include_retail=include_retail
+    )
+
     retail_kw = _stream_retail_kwargs(args)
+    retail_kw["epoch_utc"] = retail_epoch_eff
+    if include_retail and include_v2 and contexts:
+        retail_kw["rate_factor_fn"] = build_retail_rate_factor_fn(
+            contexts,
+            home_match_day_multiplier=args.retail_home_match_day_multiplier,
+            home_kickoff_pre_minutes=args.retail_home_kickoff_pre_minutes,
+            home_kickoff_post_minutes=args.retail_home_kickoff_post_minutes,
+            home_kickoff_extra_multiplier=args.retail_home_kickoff_extra_multiplier,
+            away_match_day_enable=args.retail_away_match_day_enable,
+            away_match_day_multiplier=args.retail_away_match_day_multiplier,
+        )
     if include_retail and include_v2:
         retail_kw["fan_pool"] = unified
     elif include_retail and args.fan_pool is not None:
@@ -1235,13 +1379,14 @@ def run_stream(args: argparse.Namespace) -> None:
 
     out = args.output
     if args.kafka_topic not in (None, ""):
-        _run_stream_kafka(args, merged, prng, emin, emax)
+        _run_stream_kafka(args, merged, prng, emin, emax, t0_anchor=t0_anchor)
     elif out is None or out == "-":
         write_merged_stream(
             merged,
             sys.stdout,
             max_events=args.max_events,
             max_duration_seconds=args.max_duration,
+            t0_anchor=t0_anchor,
             pacing_rng=prng,
             emit_wall_clock_min=emin,
             emit_wall_clock_max=emax,
@@ -1253,6 +1398,7 @@ def run_stream(args: argparse.Namespace) -> None:
                 sink,
                 max_events=args.max_events,
                 max_duration_seconds=args.max_duration,
+                t0_anchor=t0_anchor,
                 pacing_rng=prng,
                 emit_wall_clock_min=emin,
                 emit_wall_clock_max=emax,
@@ -1290,6 +1436,8 @@ def _run_stream_kafka(
     prng: random.Random | None,
     emin: float | None,
     emax: float | None,
+    *,
+    t0_anchor: datetime | None = None,
 ) -> None:
     """Publish the merged stream to Kafka (called from run_stream when --kafka-topic is set)."""
     try:
@@ -1338,6 +1486,7 @@ def _run_stream_kafka(
             sink,  # type: ignore[arg-type]
             max_events=args.max_events,
             max_duration_seconds=args.max_duration,
+            t0_anchor=t0_anchor,
             pacing_rng=prng,
             emit_wall_clock_min=emin,
             emit_wall_clock_max=emax,

@@ -8,7 +8,7 @@ fan_id (pool).
 from __future__ import annotations
 
 import random
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -90,6 +90,7 @@ def iter_retail_records(
     weighted_gap_weights: Sequence[float] | None = None,
     fan_pool: int | None = None,
     skip_default_event_cap: bool = False,
+    rate_factor_fn: Callable[[datetime], float] | None = None,
 ) -> Iterator[dict[str, Any]]:
     """
     Deterministic order of RNG draws: inter-arrival gap, then shop, item, amount, fan_id per event.
@@ -100,6 +101,9 @@ def iter_retail_records(
     set, event count is unlimited until the duration window is exceeded. When both limits are set,
     generation stops when **either** is hit first (duration checked after advancing the synthetic
     clock, before emitting).
+
+    When ``rate_factor_fn`` is set, Poisson mode uses ``λ_eff = poisson_rate * F(t)`` before each
+    gap draw; non-poisson modes scale the gap inversely by ``F(t)`` (≥ 1).
     """
     if max_events == 0:
         return
@@ -130,14 +134,28 @@ def iter_retail_records(
     while True:
         if cap_n is not None and count >= cap_n:
             break
-        gap = _next_interarrival_seconds(
-            rng,
-            arrival_mode=arrival_mode,
-            poisson_rate=poisson_rate,
-            fixed_gap_seconds=fixed_gap_seconds,
-            weighted_gaps=weighted_gaps,
-            weighted_gap_weights=weighted_gap_weights,
-        )
+        if arrival_mode == "poisson":
+            if poisson_rate <= 0:
+                raise ValueError("poisson_rate must be > 0 for arrival_mode='poisson'")
+            lam = poisson_rate
+            if rate_factor_fn is not None:
+                fac = max(1.0, float(rate_factor_fn(t)))
+                lam = poisson_rate * fac
+            if lam <= 0:
+                raise ValueError("lam must be > 0 for arrival_mode='poisson'")
+            gap = float(rng.expovariate(lam))
+        else:
+            gap = _next_interarrival_seconds(
+                rng,
+                arrival_mode=arrival_mode,
+                poisson_rate=poisson_rate,
+                fixed_gap_seconds=fixed_gap_seconds,
+                weighted_gaps=weighted_gaps,
+                weighted_gap_weights=weighted_gap_weights,
+            )
+            if rate_factor_fn is not None and gap > 0:
+                fac = max(1.0, float(rate_factor_fn(t)))
+                gap = float(gap) / fac
         t = t + timedelta(seconds=gap)
         if cap_d is not None and (t - epoch).total_seconds() > cap_d:
             break
