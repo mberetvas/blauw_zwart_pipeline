@@ -132,38 +132,59 @@ tailwind.config = {
       </div>
       <div class="sm:ml-auto flex gap-3 items-center flex-wrap">
         <span id="live-badge" class="hidden items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-xs font-bold uppercase tracking-widest text-primary">
-          <span class="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse inline-block"></span>
-          Live Season Stats
+          <span class="material-symbols-outlined text-sm">calendar_today</span>
+          Daily Snapshot
         </span>
         <span id="offline-badge" class="hidden items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-xs font-bold uppercase tracking-widest text-error">
-          <span class="material-symbols-outlined text-sm">wifi_off</span>Scraper Offline
+          <span class="material-symbols-outlined text-sm">wifi_off</span>Data Unavailable
         </span>
         <a href="/" class="px-4 py-2 rounded-2xl bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors">Ask AI</a>
       </div>
     </div>
 
-    <!-- ── Loading / error state ─────────────────────────────── -->
     <div id="loading-state" class="py-24 flex flex-col items-center gap-4 text-on-surface-variant">
       <span class="material-symbols-outlined text-5xl animate-spin" style="animation-duration:1.2s">autorenew</span>
-      <p class="text-sm font-medium uppercase tracking-widest">Fetching squad data…</p>
-      <p class="text-xs opacity-60">Scraping Pro League — may take 30–60 s on first load</p>
+      <p class="text-sm font-medium uppercase tracking-widest">Loading squad data…</p>
+      <p class="text-xs opacity-60">Reading latest data from database</p>
     </div>
 
+    <!-- ── HTTP / DB error state ──────────────────────────────── -->
     <div id="error-state" class="hidden py-16 flex flex-col items-center gap-4 text-center">
       <div class="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center">
         <span class="material-symbols-outlined text-3xl text-error">error_outline</span>
       </div>
       <div>
-        <p class="font-headline font-bold text-on-surface text-lg">Scraper Unavailable</p>
+        <p class="font-headline font-bold text-on-surface text-lg">Data Unavailable</p>
         <p id="error-msg" class="text-sm text-on-surface-variant mt-2 max-w-md mx-auto"></p>
       </div>
-      <p class="text-xs text-outline max-w-sm">Make sure the <code class="bg-surface-container-highest px-1.5 py-0.5 rounded text-primary">proleague-scraper</code> service is running: <code class="bg-surface-container-highest px-1.5 py-0.5 rounded text-primary">docker compose up proleague-scraper</code></p>
+      <p class="text-xs text-outline max-w-sm">The player stats API or database could not be reached. Check <code class="bg-surface-container-highest px-1.5 py-0.5 rounded text-primary">docker compose logs llm-api</code> for details.</p>
       <button onclick="loadSquad()" class="mt-2 px-5 py-2.5 rounded-2xl bg-primary-container text-on-primary text-xs font-bold uppercase tracking-widest hover:bg-primary transition-colors">
         Retry
       </button>
     </div>
 
-    <!-- ── Live content (hidden until data loads) ─────────────── -->
+    <!-- ── Empty pipeline state (API ok, no rows yet) ─────────── -->
+    <div id="empty-state" class="hidden py-16 flex flex-col items-center gap-4 text-center">
+      <div class="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center">
+        <span class="material-symbols-outlined text-3xl text-primary">schedule</span>
+      </div>
+      <div>
+        <p class="font-headline font-bold text-on-surface text-lg">Waiting for first daily run</p>
+        <p class="text-sm text-on-surface-variant mt-2 max-w-md mx-auto">
+          Player stats are ingested once per day via the scheduled pipeline.<br>
+          The database is empty until the first scrape cycle completes.
+        </p>
+      </div>
+      <p class="text-xs text-outline max-w-sm">
+        To trigger an immediate scrape, restart the scheduler:<br>
+        <code class="bg-surface-container-highest px-1.5 py-0.5 rounded text-primary">docker compose restart proleague-scheduler</code>
+      </p>
+      <button onclick="loadSquad()" class="mt-2 px-5 py-2.5 rounded-2xl bg-surface-container-high text-on-surface-variant text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors">
+        Check again
+      </button>
+    </div>
+
+    <!-- ── Content (hidden until data loaded from DB) ───────── -->
     <div id="live-content" class="hidden">
 
       <!-- ── Player selector row ──────────────────────────────── -->
@@ -214,7 +235,7 @@ tailwind.config = {
       <p class="text-xs text-outline text-center pb-4">
         Stats sourced from
         <a href="https://www.proleague.be" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline">proleague.be</a>
-        · Current season · <span id="fetched-at"></span>
+        · Daily snapshot · <span id="fetched-at"></span>
       </p>
 
     </div><!-- /live-content -->
@@ -223,9 +244,10 @@ tailwind.config = {
 </div>
 
 <script>
-// ── Player Stats — live data from /api/player-stats/squad ─────────────────
-// Fetches squad + stats from the proleague-scraper microservice via the
-// Flask proxy to avoid browser CORS issues.
+// ── Player Stats — DB-backed daily snapshot from /api/player-stats/squad ────
+// Data is ingested once per day via proleague-scheduler → Kafka → proleague-ingest.
+// The API reads public.player_stats from Postgres; no synchronous scraping occurs
+// on page load.  Three distinct states: loading, empty-pipeline (0 rows), error.
 
 let squadData = null;
 
@@ -389,6 +411,7 @@ function populateSelectors(players) {
 async function loadSquad() {
   document.getElementById('loading-state').classList.remove('hidden');
   document.getElementById('error-state').classList.add('hidden');
+  document.getElementById('empty-state').classList.add('hidden');
   document.getElementById('live-content').classList.add('hidden');
   document.getElementById('live-badge').classList.add('hidden');
   document.getElementById('offline-badge').classList.add('hidden');
@@ -401,15 +424,22 @@ async function loadSquad() {
     }
     squadData = await resp.json();
     const players = (squadData.players || []).filter(p => !p.error);
-    if (players.length === 0) throw new Error('Squad returned 0 players.');
 
-    populateSelectors(squadData.players.filter(p => !p.error));
+    if (players.length === 0) {
+      // API succeeded but the table is empty — daily pipeline hasn't run yet.
+      document.getElementById('loading-state').classList.add('hidden');
+      document.getElementById('empty-state').classList.remove('hidden');
+      document.getElementById('empty-state').classList.add('flex');
+      return;
+    }
+
+    populateSelectors(players);
     renderComparison();
 
     if (squadData.fetched_at) {
       const dt = new Date(squadData.fetched_at);
       document.getElementById('fetched-at').textContent =
-        'Fetched ' + dt.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+        'Last updated ' + dt.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
     }
 
     document.getElementById('loading-state').classList.add('hidden');

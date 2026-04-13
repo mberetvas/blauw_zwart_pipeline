@@ -1202,7 +1202,10 @@ def health() -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Player stats — DB-backed reads + scraper proxy for single-player live fetch
+# Player stats — DB-backed reads (squad) + image proxy
+# /api/player-stats/squad   reads public.player_stats (written by proleague-ingest)
+# /api/player-stats/player  single-player live fetch via proleague-scraper (utility)
+# /api/player-stats/image   server-side CDN image proxy (bypasses hotlink/CORS)
 # ---------------------------------------------------------------------------
 
 #: Internal URL of the proleague-scraper Compose service.
@@ -1287,7 +1290,7 @@ def player_stats_squad() -> Any:
         {
             "source_url": DEFAULT_SQUAD_URL,
             "fetched_at": latest or "",
-            "cached": True,
+            "db_backed": True,
             "players": players,
         }
     )
@@ -1295,7 +1298,12 @@ def player_stats_squad() -> Any:
 
 @app.get("/api/player-stats/player")
 def player_stats_player() -> Any:
-    """Proxy GET /player?url=<profile_url> from the proleague-scraper service."""
+    """Proxy a single-player live fetch from the proleague-scraper service.
+
+    This is a utility endpoint for on-demand single-player refresh; normal
+    squad reads go through /api/player-stats/squad (DB-backed).
+    Requires the proleague-scraper Compose service to be reachable.
+    """
     player_url = request.args.get("url", "").strip()
     if not player_url:
         return jsonify({"error": "url query parameter is required"}), 400
@@ -1310,12 +1318,13 @@ def player_stats_player() -> Any:
     except requests.exceptions.ConnectionError:
         return (
             jsonify(
-                {"error": "Player stats scraper is unavailable. Is proleague-scraper running?"}
+                {"error": "proleague-scraper is unreachable. "
+                          "Check: docker compose logs proleague-scraper."}
             ),
             503,
         )
     except requests.exceptions.Timeout:
-        return jsonify({"error": "Player stats scraper timed out."}), 504
+        return jsonify({"error": "proleague-scraper timed out."}), 504
     except requests.exceptions.RequestException as exc:
         log.exception("Player stats player proxy failed")
         return jsonify({"error": f"Scraper request failed: {exc}"}), 502

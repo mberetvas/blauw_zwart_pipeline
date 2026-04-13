@@ -1,0 +1,61 @@
+# `proleague_scraper` sources: see dbt/models/intermediate/_sources.yaml
+version: 2
+
+models:
+  - name: stg_player_stats
+    description: >
+      Staging pass-through over the `proleague_scraper.player_stats` source table for downstream
+      intermediate models. Add casts and renames here as the project grows.
+      Owner: proleague_scraper; layer: staging.
+    config:
+      tags: [staging, proleague, player_stats]
+    columns:
+      - name: player_id
+        description: Stable player identifier from proleague.be (primary key in raw).
+        data_type: text
+        tests:
+          - not_null
+          - unique
+      - name: slug
+        description: URL slug for the player profile.
+        data_type: text
+        tests:
+          - not_null
+      - name: name
+        description: Display name.
+        data_type: text
+        tests:
+          - not_null
+      - name: position
+        description: Position label from the site when present.
+        data_type: text
+      - name: field_position
+        description: Field position detail when present.
+        data_type: text
+      - name: shirt_number
+        description: Squad number when present.
+        data_type: integer
+      - name: image_url
+        description: Profile image URL when present.
+        data_type: text
+      - name: profile
+        description: JSON map of biographical fields from the scraper.
+        data_type: jsonb
+        tests:
+          - not_null
+      - name: stats
+        description: JSON array of stat rows for the main competition.
+        data_type: jsonb
+        tests:
+          - not_null
+      - name: competition
+        description: Competition label when scoped.
+        data_type: text
+      - name: source_url
+        description: Page URL scraped for this row.
+        data_type: text
+      - name: scraped_at
+        description: Time the scraper upserted the row.
+        data_type: timestamp with time zone
+        tests:
+          - not_null
