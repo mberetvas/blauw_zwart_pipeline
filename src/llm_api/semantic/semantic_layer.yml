@@ -8,7 +8,9 @@ subjects:
     primary_mart: mart_fan_loyalty
     description: >
       One row per fan. Use mart_fan_loyalty for all fan-level aggregated KPIs
-      (spend, attendance counts, favourite items and shops).
+      (spend, attendance counts, favourite items and shops). The public fan
+      leaderboard ranks fans by a composite points score derived from these
+      columns—see layering rule fan_leaderboard_and_points.
     prefer_mart_when: >
       Fan-level aggregates: total spend, merchandise spend, retail spend,
       matches attended, purchase counts, favourite merch item, favourite shop.
@@ -150,6 +152,16 @@ layering_rules:
       unless the question explicitly needs unparsed JSONB payload or Kafka
       infrastructure fields (topic, partition, offset).
 
+  - id: fan_leaderboard_and_points
+    description: >
+      The public fan leaderboard (UI and GET /api/leaderboard) orders fans by
+      a composite score built from mart_fan_loyalty. It is not a stored column:
+      points = ROUND(100 * matches_attended + total_spend + 5 *
+      merch_purchase_count + 5 * retail_purchase_count). Sort by points
+      descending; ties break by total_spend DESC, then matches_attended DESC,
+      then fan_id ASC. To reproduce rankings in SQL, compute that expression
+      per fan_id and apply the same ORDER BY.
+
 # ---------------------------------------------------------------------------
 # Answer style: rules for the second-stage (NL answer) prompt.
 # ---------------------------------------------------------------------------
@@ -159,6 +171,7 @@ answer_style:
   rules:
     - "State monetary values with the EUR unit, e.g. €42.50, not just 42.5."
     - "Round monetary values to 2 decimal places."
+    - "Fan leaderboard / loyalty points are not a mart column: each fan's score is ROUND(100 * matches_attended + total_spend + 5 * merch_purchase_count + 5 * retail_purchase_count). Ranking tie-breakers: higher points, then higher total_spend, then more matches_attended, then lower fan_id."
     - "State count metrics (matches, transactions) as whole numbers."
     - "If the query returned zero rows, say 'No data was found' — do not guess or hallucinate values."
     - "Do not invent values not present in the data rows."
