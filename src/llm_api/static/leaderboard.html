@@ -132,7 +132,7 @@ tailwind.config = {
       <h1 class="font-headline text-5xl md:text-7xl font-black italic tracking-tighter uppercase text-on-surface leading-none">
         Fan<br>Leaderboard
       </h1>
-      <p class="text-sm text-on-surface-variant mt-3 max-w-[60ch]">Rankings are based on attendance and spend from the live loyalty mart. Community engagement and referrals are not tracked yet.</p>
+      <p class="text-sm text-on-surface-variant mt-3 max-w-[60ch]">Rankings reward match attendance first, then spend and purchases from the live loyalty mart. Community engagement and referrals are not tracked yet.</p>
       <p id="leaderboard-as-of" class="text-xs text-outline uppercase tracking-[0.2em] mt-4 font-headline">Loading latest leaderboard snapshot...</p>
     </div>
 
@@ -266,8 +266,8 @@ tailwind.config = {
 <div class="glass-card fixed bottom-20 md:bottom-6 right-6 rounded-2xl px-5 py-4 z-40 hidden md:flex items-center gap-4" aria-label="Leaderboard scoring">
   <div class="flex flex-col">
     <span class="text-xs font-bold uppercase tracking-[0.2em] text-primary font-headline">Points Formula</span>
-    <span class="font-headline font-black text-2xl text-on-surface leading-none">100 x matches</span>
-    <span class="text-xs text-outline mt-0.5" id="floating-points-formula">+ spend + 5 x merch + 5 x retail</span>
+    <span class="font-headline font-black text-2xl text-on-surface leading-none">Attendance-first</span>
+    <span class="text-xs text-outline mt-0.5" id="floating-points-formula">1,000 attendance bonus + 150 x matches + spend + 5 x merch + 5 x retail</span>
   </div>
   <div class="flex flex-col items-end gap-1">
     <span class="px-2 py-1 rounded-full bg-primary-container text-on-primary text-xs font-bold tracking-wider">ALL TIME</span>
@@ -478,12 +478,7 @@ tailwind.config = {
       asOfEl.textContent = formatAsOf(payload.as_of);
       floatingAsOfEl.textContent = formatAsOf(payload.as_of).replace("Updated ", "");
       if (payload.points_formula) {
-        floatingFormulaEl.textContent = payload.points_formula
-          .replace("ROUND(", "")
-          .replace(")::bigint", "")
-          .replace("matches_attended", "matches")
-          .replace("merch_purchase_count", "merch")
-          .replace("retail_purchase_count", "retail");
+        floatingFormulaEl.textContent = payload.points_formula;
       }
 
       renderPodium(payload.podium || []);

@@ -448,6 +448,27 @@ def _sample_leaderboard_rows() -> list[dict[str, object]]:
     ]
 
 
+def test_leaderboard_points_sql_is_attendance_first(llm_app_module) -> None:
+    assert llm_app_module._leaderboard_points_sql("loyalty") == (
+        "ROUND(CASE WHEN loyalty.matches_attended > 0 THEN 1000 ELSE 0 END + "
+        "150 * loyalty.matches_attended + loyalty.total_spend + "
+        "5 * loyalty.merch_purchase_count + 5 * loyalty.retail_purchase_count)::bigint"
+    )
+
+
+def test_leaderboard_order_sql_prioritizes_matches_before_spend(llm_app_module) -> None:
+    assert llm_app_module._leaderboard_order_sql("leaderboard") == (
+        "leaderboard.points DESC, leaderboard.matches_attended DESC, "
+        "leaderboard.total_spend DESC, leaderboard.fan_id ASC"
+    )
+    assert llm_app_module.LEADERBOARD_TIE_BREAKERS == [
+        "points DESC",
+        "matches_attended DESC",
+        "total_spend DESC",
+        "fan_id ASC",
+    ]
+
+
 def test_build_leaderboard_payload_shapes_rankings(
     llm_app_module, monkeypatch: pytest.MonkeyPatch
 ) -> None:

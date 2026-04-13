@@ -58,18 +58,25 @@ KNOWN_PROVIDERS: frozenset[str] = frozenset({"ollama", "openrouter"})
 _PROVIDER_DISPLAY = {"ollama": "Ollama", "openrouter": "OpenRouter"}
 LEADERBOARD_SUPPORTED_WINDOWS: frozenset[str] = frozenset({"all"})
 LEADERBOARD_LIMIT = 25
-LEADERBOARD_POINTS_FORMULA_SQL = (
-    "ROUND(100 * matches_attended + total_spend + 5 * merch_purchase_count "
-    "+ 5 * retail_purchase_count)::bigint"
+LEADERBOARD_ATTENDANCE_BONUS = 1000
+LEADERBOARD_MATCH_POINTS = 150
+LEADERBOARD_PURCHASE_POINTS = 5
+LEADERBOARD_POINTS_FORMULA_TEMPLATE = (
+    "ROUND(CASE WHEN {matches_attended} > 0 THEN "
+    f"{LEADERBOARD_ATTENDANCE_BONUS} ELSE 0 END + "
+    f"{LEADERBOARD_MATCH_POINTS} * {{matches_attended}} + {{total_spend}} "
+    f"+ {LEADERBOARD_PURCHASE_POINTS} * {{merch_purchase_count}} "
+    f"+ {LEADERBOARD_PURCHASE_POINTS} * {{retail_purchase_count}})::bigint"
 )
 LEADERBOARD_POINTS_FORMULA_TEXT = (
-    "ROUND(100 * matches_attended + total_spend + 5 * merch_purchase_count "
-    "+ 5 * retail_purchase_count)::bigint"
+    f"{LEADERBOARD_ATTENDANCE_BONUS:,} attendance bonus + "
+    f"{LEADERBOARD_MATCH_POINTS} x matches + spend + "
+    f"{LEADERBOARD_PURCHASE_POINTS} x merch + {LEADERBOARD_PURCHASE_POINTS} x retail"
 )
 LEADERBOARD_TIE_BREAKERS = [
     "points DESC",
-    "total_spend DESC",
     "matches_attended DESC",
+    "total_spend DESC",
     "fan_id ASC",
 ]
 ASK_CONTEXT_MAX_TURNS = 3
@@ -315,18 +322,20 @@ def _run_read_query(
 
 
 def _leaderboard_points_sql(alias: str) -> str:
-    """Return the shared leaderboard points expression for the given table alias."""
-    return (
-        f"ROUND(100 * {alias}.matches_attended + {alias}.total_spend "
-        f"+ 5 * {alias}.merch_purchase_count + 5 * {alias}.retail_purchase_count)::bigint"
+    """Return the shared attendance-first leaderboard points expression."""
+    return LEADERBOARD_POINTS_FORMULA_TEMPLATE.format(
+        matches_attended=f"{alias}.matches_attended",
+        total_spend=f"{alias}.total_spend",
+        merch_purchase_count=f"{alias}.merch_purchase_count",
+        retail_purchase_count=f"{alias}.retail_purchase_count",
     )
 
 
 def _leaderboard_order_sql(alias: str) -> str:
     """Return the deterministic leaderboard sort order for the given alias."""
     return (
-        f"{alias}.points DESC, {alias}.total_spend DESC, "
-        f"{alias}.matches_attended DESC, {alias}.fan_id ASC"
+        f"{alias}.points DESC, {alias}.matches_attended DESC, "
+        f"{alias}.total_spend DESC, {alias}.fan_id ASC"
     )
 
 
@@ -453,8 +462,8 @@ def _fetch_fan_of_the_month() -> dict[str, Any] | None:
                 ROW_NUMBER() OVER (
                     ORDER BY month_scans.month_ticket_scans DESC,
                              {points_sql} DESC,
-                             loyalty.total_spend DESC,
                              loyalty.matches_attended DESC,
+                             loyalty.total_spend DESC,
                              month_scans.fan_id ASC
                 ) AS month_rank
             FROM month_scans

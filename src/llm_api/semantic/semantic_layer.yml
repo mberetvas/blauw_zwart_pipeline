@@ -156,9 +156,10 @@ layering_rules:
     description: >
       The public fan leaderboard (UI and GET /api/leaderboard) orders fans by
       a composite score built from mart_fan_loyalty. It is not a stored column:
-      points = ROUND(100 * matches_attended + total_spend + 5 *
-      merch_purchase_count + 5 * retail_purchase_count). Sort by points
-      descending; ties break by total_spend DESC, then matches_attended DESC,
+      points = ROUND(CASE WHEN matches_attended > 0 THEN 1000 ELSE 0 END +
+      150 * matches_attended + total_spend + 5 * merch_purchase_count + 5 *
+      retail_purchase_count). Sort by points descending; ties break by
+      matches_attended DESC, then total_spend DESC,
       then fan_id ASC. To reproduce rankings in SQL, compute that expression
       per fan_id and apply the same ORDER BY.
 
@@ -171,7 +172,7 @@ answer_style:
   rules:
     - "State monetary values with the EUR unit, e.g. €42.50, not just 42.5."
     - "Round monetary values to 2 decimal places."
-    - "Fan leaderboard / loyalty points are not a mart column: each fan's score is ROUND(100 * matches_attended + total_spend + 5 * merch_purchase_count + 5 * retail_purchase_count). Ranking tie-breakers: higher points, then higher total_spend, then more matches_attended, then lower fan_id."
+    - "Fan leaderboard / loyalty points are not a mart column: each fan's score is ROUND(CASE WHEN matches_attended > 0 THEN 1000 ELSE 0 END + 150 * matches_attended + total_spend + 5 * merch_purchase_count + 5 * retail_purchase_count). Ranking tie-breakers: higher points, then more matches_attended, then higher total_spend, then lower fan_id."
     - "State count metrics (matches, transactions) as whole numbers."
     - "If the query returned zero rows, say 'No data was found' — do not guess or hallucinate values."
     - "Do not invent values not present in the data rows."

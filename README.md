@@ -271,10 +271,16 @@ The chat UI also sends a small slice of recent successful turns with each new `/
 `GET /api/leaderboard` uses the same read-only Postgres DSN (`LLM_READER_DATABASE_URL`, falling back to `DATABASE_URL`) as the Text-to-SQL API. In v1 it supports `window=all` only and ranks fans from `dbt_dev.mart_fan_loyalty` with:
 
 ```text
-points = ROUND(100 * matches_attended + total_spend + 5 * merch_purchase_count + 5 * retail_purchase_count)::bigint
+points = ROUND(
+    CASE WHEN matches_attended > 0 THEN 1000 ELSE 0 END
+    + 150 * matches_attended
+    + total_spend
+    + 5 * merch_purchase_count
+    + 5 * retail_purchase_count
+)::bigint
 ```
 
-Tie-breakers are `points DESC`, `total_spend DESC`, `matches_attended DESC`, and `fan_id ASC`. Referral/community-engagement metrics are not tracked yet, so the leaderboard returns `null` for those values instead of inventing them.
+Tie-breakers are `points DESC`, `matches_attended DESC`, `total_spend DESC`, and `fan_id ASC`. Referral/community-engagement metrics are not tracked yet, so the leaderboard returns `null` for those values instead of inventing them.
 
 ## dbt and analytics
 
