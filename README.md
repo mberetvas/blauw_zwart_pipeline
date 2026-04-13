@@ -227,6 +227,8 @@ Current provider support:
 
 Runtime config is persisted through `LLM_CONFIG_PATH` in Compose (`/data/llm_config.json` on the named volume).
 
+**Schema context for Text-to-SQL.** The API merges dbt YAML column documentation (staging, intermediate, marts) into the SQL-generation prompt. The Docker image sets `DBT_MODELS_DIR` to a baked copy of `dbt\models\staging`, `intermediate`, and `marts`. On the host, set `DBT_MODELS_DIR` to `.\dbt\models` (or use comma-separated `SCHEMA_FILES`, or a single `SCHEMA_FILE`). Optional: `DBT_RELATION_SCHEMA` (default `dbt_dev`, matching `llm_reader` search_path), `SCHEMA_CONTEXT_MAX_CHARS`, and `SCHEMA_CONTEXT_OVERFLOW` (`error` or `truncate`). See `.env.example`.
+
 ### Run it in Compose
 
 1. Copy `.env.example` to `.env`.
@@ -284,7 +286,7 @@ Relevant analytics assets:
 | dbt project config | `dbt_project.yml` |
 | Host profiles | `dbt\profiles.yml` and `dbt\profiles.yml.example` |
 | Loyalty mart SQL | `dbt\models\marts\mart_fan_loyalty.sql` |
-| Loyalty mart schema docs | `dbt\models\marts\schema.yml` |
+| dbt schema docs (marts + upstream YAML) | `dbt\models\marts\schema.yml` and `dbt\models\**\*_schema.yaml` (used by `llm_api` / `DBT_MODELS_DIR`) |
 
 ## Development and test
 

@@ -3,7 +3,7 @@
 Flow
 ----
 1. POST /api/ask {"question": "...", "provider": "ollama"|"openrouter", "model": "..."}
-2. Load schema.yml context (dbt marts column descriptions).
+2. Load merged dbt schema YAML context (staging / intermediate / marts column docs).
 3. Prompt the selected LLM provider -> raw SQL.
 4. Validate: must be SELECT-only; no mutating keywords.
 5. Execute wrapped SQL (LIMIT 50, statement_timeout 10 s) as llm_reader.
@@ -18,12 +18,10 @@ import logging
 import os
 import re
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
 import psycopg2
 import requests
-import yaml
 from flask import Flask, jsonify, request, send_from_directory
 
 from .llm_runtime_config import (
@@ -32,12 +30,13 @@ from .llm_runtime_config import (
     init_llm_config,
     to_public_config,
 )
+from .schema_context import build_schema_context_text
 
 # ---------------------------------------------------------------------------
 # Configuration (environment variables)
 # ---------------------------------------------------------------------------
 
-SCHEMA_FILE = Path(os.environ.get("SCHEMA_FILE", Path(__file__).parent / "schema.yml"))
+# Schema loading is implemented in schema_context (SCHEMA_FILE, SCHEMA_FILES, DBT_MODELS_DIR).
 # Prefer read-only role URL; Compose maps LLM_READER_DATABASE_URL -> DATABASE_URL for this service.
 DATABASE_URL = (
     os.environ.get("LLM_READER_DATABASE_URL", "").strip()
@@ -74,23 +73,8 @@ init_llm_config()
 
 
 def load_schema_context() -> str:
-    """Read schema.yml and return a compact prompt-friendly description."""
-    with open(SCHEMA_FILE) as fh:
-        schema: dict[str, Any] = yaml.safe_load(fh)
-
-    parts: list[str] = []
-    for model in schema.get("models", []):
-        parts.append(f"Table: {model['name']}")
-        desc = (model.get("description") or "").strip().replace("\n", " ")
-        if desc:
-            parts.append(f"  Description: {desc}")
-        for col in model.get("columns", []):
-            col_desc = (col.get("description") or "").strip().replace("\n", " ")
-            parts.append(
-                f"  - {col['name']} ({col.get('data_type', '?')}): {col_desc}"
-            )
-        parts.append("")
-    return "\n".join(parts)
+    """Merge configured dbt schema YAML(s) into a compact prompt-friendly description."""
+    return build_schema_context_text()
 
 
 # ---------------------------------------------------------------------------
@@ -369,6 +353,10 @@ def ask() -> Any:
         "You are a PostgreSQL expert. Given the schema below, write a single "
         "SELECT query that answers the question. Return ONLY the SQL — no "
         "explanation, no markdown, no code fences.\n\n"
+        "Prefer the mart relation mart_fan_loyalty for fan-level summaries (spend, "
+        "attendance, favourites). Use staging (e.g. stg_fan_events_ingested) or "
+        "intermediate relations (merch_purchase, retail_purchase, match_events) only "
+        "when the question needs raw or event-level detail (Kafka fields, per-event rows).\n\n"
         f"Schema:\n{schema_context}\n"
         f"Question: {question}\n\n"
         "SQL:"

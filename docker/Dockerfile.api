@@ -14,10 +14,12 @@ RUN uv sync --frozen --no-dev --extra api
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Bake the marts schema into the image so the container needs no volume mount.
-# Rebuild the image whenever schema.yml changes.
-COPY dbt/models/marts/schema.yml /app/schema.yml
-ENV SCHEMA_FILE=/app/schema.yml
+# Bake all dbt layer schema YAMLs for Text-to-SQL (staging → intermediate → marts).
+# Rebuild the image when any of these change.
+COPY dbt/models/staging /app/dbt_schema/staging
+COPY dbt/models/intermediate /app/dbt_schema/intermediate
+COPY dbt/models/marts /app/dbt_schema/marts
+ENV DBT_MODELS_DIR=/app/dbt_schema
 
 EXPOSE 8080
 CMD ["python", "-m", "llm_api.app"]
