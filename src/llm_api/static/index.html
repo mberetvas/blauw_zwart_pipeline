@@ -156,7 +156,7 @@ tailwind.config = {
   .msg.assistant .markdown-body th{background:#171f33;color:#8c90a1;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;font-family:'Chivo',system-ui,sans-serif}
   .msg.assistant .markdown-body td{color:#dae2fd}
   .msg.assistant .markdown-body a{color:#548dff;text-decoration:underline;word-break:break-word}
-  .msg.assistant .markdown-body blockquote{border-left:3px solid #548dff;margin:.5rem 0;padding:.25rem 0 .25rem .75rem;color:#c2c6d8}
+  .msg.assistant .markdown-body blockquote{margin:.75rem 0;padding:.75rem 1rem;border-radius:.35rem;background:rgba(23,31,51,.95);color:#c2c6d8;outline:1px solid rgba(255,255,255,.06);outline-offset:-1px}
   .msg.assistant .markdown-body strong{color:#dae2fd;font-weight:700}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
@@ -202,7 +202,7 @@ tailwind.config = {
       <span class="material-symbols-outlined">compare_arrows</span>Player Stats
     </a>
   </nav>
-  <div class="flex flex-col gap-1 border-t border-white/5 pt-4">
+  <div class="flex flex-col gap-1 mt-6 pt-1">
     <a href="/settings" class="flex items-center gap-3 text-on-surface opacity-40 px-4 py-2 hover:opacity-80 transition-opacity text-xs font-medium">
       <span class="material-symbols-outlined text-sm">settings</span>Club Settings
     </a>
@@ -221,17 +221,17 @@ tailwind.config = {
 
     <!-- ── Message thread ──────────────────────────────────────── -->
     <div id="messages"
-      class="flex-1 overflow-y-auto px-4 md:px-6 py-8 flex flex-col gap-10 max-w-4xl mx-auto w-full pb-56 md:pb-52"
+      class="flex-1 overflow-y-auto px-4 md:px-8 py-8 md:py-10 flex flex-col gap-8 md:gap-11 max-w-4xl w-full mx-auto md:mx-0 md:ml-6 lg:ml-10 md:mr-6 xl:mr-14 pb-56 md:pb-52"
       role="main" aria-label="Conversation history">
 
       <!-- Static welcome (mirrored in WELCOME_HTML JS template) -->
-      <div id="welcome" class="flex flex-col gap-6 py-4 max-w-2xl">
-        <div>
-          <p class="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-3 font-headline">Club Brugge Analytics</p>
+      <div id="welcome" class="flex flex-col gap-8 md:gap-10 py-6 md:py-8 max-w-2xl">
+        <div class="flex flex-col gap-4">
+          <p class="text-xs font-bold tracking-[0.2em] text-primary uppercase font-headline">Club Brugge Analytics</p>
           <h2 class="font-headline text-4xl md:text-5xl font-black italic tracking-tighter text-on-surface leading-none">Ask anything<br>about fan data.</h2>
-          <p class="text-base text-on-surface-variant mt-4 max-w-[65ch] leading-relaxed">Match attendance, merchandise spend, fan segmentation &mdash; powered by AI analysis of the live dbt pipeline.</p>
+          <p class="text-base text-on-surface-variant max-w-[65ch] leading-relaxed">Match attendance, merchandise spend, fan segmentation &mdash; powered by AI analysis of the live dbt pipeline.</p>
         </div>
-        <div class="flex flex-wrap gap-2">
+        <div class="flex flex-wrap gap-2 md:gap-3">
           <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Which matches had the highest attendance?</button>
           <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Top merchandise categories</button>
           <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Fan spending by segment</button>
@@ -243,10 +243,10 @@ tailwind.config = {
 
     <!-- ── Fixed input area ────────────────────────────────────── -->
     <div class="absolute bottom-0 left-0 w-full pb-16 md:pb-0 bg-gradient-to-t from-surface via-surface to-transparent">
-      <div class="max-w-4xl mx-auto px-4 md:px-6 pt-8 pb-4">
+      <div class="max-w-4xl w-full mx-auto md:mx-0 md:ml-6 lg:ml-10 md:mr-6 xl:mr-14 px-4 md:px-8 pt-6 md:pt-10 pb-5">
 
         <!-- LLM provider / model row -->
-        <div id="llm-settings" class="flex items-center gap-2 flex-wrap mb-3">
+        <div id="llm-settings" class="flex items-center gap-3 flex-wrap mb-4">
           <span class="text-xs text-outline-variant font-medium tracking-widest uppercase select-none">via</span>
           <select id="provider-sel" aria-label="LLM provider">
             <option value="ollama">Ollama</option>
@@ -288,7 +288,7 @@ tailwind.config = {
             </button>
           </div>
           <!-- Quick suggestion chips (always visible) -->
-          <div class="flex gap-2 mt-4 overflow-x-auto pb-1 no-scrollbar" id="bottom-chips">
+          <div class="flex gap-2 md:gap-3 mt-5 overflow-x-auto pb-1 no-scrollbar" id="bottom-chips">
             <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="Who are the top 5 fans by total spend?">Top fans</button>
             <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="Which matches had the highest attendance this season?">Attendance</button>
             <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="Show total revenue by fan segment">Revenue</button>
@@ -402,13 +402,13 @@ tailwind.config = {
 
   // ── Welcome HTML template (must mirror static HTML above) ────
   const WELCOME_HTML = `
-    <div id="welcome" class="flex flex-col gap-6 py-4 max-w-2xl">
-      <div>
-        <p class="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-3 font-headline">Club Brugge Analytics</p>
+    <div id="welcome" class="flex flex-col gap-8 md:gap-10 py-6 md:py-8 max-w-2xl">
+      <div class="flex flex-col gap-4">
+        <p class="text-xs font-bold tracking-[0.2em] text-primary uppercase font-headline">Club Brugge Analytics</p>
         <h2 class="font-headline text-4xl md:text-5xl font-black italic tracking-tighter text-on-surface leading-none">Ask anything<br>about fan data.</h2>
-        <p class="text-base text-on-surface-variant mt-4 max-w-[65ch] leading-relaxed">Match attendance, merchandise spend, fan segmentation &mdash; powered by AI analysis of the live dbt pipeline.</p>
+        <p class="text-base text-on-surface-variant max-w-[65ch] leading-relaxed">Match attendance, merchandise spend, fan segmentation &mdash; powered by AI analysis of the live dbt pipeline.</p>
       </div>
-      <div class="flex flex-wrap gap-2">
+      <div class="flex flex-wrap gap-2 md:gap-3">
         <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Which matches had the highest attendance?</button>
         <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Top merchandise categories</button>
         <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Fan spending by segment</button>

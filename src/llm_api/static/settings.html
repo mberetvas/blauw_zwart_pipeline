@@ -116,7 +116,7 @@ tailwind.config = {
       <span class="material-symbols-outlined">compare_arrows</span>Player Stats
     </a>
   </nav>
-  <div class="flex flex-col gap-1 border-t border-white/5 pt-4">
+  <div class="flex flex-col gap-1 mt-6 pt-1">
     <a href="/settings" class="flex items-center gap-3 bg-surface-container-highest text-primary rounded-xl px-4 py-2 text-xs font-medium" aria-current="page">
       <span class="material-symbols-outlined text-sm">settings</span>Club Settings
     </a>
@@ -127,9 +127,9 @@ tailwind.config = {
 </aside>
 
 <div class="ml-0 md:ml-64 pt-[72px] min-h-screen pb-24 md:pb-10">
-  <main class="max-w-3xl mx-auto px-4 md:px-8 py-10">
+  <main class="max-w-3xl mx-auto px-4 md:px-8 py-12 md:py-14">
 
-    <div class="mb-10">
+    <div class="mb-12 md:mb-14">
       <p class="text-xs font-bold tracking-[0.25em] text-primary uppercase mb-2 font-headline">Infrastructure</p>
       <h1 class="font-headline text-4xl md:text-5xl font-black italic tracking-tighter text-on-surface leading-tight">Club Settings</h1>
       <p class="text-sm text-on-surface-variant mt-3 max-w-[60ch] leading-relaxed">Configure Ollama and OpenRouter for the Text-to-SQL assistant. Values are stored on the server and apply immediately after save.</p>
@@ -138,7 +138,7 @@ tailwind.config = {
 
     <p id="flash" class="hidden rounded-2xl px-4 py-3 text-sm mb-6" role="status"></p>
 
-    <form id="settings-form" class="flex flex-col gap-8">
+    <form id="settings-form" class="flex flex-col gap-10">
       <div class="bg-surface-container-high rounded-3xl p-6 md:p-8 flex flex-col gap-5">
         <div>
           <h2 class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary">Default provider</h2>
