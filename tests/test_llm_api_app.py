@@ -308,6 +308,7 @@ def test_answer_prompt_includes_answer_guidelines(
     answer_prompt = next(p for p in captured_prompts if "Answer:" in p)
     assert "ANSWER GUIDELINES" in answer_prompt
     assert "EUR" in answer_prompt
+    assert "GitHub-flavored Markdown" in answer_prompt
 
 
 def test_semantic_load_failure_returns_500(
@@ -331,6 +332,88 @@ def test_semantic_load_failure_returns_500(
     body = response.get_json()
     assert "error" in body
     assert "semantic" in body["error"].lower()
+
+
+def test_ask_prompt_includes_recent_history_for_follow_up_scope(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured_prompts: list[str] = []
+
+    def fake_complete(prompt: str, provider: str, model: str) -> str:
+        captured_prompts.append(prompt)
+        if "SQL:" in prompt:
+            return (
+                "SELECT fan_id, merch_total_spend, retail_total_spend "
+                "FROM mart_fan_loyalty WHERE fan_id IN "
+                "('fan_03248', 'fan_17965', 'fan_00219')"
+            )
+        return "They spent money on merch and retail items."
+
+    monkeypatch.setattr(llm_app_module, "load_schema_context", lambda: "Table: mart_fan_loyalty")
+    monkeypatch.setattr(llm_app_module, "load_semantic_context", lambda: ("", ""))
+    monkeypatch.setattr(llm_app_module, "complete", fake_complete)
+    monkeypatch.setattr(
+        llm_app_module,
+        "_execute_sql",
+        lambda sql: [
+            {
+                "fan_id": "fan_03248",
+                "merch_total_spend": 267.54,
+                "retail_total_spend": 244.86,
+            }
+        ],
+    )
+
+    response = llm_app_module.app.test_client().post(
+        "/api/ask",
+        json={
+            "question": "Can you also tell me what they spent it on?",
+            "provider": "ollama",
+            "history": [
+                {
+                    "question": "Why are these fans top 3?",
+                    "answer": "They are the top 3 by total spend.",
+                    "sql": (
+                        "SELECT fan_id, total_spend FROM mart_fan_loyalty "
+                        "ORDER BY total_spend DESC LIMIT 3"
+                    ),
+                    "data_preview": [
+                        {"fan_id": "fan_03248", "total_spend": 512.4},
+                        {"fan_id": "fan_17965", "total_spend": 417.59},
+                        {"fan_id": "fan_00219", "total_spend": 336.7},
+                    ],
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["trace"]["notes"][2].startswith("Included 1 recent conversation turn")
+
+    sql_prompt = next(prompt for prompt in captured_prompts if "SQL:" in prompt)
+    answer_prompt = next(prompt for prompt in captured_prompts if "Answer:" in prompt)
+    assert "RECENT CONVERSATION CONTEXT" in sql_prompt
+    assert "keep the SQL scoped to that subset" in sql_prompt
+    assert "fan_03248" in sql_prompt
+    assert "fan_17965" in sql_prompt
+    assert "fan_00219" in sql_prompt
+    assert "RECENT CONVERSATION CONTEXT" in answer_prompt
+
+
+def test_ask_route_rejects_invalid_history_payload(llm_app_module) -> None:
+    response = llm_app_module.app.test_client().post(
+        "/api/ask",
+        json={
+            "question": "Who spent the most?",
+            "provider": "ollama",
+            "history": {"question": "bad shape"},
+        },
+    )
+
+    assert response.status_code == 400
+    body = response.get_json()
+    assert body["error"] == "history must be a list of prior ask/answer turns"
 
 
 def _sample_leaderboard_rows() -> list[dict[str, object]]:

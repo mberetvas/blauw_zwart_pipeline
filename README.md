@@ -266,6 +266,8 @@ uv run python -m llm_api.app
 
 The API executes read-only `SELECT` / `WITH ... SELECT` queries only, wraps results in an outer `LIMIT 50`, and sets `statement_timeout` to 10 seconds on each DB session.
 
+The chat UI also sends a small slice of recent successful turns with each new `/api/ask` request so follow-up questions like “these fans”, “them”, or “that match” stay scoped to the previous result set instead of silently broadening back to the full table.
+
 `GET /api/leaderboard` uses the same read-only Postgres DSN (`LLM_READER_DATABASE_URL`, falling back to `DATABASE_URL`) as the Text-to-SQL API. In v1 it supports `window=all` only and ranks fans from `dbt_dev.mart_fan_loyalty` with:
 
 ```text

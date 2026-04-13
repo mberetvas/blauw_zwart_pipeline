@@ -72,6 +72,8 @@ LEADERBOARD_TIE_BREAKERS = [
     "matches_attended DESC",
     "fan_id ASC",
 ]
+ASK_CONTEXT_MAX_TURNS = 3
+ASK_CONTEXT_MAX_PREVIEW_ROWS = 5
 
 # ---------------------------------------------------------------------------
 # Security: forbidden SQL keywords that would mutate state
@@ -192,6 +194,7 @@ def _build_trace(
     provider_label: str,
     model: str,
     *,
+    conversation_turn_count: int = 0,
     raw_sql: str | None = None,
     sql: str | None = None,
     row_count: int | None = None,
@@ -202,6 +205,12 @@ def _build_trace(
         f"Used {provider_label} with model {model}.",
         "Asked the model for one PostgreSQL SELECT query based on the schema and your question.",
     ]
+    if conversation_turn_count:
+        notes.append(
+            "Included "
+            f"{conversation_turn_count} recent conversation turn(s) so "
+            "follow-up references stay scoped to the prior result set."
+        )
     if raw_sql is not None:
         if sql is not None and raw_sql.strip() != sql:
             notes.append(
@@ -539,6 +548,7 @@ class AskPipelineOk:
     """Successful SQL generation, validation, and execution; ready for answer step."""
 
     question: str
+    conversation_turn_count: int
     provider: str
     model: str
     provider_label: str
@@ -550,6 +560,97 @@ class AskPipelineOk:
     answer_prompt: str
 
 
+@dataclass(frozen=True)
+class ConversationTurn:
+    """Recent successful ask/answer turn used to resolve follow-up references."""
+
+    question: str
+    answer: str
+    sql: str | None
+    data_preview: list[dict[str, Any]]
+
+
+def _normalise_conversation_history(
+    body: dict[str, Any],
+) -> list[ConversationTurn]:
+    """Validate and normalise recent conversation history from the request body."""
+    raw_history = body.get("history")
+    if raw_history is None:
+        return []
+    if not isinstance(raw_history, list):
+        raise ValueError("history must be a list of prior ask/answer turns")
+
+    history: list[ConversationTurn] = []
+    for idx, item in enumerate(raw_history[-ASK_CONTEXT_MAX_TURNS:], start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"history[{idx}] must be an object")
+
+        question = str(item.get("question") or "").strip()
+        answer = str(item.get("answer") or "").strip()
+        if not question or not answer:
+            raise ValueError(
+                f"history[{idx}] must include non-empty question and answer strings"
+            )
+
+        sql = item.get("sql")
+        if sql is not None:
+            sql = str(sql).strip() or None
+
+        raw_preview = item.get("data_preview") or []
+        if not isinstance(raw_preview, list):
+            raise ValueError(f"history[{idx}].data_preview must be a list")
+
+        preview: list[dict[str, Any]] = []
+        for row_idx, row in enumerate(
+            raw_preview[:ASK_CONTEXT_MAX_PREVIEW_ROWS], start=1
+        ):
+            if not isinstance(row, dict):
+                raise ValueError(
+                    f"history[{idx}].data_preview[{row_idx}] must be an object"
+                )
+            preview.append(row)
+
+        history.append(
+            ConversationTurn(
+                question=question,
+                answer=answer,
+                sql=sql,
+                data_preview=preview,
+            )
+        )
+
+    return history
+
+
+def _conversation_context_section(history: list[ConversationTurn]) -> str:
+    """Return prompt context that helps the model scope follow-up questions."""
+    if not history:
+        return ""
+
+    blocks: list[str] = []
+    for idx, turn in enumerate(history, start=1):
+        lines = [
+            f"Turn {idx} user question: {turn.question}",
+            f"Turn {idx} assistant answer: {turn.answer}",
+        ]
+        if turn.sql:
+            lines.append(f"Turn {idx} SQL used: {turn.sql}")
+        if turn.data_preview:
+            preview_json = json.dumps(turn.data_preview, indent=2, default=_json_default)
+            lines.append(f"Turn {idx} data preview (JSON):\n{preview_json}")
+        blocks.append("\n".join(lines))
+
+    joined = "\n\n".join(blocks)
+    return (
+        "RECENT CONVERSATION CONTEXT:\n"
+        "Use the recent turns below only to resolve follow-up references such as "
+        "'these fans', 'them', 'those results', 'that match', or 'the same group'. "
+        "If the latest question refers to a previously returned subset, keep the SQL "
+        "scoped to that subset instead of broadening it to the whole table.\n\n"
+        f"{joined}\n\n"
+    )
+
+
 def _ask_run_through_execution(
     body: dict[str, Any],
 ) -> AskPipelineOk | tuple[dict[str, Any], int]:
@@ -557,6 +658,10 @@ def _ask_run_through_execution(
     question: str = (body.get("question") or "").strip()
     if not question:
         return ({"error": "question is required"}, 400)
+    try:
+        history = _normalise_conversation_history(body)
+    except ValueError as exc:
+        return ({"error": str(exc)}, 400)
 
     s = get_llm_settings()
     provider = (body.get("provider") or s["default_provider"]).strip().lower()
@@ -603,11 +708,13 @@ def _ask_run_through_execution(
     semantic_section = (
         f"SEMANTIC LAYER:\n{sql_semantic_ctx}\n" if sql_semantic_ctx else ""
     )
+    conversation_section = _conversation_context_section(history)
     sql_prompt = (
         "You are a PostgreSQL expert. Given the schema below, write a single "
         "SELECT query that answers the question. Return ONLY the SQL — no "
         "explanation, no markdown, no code fences.\n\n"
         f"{semantic_section}"
+        f"{conversation_section}"
         f"Schema:\n{schema_context}\n"
         f"Question: {question}\n\n"
         "SQL:"
@@ -620,7 +727,12 @@ def _ask_run_through_execution(
         return (
             {
                 "error": error,
-                "trace": _build_trace(provider, provider_label, model),
+                "trace": _build_trace(
+                    provider,
+                    provider_label,
+                    model,
+                    conversation_turn_count=len(history),
+                ),
             },
             status,
         )
@@ -631,6 +743,7 @@ def _ask_run_through_execution(
         provider,
         provider_label,
         model,
+        conversation_turn_count=len(history),
         raw_sql=raw_sql,
         sql=sql,
     )
@@ -669,7 +782,13 @@ def _ask_run_through_execution(
     answer_prompt = (
         "You are a helpful data analyst for a football club. "
         "Answer the question below using the data provided.\n\n"
+        "Output format — Markdown only:\n"
+        "- Respond only in GitHub-flavored Markdown (headings, bold, lists, tables, "
+        "inline `code`, fenced code blocks when useful).\n"
+        "- Do not wrap the entire answer in one outer fenced code block.\n"
+        "- Do not include raw HTML tags in your answer.\n\n"
         f"{answer_guidelines_section}"
+        f"{conversation_section}"
         f"Question: {question}\n\n"
         f"Data (JSON, up to 10 rows):\n{json.dumps(preview, indent=2)}\n\n"
         "Answer:"
@@ -679,6 +798,7 @@ def _ask_run_through_execution(
         provider,
         provider_label,
         model,
+        conversation_turn_count=len(history),
         raw_sql=raw_sql,
         sql=sql,
         row_count=len(rows),
@@ -686,6 +806,7 @@ def _ask_run_through_execution(
 
     return AskPipelineOk(
         question=question,
+        conversation_turn_count=len(history),
         provider=provider,
         model=model,
         provider_label=provider_label,
@@ -869,6 +990,7 @@ def ask() -> Any:
                         ok.provider,
                         ok.provider_label,
                         ok.model,
+                        conversation_turn_count=ok.conversation_turn_count,
                         raw_sql=ok.raw_sql,
                         sql=ok.sql,
                         row_count=len(ok.rows),
@@ -887,6 +1009,7 @@ def ask() -> Any:
                 ok.provider,
                 ok.provider_label,
                 ok.model,
+                conversation_turn_count=ok.conversation_turn_count,
                 raw_sql=ok.raw_sql,
                 sql=ok.sql,
                 row_count=len(ok.rows),

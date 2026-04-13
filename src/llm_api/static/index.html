@@ -129,7 +129,38 @@ tailwind.config = {
   #model-input::placeholder{color:#414655}
   /* ── No-line rule ───────────────────────────────────── */
   .no-line-rule{border:none!important}
+  /* ── Markdown answer (assistant bubble) ───────────── */
+  .msg.assistant .markdown-body{white-space:normal;min-width:0}
+  .msg.assistant .markdown-body > :first-child{margin-top:0}
+  .msg.assistant .markdown-body > :last-child{margin-bottom:0}
+  .msg.assistant .markdown-body p{margin:.5rem 0}
+  .msg.assistant .markdown-body h1,
+  .msg.assistant .markdown-body h2,
+  .msg.assistant .markdown-body h3,
+  .msg.assistant .markdown-body h4{margin:.75rem 0 .35rem;font-family:'Chivo',system-ui,sans-serif;font-weight:700;color:#dae2fd;line-height:1.35}
+  .msg.assistant .markdown-body h1{font-size:1.15rem}
+  .msg.assistant .markdown-body h2{font-size:1.05rem}
+  .msg.assistant .markdown-body h3{font-size:1rem}
+  .msg.assistant .markdown-body h4{font-size:.95rem}
+  .msg.assistant .markdown-body ul,
+  .msg.assistant .markdown-body ol{margin:.35rem 0;padding-left:1.25rem}
+  .msg.assistant .markdown-body li{margin:.2rem 0}
+  .msg.assistant .markdown-body li > p{margin:.15rem 0}
+  .msg.assistant .markdown-body hr{border:none;border-top:1px solid rgba(255,255,255,.1);margin:.75rem 0}
+  .msg.assistant .markdown-body code{font-family:'Consolas','Menlo',monospace;font-size:.88em;background:#171f33;padding:.1em .35em;border-radius:.2rem;color:#b0c6ff;white-space:pre-wrap}
+  .msg.assistant .markdown-body pre{background:#060e20;padding:.75rem 1rem;border-radius:.35rem;overflow-x:auto;margin:.5rem 0;line-height:1.55}
+  .msg.assistant .markdown-body pre code{background:transparent;padding:0;font-size:.78rem;color:#6ab0f5;white-space:pre;word-break:normal}
+  .msg.assistant .markdown-body table{border-collapse:collapse;width:100%;font-size:.875rem;margin:.5rem 0;font-variant-numeric:tabular-nums}
+  .msg.assistant .markdown-body th,
+  .msg.assistant .markdown-body td{border:1px solid rgba(255,255,255,.08);padding:.35rem .5rem;text-align:left}
+  .msg.assistant .markdown-body th{background:#171f33;color:#8c90a1;font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;font-family:'Chivo',system-ui,sans-serif}
+  .msg.assistant .markdown-body td{color:#dae2fd}
+  .msg.assistant .markdown-body a{color:#548dff;text-decoration:underline;word-break:break-word}
+  .msg.assistant .markdown-body blockquote{border-left:3px solid #548dff;margin:.5rem 0;padding:.25rem 0 .25rem .75rem;color:#c2c6d8}
+  .msg.assistant .markdown-body strong{color:#dae2fd;font-weight:700}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 </head>
 <body class="bg-surface text-on-surface font-body overflow-hidden">
 
@@ -312,7 +343,12 @@ tailwind.config = {
   let busy = false;
   let abortCtrl = null;
   let cancelTimer = null;
+  const conversationTurns = [];
   const TIMEOUT_MS = 120_000;
+
+  if (typeof marked !== "undefined" && typeof marked.use === "function") {
+    marked.use({ gfm: true, breaks: true });
+  }
 
   function fillOpenrouterDatalist(models) {
     const dl = document.getElementById("openrouter-models");
@@ -421,6 +457,7 @@ tailwind.config = {
   clearBtn.addEventListener("click", () => {
     if (busy) return;
     messagesEl.innerHTML = WELCOME_HTML;
+    conversationTurns.length = 0;
     questionEl.focus();
   });
 
@@ -450,6 +487,7 @@ tailwind.config = {
     abortCtrl = new AbortController();
     const timeoutId = setTimeout(() => abortCtrl.abort(), TIMEOUT_MS);
     cancelTimer = setTimeout(() => cancelBtn.classList.add("visible"), 3000);
+    let responseMeta = null;
 
     try {
       const res = await fetch("/api/ask/stream", {
@@ -458,7 +496,12 @@ tailwind.config = {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
         },
-        body: JSON.stringify({ question: q, provider: providerEl.value, model: modelEl.value.trim() }),
+        body: JSON.stringify({
+          question: q,
+          provider: providerEl.value,
+          model: modelEl.value.trim(),
+          history: buildHistoryPayload(),
+        }),
         signal: abortCtrl.signal,
       });
       clearTimeout(timeoutId);
@@ -478,7 +521,7 @@ tailwind.config = {
         const decoder = new TextDecoder();
         let buffer = "";
         let msgEl = null;
-        let answerSpan = null;
+        let answerMdEl = null;
         let accumulated = "";
         let metaReceived = false;
         let streamDone = false;
@@ -518,19 +561,23 @@ tailwind.config = {
               if (event === "meta") {
                 thinking.remove();
                 metaReceived = true;
+                responseMeta = payload;
                 let shell =
-                  '<div class="answer-text"><span class="answer-stream" aria-live="polite"></span></div>'
+                  '<div class="answer-text"><div class="answer-stream markdown-body" aria-live="polite"></div></div>'
                   + buildMetaDetailsHtml(payload)
                   + '<button class="copy-btn" type="button" aria-label="Copy answer" disabled>Copy</button>';
                 msgEl = appendMsg("assistant", shell);
-                answerSpan = msgEl.querySelector(".answer-stream");
+                answerMdEl = msgEl.querySelector(".answer-stream");
                 announce("Streaming answer\u2026");
-              } else if (event === "answer_delta" && answerSpan && payload.text) {
+              } else if (event === "answer_delta" && answerMdEl && payload.text) {
                 accumulated += payload.text;
-                answerSpan.textContent = accumulated;
-                messagesEl.scrollTop = messagesEl.scrollHeight;
+                scheduleAnswerMarkdown(answerMdEl, accumulated);
               } else if (event === "done") {
                 streamDone = true;
+                if (answerMdEl && accumulated) {
+                  answerMdEl.innerHTML = renderAnswerMarkdown(accumulated);
+                  messagesEl.scrollTop = messagesEl.scrollHeight;
+                }
                 if (msgEl) {
                   const copyBtn = msgEl.querySelector(".copy-btn");
                   copyBtn.disabled = false;
@@ -571,6 +618,9 @@ tailwind.config = {
           try { reader.releaseLock(); } catch (_) {}
         }
 
+        if (streamDone && accumulated.trim().length) {
+          rememberConversationTurn(q, accumulated, responseMeta);
+        }
         if (!metaReceived) {
           thinking.remove();
           showError({ error: "Empty response from server." });
@@ -677,6 +727,53 @@ tailwind.config = {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
+  function renderAnswerMarkdown(md) {
+    if (typeof md !== "string" || md === "") return "";
+    if (typeof marked === "undefined" || typeof DOMPurify === "undefined") {
+      return escHtml(md).replace(/\n/g, "<br>");
+    }
+    try {
+      const raw = marked.parse(md);
+      return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
+    } catch (_) {
+      return escHtml(md).replace(/\n/g, "<br>");
+    }
+  }
+
+  function scheduleAnswerMarkdown(el, text) {
+    el._pendingMd = text;
+    if (el._mdScheduled) return;
+    el._mdScheduled = true;
+    requestAnimationFrame(function () {
+      el._mdScheduled = false;
+      el.innerHTML = renderAnswerMarkdown(el._pendingMd);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    });
+  }
+
+  function buildHistoryPayload() {
+    return conversationTurns.slice(-3).map((turn) => ({
+      question: turn.question,
+      answer: turn.answer,
+      sql: turn.sql,
+      data_preview: Array.isArray(turn.data_preview) ? turn.data_preview.slice(0, 5) : [],
+    }));
+  }
+
+  function rememberConversationTurn(question, answer, meta) {
+    if (!question || !answer) return;
+    conversationTurns.push({
+      question,
+      answer,
+      sql: meta && typeof meta.sql === "string" ? meta.sql : "",
+      data_preview:
+        meta && Array.isArray(meta.data_preview) ? meta.data_preview.slice(0, 5) : [],
+    });
+    if (conversationTurns.length > 6) {
+      conversationTurns.splice(0, conversationTurns.length - 6);
+    }
+  }
+
   function buildMetaDetailsHtml(data) {
     let html = "";
     if (data.trace) html += buildTraceHtml(data.trace);
@@ -713,11 +810,15 @@ tailwind.config = {
   // ── Render answer (non-streaming JSON; e.g. other clients) ──
   function showAnswer(data) {
     const answerText = data.answer || "";
-    let html = '<div class="answer-text">' + escHtml(answerText) + "</div>";
+    let html = '<div class="answer-text"><div class="answer-stream markdown-body"></div></div>';
     html += buildMetaDetailsHtml(data);
     html += '<button class="copy-btn" type="button" aria-label="Copy answer">Copy</button>';
 
     const msgEl = appendMsg("assistant", html);
+    const mdEl = msgEl.querySelector(".answer-stream");
+    if (mdEl) {
+      mdEl.innerHTML = renderAnswerMarkdown(answerText);
+    }
     const copyBtn = msgEl.querySelector(".copy-btn");
     wireCopyButton(copyBtn, answerText);
   }
