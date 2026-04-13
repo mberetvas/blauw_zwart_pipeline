@@ -2,7 +2,7 @@
 
 # Blauw zwart - Mock-up data creator
 
-Synthetic fan-event pipeline for Club Brugge KV simulations. The package name in `pyproject.toml` is **`blauw-zwart-fan-sim-pipeline`** and the repository ships three Python packages under `src\`: **`fan_events`** (event generation CLI), **`fan_ingest`** (Kafka to Postgres ingest CLI), and **`llm_api`** (Flask Text-to-SQL API used by Docker Compose).
+Synthetic fan-event pipeline for Club Brugge KV simulations. The package name in `pyproject.toml` is **`blauw-zwart-fan-sim-pipeline`** and the repository ships five Python packages under `src\`: **`fan_events`** (event generation CLI), **`fan_ingest`** (Kafka to Postgres ingest for fan events), **`proleague_scraper`** (Pro League squad scraper + HTTP server + daily scheduler), **`proleague_ingest`** (Kafka to Postgres ingest for player stats), and **`llm_api`** (Flask Text-to-SQL API and browser UI used by Docker Compose).
 
 ## Table of contents
 
@@ -12,6 +12,7 @@ Synthetic fan-event pipeline for Club Brugge KV simulations. The package name in
 - [Quick start](#quick-start)
 - [CLIs](#clis)
 - [Compose pipeline](#compose-pipeline)
+- [Player stats pipeline](#player-stats-pipeline)
 - [API](#api)
 - [dbt and analytics](#dbt-and-analytics)
 - [Development and test](#development-and-test)
@@ -23,13 +24,15 @@ Synthetic fan-event pipeline for Club Brugge KV simulations. The package name in
 | Surface | What it does | How you run it |
 |---------|---------------|----------------|
 | `fan_events` | Generates synthetic NDJSON fan events | `uv run fan_events ...` |
-| `fan_ingest` | Consumes Kafka messages and writes to Postgres | `uv run fan_ingest ...` or the Compose `ingest` service |
+| `fan_ingest` | Consumes `fan_events` Kafka topic → writes to Postgres | `uv run fan_ingest ...` or the Compose `ingest` service |
+| `proleague_scraper` | Scrapes Club Brugge squad from proleague.be; HTTP read layer | Compose `proleague-scraper` service or `python -m proleague_scraper.app` |
+| `proleague_ingest` | Consumes `player_stats` Kafka topic → upserts `player_stats` table | Compose `proleague-ingest` service |
 | `llm_api` | Serves the browser UI and Text-to-SQL API over Flask | Compose `llm-api` service or `uv run python -m llm_api.app` |
 | `dbt\` | Builds analytics models such as `mart_fan_loyalty` | `uv run dbt ...` or the Compose `dbt-scheduler` service |
 | `docker-compose.yml` | Starts the local operator stack | `docker compose up -d` |
 | `justfile` | Convenience wrappers for common local tasks | `just <recipe>` |
 
-For how those services connect and how events move through Kafka and Postgres into dbt and **`llm-api`**, see the diagrams under [Compose pipeline](#compose-pipeline).
+For how those services connect and how events move through Kafka and Postgres into dbt and **`llm-api`**, see the diagrams under [Compose pipeline](#compose-pipeline) and [Player stats pipeline](#player-stats-pipeline).
 
 `fan_events` exposes three subcommands:
 
@@ -70,6 +73,8 @@ The project metadata currently defines these install knobs:
 | Everything for local host development | `uv sync --all-extras --group dbt` | Pulls all extras plus dbt |
 
 Named dependency groups in `pyproject.toml` are **`dev`** and **`dbt`**. Optional extras are **`kafka`**, **`ingest`**, and **`api`**. Console scripts are **`fan_events`** and **`fan_ingest`**.
+
+The `proleague_scraper` and `proleague_ingest` packages are built as standalone pip-based Docker images (`docker/Dockerfile.scraper` and `docker/Dockerfile.scraper-ingest`) and are not part of the uv extras; they run exclusively inside Docker Compose.
 
 ## Quick start
 
@@ -163,9 +168,9 @@ Defaults are Compose-oriented: `broker:29092`, topic `fan_events`, consumer grou
 
 ## Compose pipeline
 
-The Compose file runs Kafka (KRaft), Postgres, synthetic **`fan_events stream`** publishing, **`fan_ingest`**, periodic dbt, pgAdmin, and the Flask **`llm-api`**. The diagrams below show topology and data flow; the tables that follow list each service, defaults, and operator commands.
+The Compose file runs Kafka (KRaft), Postgres, synthetic **`fan_events stream`** publishing, **`fan_ingest`**, periodic dbt, pgAdmin, the Flask **`llm-api`**, and the [player stats pipeline](#player-stats-pipeline). The diagrams below show topology and data flow; the tables that follow list each service, defaults, and operator commands.
 
-**Diagram A — Compose service map:** services, persisted volumes, startup dependencies (`service_healthy` / `kafka-init` completion), and the ingest topic between **`producer`**, **`broker`**, and **`ingest`**.
+**Diagram A — Compose service map:** services, persisted volumes, startup dependencies, and the two Kafka topics.
 
 ```mermaid
 flowchart TB
@@ -177,8 +182,12 @@ flowchart TB
 
   broker["broker — Kafka 4.x KRaft<br/>Compose clients: broker:29092<br/>Host clients: localhost:9092"]
   kafka_init["kafka-init — one-shot<br/>creates KAFKA_TOPIC default fan_events"]
+  kafka_init_s["kafka-init-scraper — one-shot<br/>creates SCRAPER_KAFKA_TOPIC default player_stats"]
   producer["producer — fan_events stream"]
   ingest["ingest — fan_ingest"]
+  sched["proleague-scheduler — daily scrape"]
+  pl_ingest["proleague-ingest — player_stats consumer"]
+  pl_scraper["proleague-scraper — HTTP read layer"]
   postgres["postgres — Postgres 18<br/>init: docker/postgres/init/"]
   dbt_sched["dbt-scheduler"]
   pgadmin["pgadmin"]
@@ -188,23 +197,32 @@ flowchart TB
   postgres --- V_PG
   llm_api --- V_LLM
 
-  kafka_init -->|"depends_on: broker healthy"| broker
-  producer -->|"depends_on: broker healthy"| broker
-  producer -->|"depends_on: postgres healthy"| postgres
-  producer -->|"depends_on: kafka-init done"| kafka_init
-  ingest -->|"depends_on: broker healthy"| broker
-  ingest -->|"depends_on: postgres healthy"| postgres
-  ingest -->|"depends_on: kafka-init done"| kafka_init
+  kafka_init -->|depends_on: broker healthy| broker
+  kafka_init_s -->|depends_on: broker healthy| broker
 
-  dbt_sched -->|"depends_on: postgres healthy"| postgres
-  pgadmin -->|"depends_on: postgres healthy"| postgres
-  llm_api -->|"depends_on: postgres healthy"| postgres
+  producer -->|depends_on: broker healthy| broker
+  producer -->|depends_on: kafka-init done| kafka_init
+  producer -->|depends_on: postgres healthy| postgres
 
-  producer -->|"produce KAFKA_TOPIC default fan_events"| broker
-  broker -->|"consume same topic"| ingest
+  ingest -->|depends_on: broker healthy| broker
+  ingest -->|depends_on: kafka-init done| kafka_init
+  ingest -->|depends_on: postgres healthy| postgres
+
+  sched -->|depends_on: broker healthy| broker
+  sched -->|depends_on: kafka-init-scraper done| kafka_init_s
+
+  pl_ingest -->|depends_on: broker healthy| broker
+  pl_ingest -->|depends_on: kafka-init-scraper done| kafka_init_s
+  pl_ingest -->|depends_on: postgres healthy| postgres
+
+  pl_scraper -->|depends_on: postgres healthy| postgres
+
+  dbt_sched -->|depends_on: postgres healthy| postgres
+  pgadmin -->|depends_on: postgres healthy| postgres
+  llm_api -->|depends_on: postgres healthy| postgres
 ```
 
-**Diagram B — End-to-end data flow:** synthetic NDJSON from the container **`producer`** (or optionally from the host) through Kafka and **`fan_ingest`** into Postgres, dbt marts refreshed by **`dbt-scheduler`**, and read-only queries from **`llm-api`**. **Ollama** runs on the host and is reached from the container via `host.docker.internal` (see [API](#api)).
+**Diagram B — End-to-end data flow:** two Kafka topics feeding two separate ingest paths into Postgres, dbt marts, and the Flask API.
 
 ```mermaid
 flowchart LR
@@ -215,32 +233,41 @@ flowchart LR
 
   subgraph stack["Docker Compose"]
     producer["producer<br/>fan_events stream"]
-    broker["broker<br/>topic fan_events"]
+    sched["proleague-scheduler<br/>daily scrape_squad"]
+    broker["broker<br/>topic fan_events<br/>topic player_stats"]
     ingest["fan_ingest"]
-    pg[("Postgres 18")]
-    dbt["dbt-scheduler<br/>DBT_RUN_SELECTOR default +mart_fan_loyalty"]
-    llm["llm-api<br/>LLM_READER_DATABASE_URL"]
+    pl_ingest["proleague-ingest"]
+    pg[("Postgres 18<br/>fan_events_ingested<br/>player_stats")]
+    dbt["dbt-scheduler<br/>+mart_fan_loyalty"]
+    llm["llm-api<br/>reads fan + player data"]
   end
 
-  producer -->|"NDJSON produce"| broker
+  producer -->|"produce fan_events"| broker
   host_producer -.->|"optional produce"| broker
-  broker -->|"consume"| ingest
-  ingest -->|"write ingested / raw layer"| pg
-  dbt -->|"build / refresh marts"| pg
-  llm -->|"read-only SELECT / WITH"| pg
-  ollama -.->|"LLM HTTP when provider is Ollama"| llm
+  sched -->|"produce player_stats (daily)"| broker
+  broker -->|"consume fan_events"| ingest
+  broker -->|"consume player_stats"| pl_ingest
+  ingest -->|"INSERT fan_events_ingested"| pg
+  pl_ingest -->|"UPSERT player_stats"| pg
+  dbt -->|"build/refresh marts"| pg
+  llm -->|"SELECT (read-only)"| pg
+  ollama -.->|"LLM HTTP (Ollama provider)"| llm
 ```
 
 | Service name | Purpose |
 |--------------|---------|
 | `broker` | Apache Kafka 4.2.0 in KRaft mode |
-| `kafka-init` | Creates the ingest topic before consumers subscribe |
+| `kafka-init` | Creates `fan_events` topic before fan-event consumers subscribe |
+| `kafka-init-scraper` | Creates `player_stats` topic before scraper and ingest start |
 | `postgres` | PostgreSQL 18 |
-| `dbt-scheduler` | Periodic dbt runner for marts |
+| `dbt-scheduler` | Periodic dbt runner for analytics marts |
 | `pgadmin` | Browser UI for Postgres |
-| `ingest` | Runs `fan_ingest` inside Docker |
-| `producer` | Runs `fan_events stream` inside Docker |
-| `llm-api` | Flask API and browser UI |
+| `ingest` | Runs `fan_ingest` — `fan_events` topic → `fan_events_ingested` table |
+| `producer` | Runs `fan_events stream` — synthetic fan events |
+| `proleague-scraper` | HTTP read layer; serves `/squad` and `/player` from DB |
+| `proleague-scheduler` | Daily scrape loop — publishes player stats to `player_stats` Kafka topic |
+| `proleague-ingest` | Kafka consumer — `player_stats` topic → `public.player_stats` Postgres table |
+| `llm-api` | Flask API and browser UI; reads both fan and player data from Postgres |
 
 The Compose defaults in `.env.example` line up like this:
 
@@ -249,6 +276,10 @@ The Compose defaults in `.env.example` line up like this:
 | `KAFKA_BOOTSTRAP_SERVERS` | `broker:29092` |
 | `KAFKA_TOPIC` | `fan_events` |
 | `KAFKA_CONSUMER_GROUP` | `fan-ingest-local` |
+| `SCRAPER_KAFKA_TOPIC` | `player_stats` |
+| `SCRAPER_KAFKA_CONSUMER_GROUP` | `scraper-ingest-local` |
+| `SCRAPER_INTERVAL_HOURS` | `24` |
+| `SCRAPER_RUN_ON_STARTUP` | `1` |
 | `DATABASE_URL` | `postgresql://postgres:changeme@postgres:5432/fan_pipeline` |
 | `LLM_READER_PASSWORD` | `change-this-dev-password` |
 | `LLM_READER_DATABASE_URL` | `postgresql://llm_reader:change-this-dev-password@postgres:5432/fan_pipeline` |
@@ -281,6 +312,119 @@ If you use `just`, these recipes are already wired:
 | `just generate-events` | v1 rolling batch |
 | `just generate-calendar` | v2 calendar batch |
 | `just generate-retail` | v3 retail batch |
+
+## Player stats pipeline
+
+The player stats pipeline scrapes Club Brugge squad data from [proleague.be](https://www.proleague.be), publishes it to a dedicated Kafka topic, and persists it to Postgres. The browser player-stats page reads from the database so normal page loads never trigger a live HTTP scrape.
+
+> **Compliance notice:** Operators are responsible for verifying [proleague.be/robots.txt](https://www.proleague.be/robots.txt) and the site's Terms of Use before running the scraper against the live site in any environment.
+
+### Data flow
+
+```
+proleague-scheduler ──(scrape_squad, once per SCRAPER_INTERVAL_HOURS)──► Kafka: player_stats
+                                                                                  │
+proleague-ingest ◄──(consume, group scraper-ingest-local)─────────────────────────┘
+        │
+        └──(UPSERT ON CONFLICT player_id)──► Postgres: public.player_stats
+                                                        │
+llm-api /api/player-stats/squad ◄──(SELECT, read-only)──┘  (instant, no scraping)
+        │
+player-stats.html ◄──────────────────────────────────────(fetch)
+```
+
+### New Compose services
+
+| Service | Docker image | Purpose |
+|---------|-------------|---------|
+| `proleague-scheduler` | `Dockerfile.scraper` + `command: python -m proleague_scraper.scheduler` | Daily `scrape_squad` → produce one Kafka message per player |
+| `proleague-ingest` | `Dockerfile.scraper-ingest` (`confluent-kafka` + `psycopg2-binary`) | `player_stats` Kafka consumer → `UPSERT` into `public.player_stats` |
+| `proleague-scraper` | `Dockerfile.scraper` | Read-only HTTP server: `/health`, `/squad` (DB), `/player` (live fetch) |
+| `kafka-init-scraper` | `apache/kafka:4.2.0` | One-shot: creates `player_stats` topic before dependent services start |
+
+### Kafka message schema (v1)
+
+Each message on the `player_stats` topic carries one player:
+
+```json
+{
+  "_schema_version": 1,
+  "event_type":  "player_stats_scraped",
+  "source_url":  "https://www.proleague.be/teams/club-brugge-kv-182/squad",
+  "scraped_at":  "2026-04-13T21:00:00Z",
+  "player": {
+    "player_id": "3219",
+    "slug":      "simon-mignolet-3219",
+    "name":      "Simon Mignolet",
+    "position":  "Goalkeeper",
+    "shirt_number": 1,
+    "image_url": "https://imagecache.proleague.be/...",
+    "profile":   { "height_cm": 193, "preferred_foot": "Right", ... },
+    "stats":     [{ "key": "savesMade", "label": "Saves", "value": 72 }, ...]
+  }
+}
+```
+
+**Key** is `player_id` bytes for deterministic partition routing. Messages are idempotent: `UPSERT ON CONFLICT (player_id) DO UPDATE` ensures re-runs and duplicate messages are safe.
+
+### Postgres table
+
+`public.player_stats` — created by `docker/postgres/init/003_player_stats.sql`:
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `player_id` | TEXT PK | Pro League numeric ID |
+| `slug` | TEXT | URL slug, e.g. `simon-mignolet-3219` |
+| `name` | TEXT | Display name |
+| `position` / `field_position` | TEXT | Position labels |
+| `shirt_number` | INTEGER | |
+| `image_url` | TEXT | CDN URL from `__NEXT_DATA__` |
+| `profile` | JSONB | `birth_date`, `height_cm`, `weight_kg`, `preferred_foot`, `nationality`, … |
+| `stats` | JSONB | Array of `{key, label, value}` for main competition (Jupiler Pro League) |
+| `competition` | TEXT | Competition name |
+| `source_url` | TEXT | Squad page URL used for this scrape |
+| `scraped_at` | TIMESTAMPTZ | UTC timestamp of last successful scrape |
+
+`llm_reader` role has `SELECT` on this table, so the LLM Text-to-SQL API can query it.
+
+### Scheduler configuration
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `SCRAPER_KAFKA_TOPIC` | `player_stats` | Kafka topic name |
+| `SCRAPER_KAFKA_CONSUMER_GROUP` | `scraper-ingest-local` | Consumer group (distinct from `fan-ingest-local`) |
+| `SCRAPER_INTERVAL_HOURS` | `24` | Hours between scrape runs |
+| `SCRAPER_RUN_ON_STARTUP` | `1` | `1` = run immediately on container start; `0` = wait first interval |
+| `PROLEAGUE_SQUAD_URL` | Club Brugge squad URL | Override target squad page |
+| `KAFKA_BOOTSTRAP_SERVERS` | `broker:29092` | Kafka bootstrap (shared with fan events) |
+
+### Smoke test
+
+```bash
+docker compose up -d
+
+# Watch the scheduler run (~60 s for a full squad scrape):
+docker compose logs -f proleague-scheduler
+
+# Watch the ingest consumer persist rows:
+docker compose logs -f proleague-ingest
+
+# Verify rows in Postgres:
+docker compose exec postgres sh -lc \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT player_id, name, scraped_at FROM player_stats ORDER BY name LIMIT 5;"'
+
+# Verify the API endpoint (instant — reads from DB):
+curl -s http://localhost:8080/api/player-stats/squad | python -m json.tool
+
+# Browser:
+open http://localhost:8080/player-stats
+```
+
+To force an immediate re-scrape outside the 24-hour window:
+
+```bash
+docker compose restart proleague-scheduler
+```
 
 ## API
 
@@ -324,17 +468,20 @@ uv run python -m llm_api.app
 |--------|------|---------|
 | `GET` | `/` | Main chat UI |
 | `GET` | `/leaderboard` | Leaderboard page |
-| `GET` | `/player-stats` | Player stats page |
+| `GET` | `/player-stats` | Player stats comparison page |
 | `GET` | `/settings` | Settings page |
 | `GET` | `/health` | Health check |
 | `GET` | `/api/leaderboard?window=all` | Live all-time fan leaderboard from `mart_fan_loyalty` |
 | `GET` | `/api/llm-config` | Read public runtime config |
 | `PUT` | `/api/llm-config` | Persist runtime config changes |
 | `POST` | `/api/ask` | Question to SQL to answer flow |
+| `GET` | `/api/player-stats/squad` | Club Brugge squad + stats from `public.player_stats` (DB read) |
+| `GET` | `/api/player-stats/player?url=<url>` | Live single-player fetch via `proleague-scraper` |
+| `GET` | `/api/player-stats/image?url=<url>` | Server-side image proxy for proleague.be CDN images |
 
 The API executes read-only `SELECT` / `WITH ... SELECT` queries only, wraps results in an outer `LIMIT 50`, and sets `statement_timeout` to 10 seconds on each DB session.
 
-The chat UI also sends a small slice of recent successful turns with each new `/api/ask` request so follow-up questions like “these fans”, “them”, or “that match” stay scoped to the previous result set instead of silently broadening back to the full table.
+The chat UI also sends a small slice of recent successful turns with each new `/api/ask` request so follow-up questions like "these fans", "them", or "that match" stay scoped to the previous result set instead of silently broadening back to the full table.
 
 `GET /api/leaderboard` uses the same read-only Postgres DSN (`LLM_READER_DATABASE_URL`, falling back to `DATABASE_URL`) as the Text-to-SQL API. In v1 it supports `window=all` only and ranks fans from `dbt_dev.mart_fan_loyalty` with:
 
@@ -349,6 +496,8 @@ points = ROUND(
 ```
 
 Tie-breakers are `points DESC`, `matches_attended DESC`, `total_spend DESC`, and `fan_id ASC`. Referral/community-engagement metrics are not tracked yet, so the leaderboard returns `null` for those values instead of inventing them.
+
+`GET /api/player-stats/squad` reads directly from `public.player_stats` via psycopg2 (no synchronous scrape on page load). Returns `{"players": [], "fetched_at": ""}` until the first daily scrape cycle completes.
 
 ## dbt and analytics
 
@@ -389,6 +538,8 @@ uv run fan_events --help
 uv run fan_ingest --help
 ```
 
+The test suite (311 tests) covers `fan_events`, `fan_ingest`, `proleague_scraper`, `proleague_ingest.consumer`, `llm_api`, and dbt-adjacent contracts. All tests run without network access or a live Kafka/Postgres instance; scraper and Kafka tests use local HTML/JSON fixtures and mocked producers.
+
 ## Troubleshooting
 
 | Problem | What to check |
@@ -400,6 +551,10 @@ uv run fan_ingest --help
 | `llm-api` returns provider errors | Verify Ollama is running on the host or that OpenRouter keys/model access are configured |
 | dbt on Windows fails with Postgres DLL issues | Use `uv sync --group dbt` and `uv run dbt ...` rather than a global `dbt` binary |
 | You want only one calendar pass from `stream` | Add `--no-calendar-loop` |
+| `/player-stats` page shows no players | The first scrape hasn't completed yet; check `docker compose logs proleague-scheduler` and wait |
+| Player images do not load | Images are proxied through `/api/player-stats/image`; check `docker compose logs llm-api` for proxy errors |
+| `proleague-scheduler` fails with HTTP errors | proleague.be may be temporarily unreachable; the scheduler logs the error and retries at the next interval |
+| Player data is stale | Restart `proleague-scheduler` to trigger an immediate re-scrape: `docker compose restart proleague-scheduler` |
 
 ## Specs and links
 

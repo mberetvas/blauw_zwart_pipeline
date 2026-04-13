@@ -3,7 +3,8 @@
 The scraper writes here after every squad fetch; the Flask app serves the
 cached rows to avoid re-scraping on every request.
 
-Table: ``player_stats`` (created by docker/postgres/init/003_player_stats.sql).
+Table: ``player_stats`` (docker/postgres/init/003_player_stats.sql on first boot;
+``ensure_player_stats_table`` creates it at runtime if the volume predates that script).
 Upserts are keyed on ``player_id`` so re-runs overwrite stale rows.
 """
 
@@ -12,12 +13,35 @@ from __future__ import annotations
 import json
 import logging
 import os
+import weakref
 from typing import Any
 
 import psycopg2
 import psycopg2.extras
 
 log = logging.getLogger(__name__)
+
+# One-time ensure per live connection (psycopg2 C objects may not allow custom attrs).
+_conn_player_stats_ready: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+# Same DDL as docker/postgres/init/003_player_stats.sql — run at runtime so existing
+# DB volumes (created before that init script existed) get the table without a manual migration.
+_ENSURE_PLAYER_STATS_SQL = """
+CREATE TABLE IF NOT EXISTS player_stats (
+    player_id       TEXT        PRIMARY KEY,
+    slug            TEXT        NOT NULL,
+    name            TEXT        NOT NULL,
+    position        TEXT,
+    field_position  TEXT,
+    shirt_number    INTEGER,
+    image_url       TEXT,
+    profile         JSONB       NOT NULL DEFAULT '{}',
+    stats           JSONB       NOT NULL DEFAULT '[]',
+    competition     TEXT,
+    source_url      TEXT,
+    scraped_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+"""
 
 _UPSERT_SQL = """
 INSERT INTO player_stats (
@@ -58,6 +82,22 @@ def get_connection() -> psycopg2.extensions.connection:
     return psycopg2.connect(url)
 
 
+def ensure_player_stats_table(conn: psycopg2.extensions.connection) -> None:
+    """Create ``player_stats`` if missing (idempotent).
+
+    Docker init only runs on an empty data directory; this covers upgraded volumes.
+    """
+    with conn.cursor() as cur:
+        cur.execute(_ENSURE_PLAYER_STATS_SQL)
+    conn.commit()
+
+
+def _ensure_player_stats_once(conn: psycopg2.extensions.connection) -> None:
+    if _conn_player_stats_ready.get(conn) is not True:
+        ensure_player_stats_table(conn)
+        _conn_player_stats_ready[conn] = True
+
+
 def upsert_players(
     conn: psycopg2.extensions.connection,
     players: list[dict[str, Any]],
@@ -69,6 +109,8 @@ def upsert_players(
     Players that carry an ``error`` key or have an empty ``player_id`` are skipped.
     Returns the number of rows actually written.
     """
+    _ensure_player_stats_once(conn)
+
     count = 0
     with conn.cursor() as cur:
         for p in players:
@@ -101,6 +143,7 @@ def get_players(
     conn: psycopg2.extensions.connection,
 ) -> list[dict[str, Any]]:
     """Return all rows from ``player_stats`` as normalised player dicts."""
+    _ensure_player_stats_once(conn)
     with conn.cursor() as cur:
         cur.execute(_SELECT_SQL)
         rows = cur.fetchall()
@@ -133,6 +176,7 @@ def get_players(
 
 def count_players(conn: psycopg2.extensions.connection) -> int:
     """Return the number of rows currently in ``player_stats``."""
+    _ensure_player_stats_once(conn)
     with conn.cursor() as cur:
         cur.execute("SELECT COUNT(*) FROM player_stats")
         return cur.fetchone()[0]
