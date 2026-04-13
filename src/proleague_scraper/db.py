@@ -43,6 +43,13 @@ CREATE TABLE IF NOT EXISTS player_stats (
 );
 """
 
+# Same as docker/postgres/init/003_player_stats.sql — llm-api reads via role llm_reader.
+# One statement per execute (psycopg2 protocol).
+_GRANT_LLM_READER_ON_PLAYER_STATS = (
+    "GRANT USAGE ON SCHEMA public TO llm_reader",
+    "GRANT SELECT ON player_stats TO llm_reader",
+)
+
 _UPSERT_SQL = """
 INSERT INTO player_stats (
     player_id, slug, name, position, field_position, shirt_number,
@@ -86,9 +93,21 @@ def ensure_player_stats_table(conn: psycopg2.extensions.connection) -> None:
     """Create ``player_stats`` if missing (idempotent).
 
     Docker init only runs on an empty data directory; this covers upgraded volumes.
+    When the table is created here (not by init SQL), apply the same grants as
+    ``003_player_stats.sql`` so ``llm_reader`` can SELECT for the LLM API.
     """
     with conn.cursor() as cur:
         cur.execute(_ENSURE_PLAYER_STATS_SQL)
+        cur.execute("SAVEPOINT grant_llm_reader_player_stats")
+        try:
+            for stmt in _GRANT_LLM_READER_ON_PLAYER_STATS:
+                cur.execute(stmt)
+        except psycopg2.Error as exc:
+            cur.execute("ROLLBACK TO SAVEPOINT grant_llm_reader_player_stats")
+            # Role missing (e.g. minimal local DB): table still usable for writers.
+            if getattr(exc, "pgcode", None) != psycopg2.errorcodes.UNDEFINED_OBJECT:
+                raise
+            log.debug("Skipped llm_reader grants on player_stats: %s", exc)
     conn.commit()
 
 
