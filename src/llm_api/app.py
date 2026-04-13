@@ -11,6 +11,7 @@ Flow
 7. Return {"answer", "sql", "data_preview"}.
 
 POST /api/ask/stream — same steps 1–5, then streams the answer via SSE (meta, answer_delta, done).
+GET /api/leaderboard — read-only fan leaderboard from mart_fan_loyalty.
 """
 
 from __future__ import annotations
@@ -20,8 +21,9 @@ import logging
 import os
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Iterator
+from typing import Any, Iterator, Sequence
 
 import psycopg2
 import requests
@@ -54,6 +56,22 @@ DATABASE_URL = (
 
 KNOWN_PROVIDERS: frozenset[str] = frozenset({"ollama", "openrouter"})
 _PROVIDER_DISPLAY = {"ollama": "Ollama", "openrouter": "OpenRouter"}
+LEADERBOARD_SUPPORTED_WINDOWS: frozenset[str] = frozenset({"all"})
+LEADERBOARD_LIMIT = 25
+LEADERBOARD_POINTS_FORMULA_SQL = (
+    "ROUND(100 * matches_attended + total_spend + 5 * merch_purchase_count "
+    "+ 5 * retail_purchase_count)::bigint"
+)
+LEADERBOARD_POINTS_FORMULA_TEXT = (
+    "ROUND(100 * matches_attended + total_spend + 5 * merch_purchase_count "
+    "+ 5 * retail_purchase_count)::bigint"
+)
+LEADERBOARD_TIE_BREAKERS = [
+    "points DESC",
+    "total_spend DESC",
+    "matches_attended DESC",
+    "fan_id ASC",
+]
 
 # ---------------------------------------------------------------------------
 # Security: forbidden SQL keywords that would mutate state
@@ -260,21 +278,255 @@ def _json_default(obj: Any) -> Any:
 
 def _execute_sql(sql: str) -> list[dict[str, Any]]:
     """Wrap sql in a LIMIT guard and execute it as the llm_reader role."""
+    wrapped = f"SELECT * FROM (\n{sql}\n) AS llm_query LIMIT 50"
+    return _run_read_query(wrapped)
+
+
+def _run_read_query(
+    sql: str, params: Sequence[Any] | None = None
+) -> list[dict[str, Any]]:
+    """Execute a read-only query with the shared reader DSN and timeout."""
     if not DATABASE_URL:
         raise psycopg2.OperationalError(
             "No database URL: set LLM_READER_DATABASE_URL or DATABASE_URL "
             "(see .env.example and docker/postgres/init/002_llm_reader.sql)."
         )
-    wrapped = f"SELECT * FROM (\n{sql}\n) AS llm_query LIMIT 50"
     conn = psycopg2.connect(DATABASE_URL)
     try:
         with conn.cursor() as cur:
             cur.execute("SET statement_timeout = '10s'")
-            cur.execute(wrapped)
+            if params is None:
+                cur.execute(sql)
+            else:
+                cur.execute(sql, params)
             cols = [d[0] for d in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
     finally:
         conn.close()
+
+
+def _leaderboard_points_sql(alias: str) -> str:
+    """Return the shared leaderboard points expression for the given table alias."""
+    return (
+        f"ROUND(100 * {alias}.matches_attended + {alias}.total_spend "
+        f"+ 5 * {alias}.merch_purchase_count + 5 * {alias}.retail_purchase_count)::bigint"
+    )
+
+
+def _leaderboard_order_sql(alias: str) -> str:
+    """Return the deterministic leaderboard sort order for the given alias."""
+    return (
+        f"{alias}.points DESC, {alias}.total_spend DESC, "
+        f"{alias}.matches_attended DESC, {alias}.fan_id ASC"
+    )
+
+
+def _leaderboard_month_bounds_utc() -> tuple[datetime, datetime]:
+    """Return the current UTC month start and next month start."""
+    month_start = datetime.now(timezone.utc).replace(
+        day=1,
+        hour=0,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    if month_start.month == 12:
+        next_month_start = month_start.replace(year=month_start.year + 1, month=1)
+    else:
+        next_month_start = month_start.replace(month=month_start.month + 1)
+    return month_start, next_month_start
+
+
+def _fan_display_name(fan_id: str) -> str:
+    """Return a stable, non-PII display name for leaderboard cards."""
+    match = re.fullmatch(r"fan_(\d+)", fan_id)
+    if not match:
+        return fan_id
+    return f"Fan {match.group(1)}"
+
+
+def _leaderboard_entry_from_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Convert a leaderboard row into the public JSON shape."""
+    fan_id = str(row["fan_id"])
+    return {
+        "rank": int(row["rank"]),
+        "fan_id": fan_id,
+        "display_name": _fan_display_name(fan_id),
+        "points": int(row["points"]),
+        "matches_attended": int(row["matches_attended"]),
+        "total_spend": row["total_spend"],
+        "merch_purchase_count": int(row["merch_purchase_count"]),
+        "retail_purchase_count": int(row["retail_purchase_count"]),
+    }
+
+
+def _fetch_leaderboard_rows(limit: int = LEADERBOARD_LIMIT) -> list[dict[str, Any]]:
+    """Return the top leaderboard rows from mart_fan_loyalty."""
+    points_sql = _leaderboard_points_sql("loyalty")
+    order_sql = _leaderboard_order_sql("leaderboard")
+    sql = f"""
+        WITH leaderboard AS (
+            SELECT
+                loyalty.fan_id,
+                loyalty.matches_attended,
+                loyalty.total_spend,
+                loyalty.merch_purchase_count,
+                loyalty.retail_purchase_count,
+                {points_sql} AS points
+            FROM mart_fan_loyalty AS loyalty
+        ),
+        ranked AS (
+            SELECT
+                ROW_NUMBER() OVER (
+                    ORDER BY {order_sql}
+                ) AS rank,
+                leaderboard.fan_id,
+                leaderboard.matches_attended,
+                leaderboard.total_spend,
+                leaderboard.merch_purchase_count,
+                leaderboard.retail_purchase_count,
+                leaderboard.points
+            FROM leaderboard
+        )
+        SELECT
+            rank,
+            fan_id,
+            matches_attended,
+            total_spend,
+            merch_purchase_count,
+            retail_purchase_count,
+            points
+        FROM ranked
+        WHERE rank <= %s
+        ORDER BY rank
+    """
+    return _run_read_query(sql, (limit,))
+
+
+def _fetch_leaderboard_as_of() -> datetime:
+    """Return the freshest mart watermark, or server time if the mart is empty."""
+    rows = _run_read_query(
+        """
+        SELECT COALESCE(MAX(last_updated_at), NOW()) AS as_of
+        FROM mart_fan_loyalty
+        """
+    )
+    value = rows[0]["as_of"]
+    if isinstance(value, datetime):
+        return value
+    return datetime.now(timezone.utc)
+
+
+def _fetch_fan_of_the_month() -> dict[str, Any] | None:
+    """Return the current UTC month fan based on ticket scans, with points tie-breakers."""
+    month_start, next_month_start = _leaderboard_month_bounds_utc()
+    points_sql = _leaderboard_points_sql("loyalty")
+    sql = f"""
+        WITH month_scans AS (
+            SELECT
+                fan_id,
+                COUNT(*)::integer AS month_ticket_scans
+            FROM match_events
+            WHERE event_type = %s
+              AND event_time >= %s
+              AND event_time < %s
+            GROUP BY fan_id
+        ),
+        ranked AS (
+            SELECT
+                month_scans.fan_id,
+                month_scans.month_ticket_scans,
+                loyalty.matches_attended,
+                loyalty.total_spend,
+                loyalty.merch_purchase_count,
+                loyalty.retail_purchase_count,
+                {points_sql} AS points,
+                ROW_NUMBER() OVER (
+                    ORDER BY month_scans.month_ticket_scans DESC,
+                             {points_sql} DESC,
+                             loyalty.total_spend DESC,
+                             loyalty.matches_attended DESC,
+                             month_scans.fan_id ASC
+                ) AS month_rank
+            FROM month_scans
+            JOIN mart_fan_loyalty AS loyalty
+              ON loyalty.fan_id = month_scans.fan_id
+        )
+        SELECT
+            fan_id,
+            month_ticket_scans,
+            matches_attended,
+            total_spend,
+            merch_purchase_count,
+            retail_purchase_count,
+            points
+        FROM ranked
+        WHERE month_rank = 1
+    """
+    rows = _run_read_query(sql, ("ticket_scan", month_start, next_month_start))
+    return rows[0] if rows else None
+
+
+def _fan_of_the_month_payload(
+    month_row: dict[str, Any] | None, fallback_row: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Return the public fan-of-the-month payload with a fallback to rank 1 overall."""
+    source = month_row or fallback_row
+    if source is None:
+        return None
+    fan_id = str(source["fan_id"])
+    display_name = _fan_display_name(fan_id)
+    month_scans = (
+        int(source["month_ticket_scans"])
+        if month_row is not None and source.get("month_ticket_scans") is not None
+        else None
+    )
+    summary = (
+        f"{month_scans} ticket scans this month · Referrals not tracked"
+        if month_scans is not None
+        else "No ticket scans recorded this month yet — showing the current all-time leader."
+    )
+    return {
+        "fan_id": fan_id,
+        "display_name": display_name,
+        "points": int(source["points"]),
+        "matches_attended": int(source["matches_attended"]),
+        "total_spend": source["total_spend"],
+        "subtitle_metrics": {
+            "matches": month_scans if month_scans is not None else int(source["matches_attended"]),
+            "spend_eur": source["total_spend"],
+            "referrals": None,
+        },
+        "summary": summary,
+        "fallback": month_scans is None,
+    }
+
+
+def _build_leaderboard_payload(window: str) -> dict[str, Any]:
+    """Build the public leaderboard payload for the supported window."""
+    if window not in LEADERBOARD_SUPPORTED_WINDOWS:
+        raise ValueError(
+            f"Unsupported leaderboard window '{window}'. "
+            f"Valid values: {sorted(LEADERBOARD_SUPPORTED_WINDOWS)}"
+        )
+
+    rankings = [_leaderboard_entry_from_row(row) for row in _fetch_leaderboard_rows()]
+    podium = rankings[:3]
+    fan_of_the_month = _fan_of_the_month_payload(
+        _fetch_fan_of_the_month(),
+        podium[0] if podium else None,
+    )
+    as_of = _fetch_leaderboard_as_of().astimezone(timezone.utc).isoformat()
+    return {
+        "window": window,
+        "as_of": as_of.replace("+00:00", "Z"),
+        "points_formula": LEADERBOARD_POINTS_FORMULA_TEXT,
+        "tie_breakers": LEADERBOARD_TIE_BREAKERS,
+        "podium": podium,
+        "rankings": rankings,
+        "fan_of_the_month": fan_of_the_month,
+        "achievement": None,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -573,6 +825,25 @@ def llm_config_put() -> Any:
 @app.get("/health")
 def health() -> Any:
     return jsonify({"status": "ok"})
+
+
+@app.get("/api/leaderboard")
+def leaderboard_api() -> Any:
+    window = (request.args.get("window") or "all").strip().lower()
+    try:
+        payload = _build_leaderboard_payload(window)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except psycopg2.OperationalError as exc:
+        if not DATABASE_URL:
+            return jsonify({"error": str(exc)}), 503
+        log.exception("Leaderboard query failed")
+        return jsonify({"error": f"Leaderboard query failed: {exc}"}), 500
+    except psycopg2.Error as exc:
+        log.exception("Leaderboard query failed")
+        return jsonify({"error": f"Leaderboard query failed: {exc}"}), 500
+
+    return jsonify(json.loads(json.dumps(payload, default=_json_default)))
 
 
 @app.post("/api/ask")

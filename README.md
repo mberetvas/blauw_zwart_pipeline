@@ -259,11 +259,20 @@ uv run python -m llm_api.app
 | `GET` | `/player-stats` | Player stats page |
 | `GET` | `/settings` | Settings page |
 | `GET` | `/health` | Health check |
+| `GET` | `/api/leaderboard?window=all` | Live all-time fan leaderboard from `mart_fan_loyalty` |
 | `GET` | `/api/llm-config` | Read public runtime config |
 | `PUT` | `/api/llm-config` | Persist runtime config changes |
 | `POST` | `/api/ask` | Question to SQL to answer flow |
 
 The API executes read-only `SELECT` / `WITH ... SELECT` queries only, wraps results in an outer `LIMIT 50`, and sets `statement_timeout` to 10 seconds on each DB session.
+
+`GET /api/leaderboard` uses the same read-only Postgres DSN (`LLM_READER_DATABASE_URL`, falling back to `DATABASE_URL`) as the Text-to-SQL API. In v1 it supports `window=all` only and ranks fans from `dbt_dev.mart_fan_loyalty` with:
+
+```text
+points = ROUND(100 * matches_attended + total_spend + 5 * merch_purchase_count + 5 * retail_purchase_count)::bigint
+```
+
+Tie-breakers are `points DESC`, `total_spend DESC`, `matches_attended DESC`, and `fan_id ASC`. Referral/community-engagement metrics are not tracked yet, so the leaderboard returns `null` for those values instead of inventing them.
 
 ## dbt and analytics
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib
 import json
+from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -329,3 +331,160 @@ def test_semantic_load_failure_returns_500(
     body = response.get_json()
     assert "error" in body
     assert "semantic" in body["error"].lower()
+
+
+def _sample_leaderboard_rows() -> list[dict[str, object]]:
+    return [
+        {
+            "rank": 1,
+            "fan_id": "fan_00002",
+            "points": 1550,
+            "matches_attended": 10,
+            "total_spend": Decimal("520.25"),
+            "merch_purchase_count": 3,
+            "retail_purchase_count": 5,
+        },
+        {
+            "rank": 2,
+            "fan_id": "fan_00003",
+            "points": 1490,
+            "matches_attended": 9,
+            "total_spend": Decimal("575.10"),
+            "merch_purchase_count": 4,
+            "retail_purchase_count": 2,
+        },
+        {
+            "rank": 3,
+            "fan_id": "fan_00001",
+            "points": 1310,
+            "matches_attended": 8,
+            "total_spend": Decimal("470.00"),
+            "merch_purchase_count": 2,
+            "retail_purchase_count": 2,
+        },
+    ]
+
+
+def test_build_leaderboard_payload_shapes_rankings(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(llm_app_module, "_fetch_leaderboard_rows", _sample_leaderboard_rows)
+    monkeypatch.setattr(
+        llm_app_module,
+        "_fetch_fan_of_the_month",
+        lambda: {
+            "fan_id": "fan_00003",
+            "month_ticket_scans": 4,
+            "matches_attended": 9,
+            "total_spend": Decimal("575.10"),
+            "merch_purchase_count": 4,
+            "retail_purchase_count": 2,
+            "points": 1490,
+        },
+    )
+    monkeypatch.setattr(
+        llm_app_module,
+        "_fetch_leaderboard_as_of",
+        lambda: datetime(2026, 4, 13, 19, 0, tzinfo=timezone.utc),
+    )
+
+    payload = llm_app_module._build_leaderboard_payload("all")
+
+    assert payload["window"] == "all"
+    assert payload["as_of"] == "2026-04-13T19:00:00Z"
+    assert payload["points_formula"] == llm_app_module.LEADERBOARD_POINTS_FORMULA_TEXT
+    assert [entry["rank"] for entry in payload["podium"]] == [1, 2, 3]
+    assert [entry["fan_id"] for entry in payload["rankings"]] == [
+        "fan_00002",
+        "fan_00003",
+        "fan_00001",
+    ]
+    assert payload["rankings"][0]["display_name"] == "Fan 00002"
+    assert payload["fan_of_the_month"]["fan_id"] == "fan_00003"
+    assert payload["fan_of_the_month"]["subtitle_metrics"]["matches"] == 4
+    assert payload["fan_of_the_month"]["subtitle_metrics"]["referrals"] is None
+    assert payload["fan_of_the_month"]["fallback"] is False
+    assert payload["achievement"] is None
+
+
+def test_leaderboard_route_returns_json_payload(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        llm_app_module,
+        "_build_leaderboard_payload",
+        lambda window: {
+            "window": window,
+            "as_of": "2026-04-13T19:00:00Z",
+            "points_formula": llm_app_module.LEADERBOARD_POINTS_FORMULA_TEXT,
+            "tie_breakers": llm_app_module.LEADERBOARD_TIE_BREAKERS,
+            "podium": [
+                {
+                    "rank": 1,
+                    "fan_id": "fan_00002",
+                    "display_name": "Fan 00002",
+                    "points": 1550,
+                    "matches_attended": 10,
+                    "total_spend": Decimal("520.25"),
+                    "merch_purchase_count": 3,
+                    "retail_purchase_count": 5,
+                }
+            ],
+            "rankings": [
+                {
+                    "rank": 1,
+                    "fan_id": "fan_00002",
+                    "display_name": "Fan 00002",
+                    "points": 1550,
+                    "matches_attended": 10,
+                    "total_spend": Decimal("520.25"),
+                    "merch_purchase_count": 3,
+                    "retail_purchase_count": 5,
+                }
+            ],
+            "fan_of_the_month": {
+                "fan_id": "fan_00002",
+                "display_name": "Fan 00002",
+                "points": 1550,
+                "matches_attended": 10,
+                "total_spend": Decimal("520.25"),
+                "subtitle_metrics": {
+                    "matches": 4,
+                    "spend_eur": Decimal("520.25"),
+                    "referrals": None,
+                },
+                "summary": "4 ticket scans this month · Referrals not tracked",
+                "fallback": False,
+            },
+            "achievement": None,
+        },
+    )
+
+    response = llm_app_module.app.test_client().get("/api/leaderboard?window=all")
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["window"] == "all"
+    assert body["rankings"][0]["fan_id"] == "fan_00002"
+    assert body["rankings"][0]["total_spend"] == 520.25
+    assert body["fan_of_the_month"]["subtitle_metrics"]["spend_eur"] == 520.25
+
+
+def test_leaderboard_route_rejects_unsupported_window(llm_app_module) -> None:
+    response = llm_app_module.app.test_client().get("/api/leaderboard?window=season")
+
+    assert response.status_code == 400
+    body = response.get_json()
+    assert "Unsupported leaderboard window" in body["error"]
+
+
+def test_leaderboard_route_returns_503_without_database_url(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(llm_app_module, "DATABASE_URL", "")
+
+    response = llm_app_module.app.test_client().get("/api/leaderboard")
+
+    assert response.status_code == 503
+    body = response.get_json()
+    assert "No database URL" in body["error"]

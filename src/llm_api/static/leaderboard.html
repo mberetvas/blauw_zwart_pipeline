@@ -127,26 +127,33 @@ tailwind.config = {
   <main class="max-w-7xl mx-auto px-4 md:px-8 py-10">
 
     <!-- ── Header ──────────────────────────────────────────────── -->
-    <!-- MOCK DATA: fan leaderboard — no live endpoint; replace with API when available -->
     <div class="mb-10">
-      <p class="text-xs font-bold tracking-[0.25em] text-primary uppercase mb-2 font-headline">2024–2025 Season</p>
+      <p class="text-xs font-bold tracking-[0.25em] text-primary uppercase mb-2 font-headline">Live all-time snapshot</p>
       <h1 class="font-headline text-5xl md:text-7xl font-black italic tracking-tighter uppercase text-on-surface leading-none">
         Fan<br>Leaderboard
       </h1>
-      <p class="text-sm text-on-surface-variant mt-3 max-w-[55ch]">Rankings based on match attendance, merchandise spend, and community engagement.</p>
+      <p class="text-sm text-on-surface-variant mt-3 max-w-[60ch]">Rankings are based on attendance and spend from the live loyalty mart. Community engagement and referrals are not tracked yet.</p>
+      <p id="leaderboard-as-of" class="text-xs text-outline uppercase tracking-[0.2em] mt-4 font-headline">Loading latest leaderboard snapshot...</p>
     </div>
 
-    <!-- ── Achievement callout — glass card (floating element, glassmorphism per design rules) ── -->
-    <div class="glass-card rounded-3xl p-6 mb-10 flex items-center gap-6 max-w-xl">
+    <div id="leaderboard-loading" class="rounded-3xl border border-white/5 bg-surface-container px-5 py-4 mb-4 text-sm text-on-surface-variant" aria-live="polite">
+      Loading live leaderboard data...
+    </div>
+    <div id="leaderboard-error" class="hidden rounded-3xl border border-error/20 bg-red-500/10 px-5 py-4 mb-4 text-sm text-error" role="alert" hidden></div>
+
+    <!-- ── Achievement callout — hidden until the API returns a real achievement ── -->
+    <div id="achievement-card" class="glass-card rounded-3xl p-6 mb-10 hidden" hidden>
+      <div class="flex items-center gap-6">
       <div class="w-14 h-14 rounded-2xl bg-primary-container flex items-center justify-center flex-shrink-0">
         <span class="material-symbols-outlined text-on-primary" style="font-size:28px;font-variation-settings:'FILL' 1">emoji_events</span>
       </div>
       <div>
-        <p class="text-xs font-bold tracking-widest text-primary uppercase font-headline mb-1">🏆 New Achievement Unlocked</p>
-        <p class="font-headline font-bold text-on-surface text-lg leading-tight">Season Loyalist</p>
-        <p class="text-sm text-on-surface-variant mt-0.5">You attended 15+ home matches. Top 3% of all fans.</p>
+        <p id="achievement-kicker" class="text-xs font-bold tracking-widest text-primary uppercase font-headline mb-1">Achievement</p>
+        <p id="achievement-title" class="font-headline font-bold text-on-surface text-lg leading-tight">Achievement unlocked</p>
+        <p id="achievement-copy" class="text-sm text-on-surface-variant mt-0.5"></p>
       </div>
-      <div class="ml-auto flex-shrink-0 px-4 py-2 rounded-full bg-primary-container text-on-primary text-xs font-bold uppercase tracking-widest whitespace-nowrap">+250 pts</div>
+      <div id="achievement-points" class="ml-auto flex-shrink-0 px-4 py-2 rounded-full bg-primary-container text-on-primary text-xs font-bold uppercase tracking-widest whitespace-nowrap"></div>
+      </div>
     </div>
 
     <!-- ── 12-col grid: podium + rankings ───────────────────────── -->
@@ -157,36 +164,24 @@ tailwind.config = {
         <h2 id="podium-heading" class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary mb-6">Top 3 Fans</h2>
 
         <!-- 2nd / 1st / 3rd layout -->
-        <div class="flex items-end justify-center gap-4 mb-8 podium-grid">
-          <!-- 2nd place -->
-          <div class="flex flex-col items-center gap-2 flex-1">
-            <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuArOA7wj3pS_uu1h3s1Gj4K8s0fLqFQv3OdlI8t17GbE1CkjVlXCcXFzO3N4mSwwm8jBFbGEQekiHGDV7cVSK2yUfymfDY1KKCQ=s1024" alt="2nd place fan" class="w-16 h-16 rounded-full object-cover ring-silver" onerror="this.style.background='#222a3d';this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22/>'">
-            <p class="font-headline font-bold text-on-surface text-sm">Lieselot V.</p>
-            <p class="text-xs text-outline font-medium">14,200 pts</p>
-            <div class="w-full podium-2 bg-surface-container-high rounded-t-xl flex items-center justify-center">
-              <span class="font-headline font-black text-4xl text-on-surface-variant opacity-40">2</span>
-            </div>
+        <div id="podium-grid" class="flex items-end justify-center gap-4 mb-8 podium-grid" aria-live="polite">
+          <div class="flex flex-col items-center gap-2 flex-1 animate-pulse">
+            <div class="w-16 h-16 rounded-full bg-surface-container-high"></div>
+            <div class="h-4 w-24 rounded bg-surface-container-high"></div>
+            <div class="h-3 w-16 rounded bg-surface-container-high"></div>
+            <div class="w-full podium-2 bg-surface-container-high rounded-t-xl"></div>
           </div>
-          <!-- 1st place -->
-          <div class="flex flex-col items-center gap-2 flex-1">
-            <div class="relative">
-              <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuBm3QTfQgRqX8hT0e1ue8DHvNSMJQy9VF_FnijZ80TrqmvXl7yrJFWxJE5q3p1LhEtjlBOAE3dAsPmkyGJCMpPiB0_VPYJ7AXMT=s1024" alt="1st place fan" class="w-20 h-20 rounded-full object-cover ring-gold" onerror="this.style.background='#222a3d';this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22/>'">
-              <span class="absolute -top-2 -right-2 text-lg" aria-label="Crown">👑</span>
-            </div>
-            <p class="font-headline font-bold text-primary text-sm">Jan De Smet</p>
-            <p class="text-xs text-primary font-bold">18,540 pts</p>
-            <div class="w-full podium-1 bg-primary-container rounded-t-xl flex items-center justify-center">
-              <span class="font-headline font-black text-5xl text-on-primary-container opacity-60">1</span>
-            </div>
+          <div class="flex flex-col items-center gap-2 flex-1 animate-pulse">
+            <div class="w-20 h-20 rounded-full bg-surface-container-high"></div>
+            <div class="h-4 w-28 rounded bg-surface-container-high"></div>
+            <div class="h-3 w-20 rounded bg-surface-container-high"></div>
+            <div class="w-full podium-1 bg-surface-container-high rounded-t-xl"></div>
           </div>
-          <!-- 3rd place -->
-          <div class="flex flex-col items-center gap-2 flex-1">
-            <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuBuOTzEJAktCGNXXeHQpLjJFvYpfSZ7j3a8d2L7VDhE2mlnIZmYdnFJLQQqZRPV62Tj9pVmALz3dP-w2qj4jlj0V1J8EtKi2kz7=s1024" alt="3rd place fan" class="w-14 h-14 rounded-full object-cover ring-bronze" onerror="this.style.background='#222a3d';this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22/>'">
-            <p class="font-headline font-bold text-on-surface text-sm">Ahmed K.</p>
-            <p class="text-xs text-outline font-medium">11,875 pts</p>
-            <div class="w-full podium-3 bg-surface-container-highest rounded-t-xl flex items-center justify-center">
-              <span class="font-headline font-black text-3xl text-on-surface-variant opacity-40">3</span>
-            </div>
+          <div class="flex flex-col items-center gap-2 flex-1 animate-pulse">
+            <div class="w-14 h-14 rounded-full bg-surface-container-high"></div>
+            <div class="h-4 w-24 rounded bg-surface-container-high"></div>
+            <div class="h-3 w-16 rounded bg-surface-container-high"></div>
+            <div class="w-full podium-3 bg-surface-container-high rounded-t-xl"></div>
           </div>
         </div>
 
@@ -194,24 +189,24 @@ tailwind.config = {
         <div class="bg-surface-container-highest rounded-3xl p-6">
           <p class="text-xs font-bold tracking-widest text-primary uppercase font-headline mb-4">Fan of the Month</p>
           <div class="flex items-center gap-4">
-            <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuBm3QTfQgRqX8hT0e1ue8DHvNSMJQy9VF_FnijZ80TrqmvXl7yrJFWxJE5q3p1LhEtjlBOAE3dAsPmkyGJCMpPiB0_VPYJ7AXMT=s1024" alt="Fan of the month" class="w-14 h-14 rounded-full object-cover" onerror="this.style.background='#222a3d';this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22/>'">
+            <div id="fan-of-month-avatar" class="w-14 h-14 rounded-full bg-surface-container flex items-center justify-center font-headline font-black text-primary text-lg">--</div>
             <div>
-              <p class="font-headline font-bold text-on-surface">Jan De Smet</p>
-              <p class="text-xs text-on-surface-variant mt-0.5">12 home matches · Top buyer · 3 referrals</p>
+              <p id="fan-of-month-name" class="font-headline font-bold text-on-surface">Loading...</p>
+              <p id="fan-of-month-summary" class="text-xs text-on-surface-variant mt-0.5">Waiting for the latest monthly scan data...</p>
             </div>
             <div class="ml-auto text-2xl" aria-hidden="true">🏆</div>
           </div>
           <div class="mt-4 grid grid-cols-3 gap-2 text-center">
             <div class="bg-surface-container rounded-xl py-3">
-              <p class="font-headline font-black text-primary text-xl">12</p>
+              <p id="fan-of-month-matches" class="font-headline font-black text-primary text-xl">--</p>
               <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Matches</p>
             </div>
             <div class="bg-surface-container rounded-xl py-3">
-              <p class="font-headline font-black text-primary text-xl">€2.4k</p>
+              <p id="fan-of-month-spend" class="font-headline font-black text-primary text-xl">--</p>
               <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Spend</p>
             </div>
             <div class="bg-surface-container rounded-xl py-3">
-              <p class="font-headline font-black text-primary text-xl">3</p>
+              <p id="fan-of-month-referrals" class="font-headline font-black text-primary text-xl">--</p>
               <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Referrals</p>
             </div>
           </div>
@@ -223,11 +218,12 @@ tailwind.config = {
         <div class="flex items-center justify-between mb-6">
           <h2 id="rankings-heading" class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary">Top 25 Fans</h2>
           <div class="flex gap-2">
-            <button class="px-3 py-1.5 rounded-full bg-primary-container text-on-primary text-xs font-bold uppercase tracking-widest">All Time</button>
-            <button class="px-3 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors">This Season</button>
-            <button class="px-3 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors">This Month</button>
+            <button class="px-3 py-1.5 rounded-full bg-primary-container text-on-primary text-xs font-bold uppercase tracking-widest" aria-pressed="true">All Time</button>
+            <button class="px-3 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest opacity-60 cursor-not-allowed" disabled title="Coming soon: season windows need time-bounded marts.">This Season</button>
+            <button class="px-3 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest opacity-60 cursor-not-allowed" disabled title="Coming soon: month windows need time-bounded marts.">This Month</button>
           </div>
         </div>
+        <p class="text-xs text-outline uppercase tracking-[0.18em] mb-4 font-headline">Only the all-time leaderboard is live in v1.</p>
 
         <div class="bg-surface-container-low rounded-3xl overflow-hidden">
           <!-- Column headers -->
@@ -238,81 +234,13 @@ tailwind.config = {
             <span class="col-span-3 text-xs font-bold uppercase tracking-widest text-outline text-right">Matches</span>
           </div>
 
-          <!-- Rows (mock data) -->
-          <ul class="divide-y divide-white/[0.04] tabular-nums">
-            <!-- "Your rank" highlight row — intentional identity affordance matching prototype -->
-            <li class="grid grid-cols-12 items-center px-6 py-3.5 bg-primary/10 relative">
-              <span class="col-span-1 font-headline font-black text-primary">4</span>
-              <div class="col-span-5 flex items-center gap-3">
-                <div class="w-9 h-9 rounded-full bg-primary-container flex items-center justify-center text-on-primary font-bold text-sm flex-shrink-0">Y</div>
-                <div>
-                  <p class="font-medium text-primary text-sm">You</p>
-                  <p class="text-xs text-outline">Gold member</p>
-                </div>
-              </div>
-              <span class="col-span-3 font-headline font-bold text-primary text-right">10,120</span>
-              <span class="col-span-3 font-medium text-on-surface-variant text-right text-sm">11</span>
-              <span class="absolute left-0 top-0 h-full w-1 bg-primary-container rounded-r-full" aria-hidden="true"></span>
-            </li>
-            <!-- Regular rows -->
-            <li class="grid grid-cols-12 items-center px-6 py-3.5 hover:bg-surface-container-high transition-colors">
-              <span class="col-span-1 font-headline font-bold text-on-surface-variant">5</span>
-              <div class="col-span-5 flex items-center gap-3">
-                <div class="w-9 h-9 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant font-bold text-sm flex-shrink-0">M</div>
-                <div><p class="font-medium text-on-surface text-sm">Marie D.</p><p class="text-xs text-outline">Silver member</p></div>
-              </div>
-              <span class="col-span-3 font-headline font-bold text-on-surface text-right">9,880</span>
-              <span class="col-span-3 font-medium text-on-surface-variant text-right text-sm">10</span>
-            </li>
-            <li class="grid grid-cols-12 items-center px-6 py-3.5 hover:bg-surface-container-high transition-colors">
-              <span class="col-span-1 font-headline font-bold text-on-surface-variant">6</span>
-              <div class="col-span-5 flex items-center gap-3">
-                <div class="w-9 h-9 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant font-bold text-sm flex-shrink-0">P</div>
-                <div><p class="font-medium text-on-surface text-sm">Pieter V.</p><p class="text-xs text-outline">Silver member</p></div>
-              </div>
-              <span class="col-span-3 font-headline font-bold text-on-surface text-right">9,345</span>
-              <span class="col-span-3 font-medium text-on-surface-variant text-right text-sm">9</span>
-            </li>
-            <li class="grid grid-cols-12 items-center px-6 py-3.5 hover:bg-surface-container-high transition-colors">
-              <span class="col-span-1 font-headline font-bold text-on-surface-variant">7</span>
-              <div class="col-span-5 flex items-center gap-3">
-                <div class="w-9 h-9 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant font-bold text-sm flex-shrink-0">S</div>
-                <div><p class="font-medium text-on-surface text-sm">Sara B.</p><p class="text-xs text-outline">Bronze member</p></div>
-              </div>
-              <span class="col-span-3 font-headline font-bold text-on-surface text-right">8,910</span>
-              <span class="col-span-3 font-medium text-on-surface-variant text-right text-sm">9</span>
-            </li>
-            <li class="grid grid-cols-12 items-center px-6 py-3.5 hover:bg-surface-container-high transition-colors">
-              <span class="col-span-1 font-headline font-bold text-on-surface-variant">8</span>
-              <div class="col-span-5 flex items-center gap-3">
-                <div class="w-9 h-9 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant font-bold text-sm flex-shrink-0">K</div>
-                <div><p class="font-medium text-on-surface text-sm">Koen M.</p><p class="text-xs text-outline">Bronze member</p></div>
-              </div>
-              <span class="col-span-3 font-headline font-bold text-on-surface text-right">8,540</span>
-              <span class="col-span-3 font-medium text-on-surface-variant text-right text-sm">8</span>
-            </li>
-            <li class="grid grid-cols-12 items-center px-6 py-3.5 hover:bg-surface-container-high transition-colors">
-              <span class="col-span-1 font-headline font-bold text-on-surface-variant">9</span>
-              <div class="col-span-5 flex items-center gap-3">
-                <div class="w-9 h-9 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant font-bold text-sm flex-shrink-0">L</div>
-                <div><p class="font-medium text-on-surface text-sm">Lena C.</p><p class="text-xs text-outline">Bronze member</p></div>
-              </div>
-              <span class="col-span-3 font-headline font-bold text-on-surface text-right">7,990</span>
-              <span class="col-span-3 font-medium text-on-surface-variant text-right text-sm">7</span>
-            </li>
-            <li class="grid grid-cols-12 items-center px-6 py-3.5 hover:bg-surface-container-high transition-colors">
-              <span class="col-span-1 font-headline font-bold text-on-surface-variant">10</span>
-              <div class="col-span-5 flex items-center gap-3">
-                <div class="w-9 h-9 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface-variant font-bold text-sm flex-shrink-0">T</div>
-                <div><p class="font-medium text-on-surface text-sm">Thomas N.</p><p class="text-xs text-outline">Bronze member</p></div>
-              </div>
-              <span class="col-span-3 font-headline font-bold text-on-surface text-right">7,675</span>
-              <span class="col-span-3 font-medium text-on-surface-variant text-right text-sm">7</span>
-            </li>
+          <!-- Rows -->
+          <ul id="rankings-list" class="divide-y divide-white/[0.04] tabular-nums" aria-live="polite">
+            <li class="px-6 py-5 text-sm text-on-surface-variant">Loading live leaderboard...</li>
           </ul>
 
           <div class="px-6 py-4 bg-surface-container">
-            <button class="w-full text-center text-xs font-bold uppercase tracking-widest text-outline hover:text-primary transition-colors">View all 25 fans</button>
+            <p class="w-full text-center text-xs font-bold uppercase tracking-widest text-outline">Top 25 fans from the current all-time mart snapshot</p>
           </div>
         </div>
       </section>
@@ -334,16 +262,16 @@ tailwind.config = {
   </main>
 </div>
 
-<!-- ── Floating "Your Rank" glass card (bottom-right) ─────────── -->
-<div class="glass-card fixed bottom-20 md:bottom-6 right-6 rounded-2xl px-5 py-4 z-40 hidden md:flex items-center gap-4" aria-label="Your current rank">
+<!-- ── Floating scoring card (bottom-right) ───────────────────── -->
+<div class="glass-card fixed bottom-20 md:bottom-6 right-6 rounded-2xl px-5 py-4 z-40 hidden md:flex items-center gap-4" aria-label="Leaderboard scoring">
   <div class="flex flex-col">
-    <span class="text-xs font-bold uppercase tracking-[0.2em] text-primary font-headline">Your Rank</span>
-    <span class="font-headline font-black text-4xl text-on-surface leading-none">#4</span>
-    <span class="text-xs text-outline mt-0.5">10,120 pts</span>
+    <span class="text-xs font-bold uppercase tracking-[0.2em] text-primary font-headline">Points Formula</span>
+    <span class="font-headline font-black text-2xl text-on-surface leading-none">100 x matches</span>
+    <span class="text-xs text-outline mt-0.5" id="floating-points-formula">+ spend + 5 x merch + 5 x retail</span>
   </div>
   <div class="flex flex-col items-end gap-1">
-    <span class="px-2 py-1 rounded-full bg-primary-container text-on-primary text-xs font-bold tracking-wider">GOLD</span>
-    <span class="text-xs text-on-surface-variant">+380 this week</span>
+    <span class="px-2 py-1 rounded-full bg-primary-container text-on-primary text-xs font-bold tracking-wider">ALL TIME</span>
+    <span class="text-xs text-on-surface-variant" id="floating-as-of">Awaiting refresh...</span>
   </div>
 </div>
 
@@ -366,6 +294,215 @@ tailwind.config = {
     <span class="text-xs uppercase font-bold tracking-widest">Settings</span>
   </a>
 </nav>
+
+<script>
+  document.addEventListener("DOMContentLoaded", async () => {
+    const asOfEl = document.getElementById("leaderboard-as-of");
+    const loadingEl = document.getElementById("leaderboard-loading");
+    const errorEl = document.getElementById("leaderboard-error");
+    const podiumEl = document.getElementById("podium-grid");
+    const rankingsEl = document.getElementById("rankings-list");
+    const fanOfMonthAvatarEl = document.getElementById("fan-of-month-avatar");
+    const fanOfMonthNameEl = document.getElementById("fan-of-month-name");
+    const fanOfMonthSummaryEl = document.getElementById("fan-of-month-summary");
+    const fanOfMonthMatchesEl = document.getElementById("fan-of-month-matches");
+    const fanOfMonthSpendEl = document.getElementById("fan-of-month-spend");
+    const fanOfMonthReferralsEl = document.getElementById("fan-of-month-referrals");
+    const floatingAsOfEl = document.getElementById("floating-as-of");
+    const floatingFormulaEl = document.getElementById("floating-points-formula");
+    const achievementCardEl = document.getElementById("achievement-card");
+    const achievementKickerEl = document.getElementById("achievement-kicker");
+    const achievementTitleEl = document.getElementById("achievement-title");
+    const achievementCopyEl = document.getElementById("achievement-copy");
+    const achievementPointsEl = document.getElementById("achievement-points");
+
+    const numberFormatter = new Intl.NumberFormat("en-US");
+    const compactNumberFormatter = new Intl.NumberFormat("en-US", {
+      notation: "compact",
+      maximumFractionDigits: 1,
+    });
+    const currencyFormatter = new Intl.NumberFormat("nl-BE", {
+      style: "currency",
+      currency: "EUR",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    });
+    const asOfFormatter = new Intl.DateTimeFormat("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    });
+
+    const podiumSlots = [
+      { rank: 2, ringClass: "ring-silver", avatarClass: "w-16 h-16", platformClass: "podium-2 bg-surface-container-high", numberClass: "text-4xl text-on-surface-variant opacity-40", nameClass: "text-on-surface", pointsClass: "text-outline font-medium" },
+      { rank: 1, ringClass: "ring-gold", avatarClass: "w-20 h-20", platformClass: "podium-1 bg-primary-container", numberClass: "text-5xl text-on-primary-container opacity-60", nameClass: "text-primary", pointsClass: "text-primary font-bold", crown: true },
+      { rank: 3, ringClass: "ring-bronze", avatarClass: "w-14 h-14", platformClass: "podium-3 bg-surface-container-highest", numberClass: "text-3xl text-on-surface-variant opacity-40", nameClass: "text-on-surface", pointsClass: "text-outline font-medium" },
+    ];
+
+    const escapeHtml = (value) =>
+      String(value ?? "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;",
+      })[char]);
+
+    const initialsFor = (name) => {
+      const parts = String(name ?? "").trim().split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+      }
+      const compact = String(name ?? "").replace(/[^a-z0-9]/gi, "").toUpperCase();
+      return compact.slice(0, 2) || "F";
+    };
+
+    const formatPoints = (value) => `${numberFormatter.format(Number(value ?? 0))} pts`;
+    const formatCurrency = (value) => currencyFormatter.format(Number(value ?? 0));
+    const formatCompactCurrency = (value) => `€${compactNumberFormatter.format(Number(value ?? 0))}`;
+    const formatAsOf = (isoString) => {
+      const value = new Date(isoString);
+      if (Number.isNaN(value.getTime())) {
+        return "Latest snapshot unavailable";
+      }
+      return `Updated ${asOfFormatter.format(value)} UTC`;
+    };
+
+    const setError = (message) => {
+      errorEl.textContent = message;
+      errorEl.hidden = false;
+      errorEl.classList.remove("hidden");
+    };
+
+    const renderAchievement = (achievement) => {
+      if (!achievement) {
+        achievementCardEl.hidden = true;
+        achievementCardEl.classList.add("hidden");
+        return;
+      }
+      achievementKickerEl.textContent = achievement.kicker || "Achievement";
+      achievementTitleEl.textContent = achievement.title || "Achievement unlocked";
+      achievementCopyEl.textContent = achievement.copy || "";
+      achievementPointsEl.textContent = achievement.points ? `+${achievement.points} pts` : "";
+      achievementCardEl.hidden = false;
+      achievementCardEl.classList.remove("hidden");
+    };
+
+    const renderPodium = (entries) => {
+      const byRank = new Map(entries.map((entry) => [entry.rank, entry]));
+      podiumEl.innerHTML = podiumSlots.map((slot) => {
+        const entry = byRank.get(slot.rank);
+        if (!entry) {
+          return `
+            <div class="flex flex-col items-center gap-2 flex-1">
+              <div class="${slot.avatarClass} rounded-full bg-surface-container-high flex items-center justify-center text-outline font-headline font-black">--</div>
+              <p class="font-headline font-bold ${slot.nameClass} text-sm">No data yet</p>
+              <p class="text-xs ${slot.pointsClass}">Awaiting mart refresh</p>
+              <div class="w-full ${slot.platformClass} rounded-t-xl flex items-center justify-center">
+                <span class="font-headline font-black ${slot.numberClass}">${slot.rank}</span>
+              </div>
+            </div>
+          `;
+        }
+        return `
+          <div class="flex flex-col items-center gap-2 flex-1">
+            <div class="relative">
+              <div class="${slot.avatarClass} rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface font-headline font-black ${slot.ringClass}">
+                ${escapeHtml(initialsFor(entry.display_name))}
+              </div>
+              ${slot.crown ? '<span class="absolute -top-2 -right-2 text-lg" aria-label="Crown">👑</span>' : ""}
+            </div>
+            <p class="font-headline font-bold ${slot.nameClass} text-sm">${escapeHtml(entry.display_name)}</p>
+            <p class="text-xs ${slot.pointsClass}">${escapeHtml(formatPoints(entry.points))}</p>
+            <div class="w-full ${slot.platformClass} rounded-t-xl flex items-center justify-center">
+              <span class="font-headline font-black ${slot.numberClass}">${slot.rank}</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+    };
+
+    const renderRankings = (entries) => {
+      if (!entries.length) {
+        rankingsEl.innerHTML = '<li class="px-6 py-5 text-sm text-on-surface-variant">No leaderboard rows are available yet. Run dbt to materialize <code>mart_fan_loyalty</code>.</li>';
+        return;
+      }
+      rankingsEl.innerHTML = entries.map((entry) => `
+        <li class="grid grid-cols-12 items-center px-6 py-3.5 hover:bg-surface-container-high transition-colors">
+          <span class="col-span-1 font-headline font-bold ${entry.rank <= 3 ? "text-primary" : "text-on-surface-variant"}">${entry.rank}</span>
+          <div class="col-span-5 flex items-center gap-3">
+            <div class="w-9 h-9 rounded-full ${entry.rank <= 3 ? "bg-primary-container text-on-primary" : "bg-surface-container-highest text-on-surface-variant"} flex items-center justify-center font-bold text-sm flex-shrink-0">
+              ${escapeHtml(initialsFor(entry.display_name))}
+            </div>
+            <div>
+              <p class="font-medium ${entry.rank <= 3 ? "text-primary" : "text-on-surface"} text-sm">${escapeHtml(entry.display_name)}</p>
+              <p class="text-xs text-outline">${escapeHtml(entry.fan_id)}</p>
+            </div>
+          </div>
+          <span class="col-span-3 font-headline font-bold text-on-surface text-right">${escapeHtml(numberFormatter.format(entry.points))}</span>
+          <span class="col-span-3 font-medium text-on-surface-variant text-right text-sm">${escapeHtml(numberFormatter.format(entry.matches_attended))}</span>
+        </li>
+      `).join("");
+    };
+
+    const renderFanOfMonth = (fan) => {
+      if (!fan) {
+        fanOfMonthAvatarEl.textContent = "--";
+        fanOfMonthNameEl.textContent = "No monthly winner yet";
+        fanOfMonthSummaryEl.textContent = "Waiting for attendance data.";
+        fanOfMonthMatchesEl.textContent = "--";
+        fanOfMonthSpendEl.textContent = "--";
+        fanOfMonthReferralsEl.textContent = "--";
+        return;
+      }
+      const metrics = fan.subtitle_metrics || {};
+      const matchesValue = metrics.matches;
+      const referralsValue = metrics.referrals;
+      fanOfMonthAvatarEl.textContent = initialsFor(fan.display_name);
+      fanOfMonthNameEl.textContent = fan.display_name;
+      fanOfMonthSummaryEl.textContent = fan.summary || "Live leaderboard highlight";
+      fanOfMonthMatchesEl.textContent = matchesValue == null ? "—" : numberFormatter.format(matchesValue);
+      fanOfMonthSpendEl.textContent = formatCompactCurrency(metrics.spend_eur ?? fan.total_spend);
+      fanOfMonthReferralsEl.textContent = referralsValue == null ? "—" : numberFormatter.format(referralsValue);
+    };
+
+    try {
+      const response = await fetch("/api/leaderboard?window=all", {
+        headers: { "Accept": "application/json" },
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Leaderboard request failed.");
+      }
+
+      asOfEl.textContent = formatAsOf(payload.as_of);
+      floatingAsOfEl.textContent = formatAsOf(payload.as_of).replace("Updated ", "");
+      if (payload.points_formula) {
+        floatingFormulaEl.textContent = payload.points_formula
+          .replace("ROUND(", "")
+          .replace(")::bigint", "")
+          .replace("matches_attended", "matches")
+          .replace("merch_purchase_count", "merch")
+          .replace("retail_purchase_count", "retail");
+      }
+
+      renderPodium(payload.podium || []);
+      renderRankings(payload.rankings || []);
+      renderFanOfMonth(payload.fan_of_the_month);
+      renderAchievement(payload.achievement);
+    } catch (error) {
+      renderPodium([]);
+      renderRankings([]);
+      renderFanOfMonth(null);
+      setError(error instanceof Error ? error.message : "Unable to load the leaderboard.");
+      asOfEl.textContent = "Live leaderboard unavailable";
+      floatingAsOfEl.textContent = "Unavailable";
+    } finally {
+      loadingEl.hidden = true;
+      loadingEl.classList.add("hidden");
+    }
+  });
+</script>
 
 </body>
 </html>
