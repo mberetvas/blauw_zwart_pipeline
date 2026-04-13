@@ -1,0 +1,18 @@
+# Lightweight image for the Pro League scraper microservice.
+# Uses pip directly (no uv/pyproject overhead) with a dedicated requirements file
+# so this image stays decoupled from the main project's dependency graph.
+FROM python:3.12-slim-bookworm
+
+WORKDIR /app
+
+# Install scraper dependencies first for layer caching.
+COPY docker/requirements.scraper.txt /tmp/requirements.scraper.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.scraper.txt
+
+# Copy only the scraper package (not the full monorepo).
+COPY src/proleague_scraper ./proleague_scraper
+
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8001
+CMD ["python", "-m", "proleague_scraper.app"]

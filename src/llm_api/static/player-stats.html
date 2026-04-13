@@ -123,285 +123,312 @@ tailwind.config = {
   <main class="max-w-7xl mx-auto px-4 md:px-8 py-10">
 
     <!-- ── Page header ─────────────────────────────────────────── -->
-    <!-- MOCK DATA: player stats — no live endpoint; replace with API when available -->
     <div class="mb-10 flex flex-col sm:flex-row sm:items-end gap-4">
       <div>
         <p class="text-xs font-bold tracking-[0.25em] text-primary uppercase mb-2 font-headline">Performance Center</p>
         <h1 class="font-headline text-5xl md:text-6xl font-black italic tracking-tighter uppercase text-on-surface leading-none">
-          Player<br>Comparison
+          Player<br>Stats
         </h1>
       </div>
-      <div class="sm:ml-auto flex gap-3 items-center">
-        <span class="flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-xs font-bold uppercase tracking-widest text-primary">
+      <div class="sm:ml-auto flex gap-3 items-center flex-wrap">
+        <span id="live-badge" class="hidden items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-xs font-bold uppercase tracking-widest text-primary">
           <span class="w-2 h-2 rounded-full bg-[#22c55e] animate-pulse inline-block"></span>
           Live Season Stats
+        </span>
+        <span id="offline-badge" class="hidden items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-xs font-bold uppercase tracking-widest text-error">
+          <span class="material-symbols-outlined text-sm">wifi_off</span>Scraper Offline
         </span>
         <a href="/" class="px-4 py-2 rounded-2xl bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors">Ask AI</a>
       </div>
     </div>
 
-    <!-- ── 3-col grid: Player 1 | Attribute Duel | Player 2 ─────── -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+    <!-- ── Loading / error state ─────────────────────────────── -->
+    <div id="loading-state" class="py-24 flex flex-col items-center gap-4 text-on-surface-variant">
+      <span class="material-symbols-outlined text-5xl animate-spin" style="animation-duration:1.2s">autorenew</span>
+      <p class="text-sm font-medium uppercase tracking-widest">Fetching squad data…</p>
+      <p class="text-xs opacity-60">Scraping Pro League — may take 30–60 s on first load</p>
+    </div>
 
-      <!-- ── Player 1 card ────────────────────────────────────── -->
-      <div class="lg:col-span-4">
-        <div class="rounded-3xl overflow-hidden bg-surface-container-high">
-          <!-- Hero image -->
-          <div class="relative aspect-[4/5] overflow-hidden">
-            <img
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuDK5a-TFPRiEJP2qOqr9A9p3X5qrIBJ8pnXgCpVmTxMC3Y3dJwHYLnhqPpFT7G3ySZ0v6j8TY1qrmBcvh2nVNr4Y-h10IfYLUi8=s1024"
-              alt="Hans Vanaken"
-              class="player-img w-full h-full object-cover object-top"
-              onerror="this.parentElement.style.background='#222a3d'"
-            />
-            <div class="stadium-gradient absolute inset-0"></div>
-            <div class="absolute bottom-0 left-0 p-6">
-              <p class="font-headline font-black text-on-surface text-3xl italic leading-tight">Hans<br>Vanaken</p>
-              <p class="text-xs text-on-surface-variant mt-1 uppercase tracking-wider font-bold">Midfielder · #6</p>
-            </div>
-            <div class="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-primary-container text-on-primary text-xs font-bold tracking-widest">STARTER</div>
-          </div>
-          <!-- Stat mini-cards -->
-          <div class="p-5 grid grid-cols-2 gap-3">
-            <div class="bg-surface-container rounded-xl p-3 text-center">
-              <p class="font-headline font-black text-primary text-2xl">9</p>
-              <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Goals</p>
-            </div>
-            <div class="bg-surface-container rounded-xl p-3 text-center">
-              <p class="font-headline font-black text-primary text-2xl">14</p>
-              <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Assists</p>
-            </div>
-            <div class="bg-surface-container rounded-xl p-3 text-center">
-              <p class="font-headline font-black text-primary text-2xl">91%</p>
-              <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Pass Acc.</p>
-            </div>
-            <div class="bg-surface-container rounded-xl p-3 text-center">
-              <p class="font-headline font-black text-primary text-2xl">87</p>
-              <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Rating</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── Attribute Duel ────────────────────────────────────── -->
-      <div class="lg:col-span-4 flex flex-col gap-4">
-        <div class="bg-surface-container-high rounded-3xl p-6 flex-1">
-          <p class="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-6 font-headline text-center">Attribute Duel</p>
-
-          <!-- Each stat row: left value | bar | right value -->
-          <div class="flex flex-col gap-5" id="duel-rows">
-            <!-- Shooting -->
-            <div>
-              <div class="flex justify-between items-center mb-1.5">
-                <span class="font-headline font-black text-on-surface text-lg leading-none">82</span>
-                <span class="text-xs font-bold uppercase tracking-widest text-outline">Shooting</span>
-                <span class="font-headline font-black text-on-surface text-lg leading-none">78</span>
-              </div>
-              <div class="relative flex items-center gap-1">
-                <div class="flex-1 stat-bar-track">
-                  <div class="stat-bar-fill bg-primary-container ml-auto" style="width:82%"></div>
-                </div>
-                <div class="flex-1 stat-bar-track">
-                  <div class="stat-bar-fill bg-secondary-container" style="width:78%"></div>
-                </div>
-              </div>
-            </div>
-            <!-- Passing -->
-            <div>
-              <div class="flex justify-between items-center mb-1.5">
-                <span class="font-headline font-black text-on-surface text-lg leading-none">91</span>
-                <span class="text-xs font-bold uppercase tracking-widest text-outline">Passing</span>
-                <span class="font-headline font-black text-on-surface text-lg leading-none">84</span>
-              </div>
-              <div class="relative flex items-center gap-1">
-                <div class="flex-1 stat-bar-track">
-                  <div class="stat-bar-fill bg-primary-container ml-auto" style="width:91%"></div>
-                </div>
-                <div class="flex-1 stat-bar-track">
-                  <div class="stat-bar-fill bg-secondary-container" style="width:84%"></div>
-                </div>
-              </div>
-            </div>
-            <!-- Speed -->
-            <div>
-              <div class="flex justify-between items-center mb-1.5">
-                <span class="font-headline font-black text-on-surface text-lg leading-none">71</span>
-                <span class="text-xs font-bold uppercase tracking-widest text-outline">Speed</span>
-                <span class="font-headline font-black text-on-surface text-lg leading-none">93</span>
-              </div>
-              <div class="relative flex items-center gap-1">
-                <div class="flex-1 stat-bar-track">
-                  <div class="stat-bar-fill bg-primary-container ml-auto" style="width:71%"></div>
-                </div>
-                <div class="flex-1 stat-bar-track">
-                  <div class="stat-bar-fill bg-secondary-container" style="width:93%"></div>
-                </div>
-              </div>
-            </div>
-            <!-- Defense -->
-            <div>
-              <div class="flex justify-between items-center mb-1.5">
-                <span class="font-headline font-black text-on-surface text-lg leading-none">74</span>
-                <span class="text-xs font-bold uppercase tracking-widest text-outline">Defense</span>
-                <span class="font-headline font-black text-on-surface text-lg leading-none">65</span>
-              </div>
-              <div class="relative flex items-center gap-1">
-                <div class="flex-1 stat-bar-track">
-                  <div class="stat-bar-fill bg-primary-container ml-auto" style="width:74%"></div>
-                </div>
-                <div class="flex-1 stat-bar-track">
-                  <div class="stat-bar-fill bg-secondary-container" style="width:65%"></div>
-                </div>
-              </div>
-            </div>
-            <!-- Dribbling -->
-            <div>
-              <div class="flex justify-between items-center mb-1.5">
-                <span class="font-headline font-black text-on-surface text-lg leading-none">83</span>
-                <span class="text-xs font-bold uppercase tracking-widest text-outline">Dribbling</span>
-                <span class="font-headline font-black text-on-surface text-lg leading-none">88</span>
-              </div>
-              <div class="relative flex items-center gap-1">
-                <div class="flex-1 stat-bar-track">
-                  <div class="stat-bar-fill bg-primary-container ml-auto" style="width:83%"></div>
-                </div>
-                <div class="flex-1 stat-bar-track">
-                  <div class="stat-bar-fill bg-secondary-container" style="width:88%"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Legend -->
-          <div class="flex justify-between mt-6 text-xs font-bold uppercase tracking-widest">
-            <span class="flex items-center gap-1.5 text-primary"><span class="w-3 h-1.5 rounded-full bg-primary-container inline-block"></span>Vanaken</span>
-            <span class="flex items-center gap-1.5 text-on-surface-variant"><span class="w-3 h-1.5 rounded-full bg-secondary-container inline-block"></span>Skov Olsen</span>
-          </div>
-        </div>
-
-        <!-- Overall verdict chip -->
-        <div class="bg-surface-container-high rounded-3xl p-5 text-center">
-          <p class="text-xs font-bold uppercase tracking-widest text-outline mb-2">Overall Winner</p>
-          <p class="font-headline font-black text-primary text-2xl italic">Vanaken</p>
-          <p class="text-xs text-on-surface-variant mt-1">Higher composite score (80.2 vs 81.6 pace-adjusted)</p>
-        </div>
-      </div>
-
-      <!-- ── Player 2 card ────────────────────────────────────── -->
-      <div class="lg:col-span-4">
-        <div class="rounded-3xl overflow-hidden bg-surface-container-high">
-          <div class="relative aspect-[4/5] overflow-hidden">
-            <img
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuCV_bW9VJSMKiw-P0t0RvxYuIhaqx2NLvkJKJgMEJLH9Dq_5vlPwgJt0YRxSF_FE0eM1E3Ox-f1iiWNnp4pWMVHYtmvhxM1MvE=s1024"
-              alt="Andreas Skov Olsen"
-              class="player-img w-full h-full object-cover object-top"
-              onerror="this.parentElement.style.background='#222a3d'"
-            />
-            <div class="stadium-gradient absolute inset-0"></div>
-            <div class="absolute bottom-0 left-0 p-6">
-              <p class="font-headline font-black text-on-surface text-3xl italic leading-tight">Andreas<br>Skov Olsen</p>
-              <p class="text-xs text-on-surface-variant mt-1 uppercase tracking-wider font-bold">Winger · #10</p>
-            </div>
-            <div class="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold tracking-widest">STARTER</div>
-          </div>
-          <div class="p-5 grid grid-cols-2 gap-3">
-            <div class="bg-surface-container rounded-xl p-3 text-center">
-              <p class="font-headline font-black text-on-surface text-2xl">11</p>
-              <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Goals</p>
-            </div>
-            <div class="bg-surface-container rounded-xl p-3 text-center">
-              <p class="font-headline font-black text-on-surface text-2xl">8</p>
-              <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Assists</p>
-            </div>
-            <div class="bg-surface-container rounded-xl p-3 text-center">
-              <p class="font-headline font-black text-on-surface text-2xl">84%</p>
-              <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Pass Acc.</p>
-            </div>
-            <div class="bg-surface-container rounded-xl p-3 text-center">
-              <p class="font-headline font-black text-on-surface text-2xl">85</p>
-              <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Rating</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-    </div><!-- /3-col grid -->
-
-    <!-- ── AI Verdict card ─────────────────────────────────────── -->
-    <div class="bg-surface-container-high rounded-3xl p-6 mb-8 flex gap-5 items-start">
-      <div class="w-12 h-12 rounded-xl bg-[#0572FF] flex items-center justify-center flex-shrink-0 mt-0.5">
-        <span class="material-symbols-outlined text-white" style="font-variation-settings:'FILL' 1">psychology</span>
+    <div id="error-state" class="hidden py-16 flex flex-col items-center gap-4 text-center">
+      <div class="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center">
+        <span class="material-symbols-outlined text-3xl text-error">error_outline</span>
       </div>
       <div>
-        <p class="text-xs font-bold uppercase tracking-widest text-primary font-headline mb-2">AI Verdict</p>
-        <p class="text-on-surface text-sm leading-relaxed max-w-3xl">
-          Vanaken dominates the midfield with elite passing accuracy (91%) and creative vision — the highest in the squad. Skov Olsen counters with explosive pace (93) and a clinical goal record. For a possession-based system, Vanaken is the cornerstone. In a counter-attacking setup, Skov Olsen's speed differential is decisive.
-        </p>
-        <a href="/" class="inline-flex items-center gap-2 mt-3 text-xs font-bold uppercase tracking-widest text-primary hover:text-on-surface transition-colors">
-          <span class="material-symbols-outlined text-sm">forum</span>Ask AI for more analysis
-        </a>
+        <p class="font-headline font-bold text-on-surface text-lg">Scraper Unavailable</p>
+        <p id="error-msg" class="text-sm text-on-surface-variant mt-2 max-w-md mx-auto"></p>
       </div>
+      <p class="text-xs text-outline max-w-sm">Make sure the <code class="bg-surface-container-highest px-1.5 py-0.5 rounded text-primary">proleague-scraper</code> service is running: <code class="bg-surface-container-highest px-1.5 py-0.5 rounded text-primary">docker compose up proleague-scraper</code></p>
+      <button onclick="loadSquad()" class="mt-2 px-5 py-2.5 rounded-2xl bg-primary-container text-on-primary text-xs font-bold uppercase tracking-widest hover:bg-primary transition-colors">
+        Retry
+      </button>
     </div>
 
-    <!-- ── Secondary analysis row ─────────────────────────────── -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- ── Live content (hidden until data loads) ─────────────── -->
+    <div id="live-content" class="hidden">
 
-      <!-- Heatmap placeholder -->
-      <div class="bg-surface-container-high rounded-3xl p-6">
-        <p class="text-xs font-bold uppercase tracking-widest text-primary font-headline mb-4">Position Heatmap</p>
-        <div class="aspect-[3/2] rounded-xl bg-surface-container flex items-center justify-center">
-          <div class="text-center">
-            <span class="material-symbols-outlined text-4xl text-outline opacity-40" style="font-variation-settings:'FILL' 1">grid_on</span>
-            <p class="text-xs text-outline mt-2 uppercase tracking-wider">Live data<br>not yet available</p>
-          </div>
+      <!-- ── Player selector row ──────────────────────────────── -->
+      <div class="mb-8 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+        <div class="flex-1 flex flex-col gap-1">
+          <label class="text-xs font-bold uppercase tracking-widest text-primary font-headline">Player 1</label>
+          <select id="player1-select" class="bg-surface-container-high border border-outline-variant rounded-xl px-4 py-3 text-on-surface text-sm font-medium focus:outline-none focus:border-primary transition-colors"></select>
         </div>
-        <p class="text-xs text-outline mt-3">Positional data integration planned for next sprint.</p>
+        <div class="sm:pt-6 text-outline font-bold text-xl">VS</div>
+        <div class="flex-1 flex flex-col gap-1">
+          <label class="text-xs font-bold uppercase tracking-widest text-secondary font-headline">Player 2</label>
+          <select id="player2-select" class="bg-surface-container-high border border-outline-variant rounded-xl px-4 py-3 text-on-surface text-sm font-medium focus:outline-none focus:border-primary transition-colors"></select>
+        </div>
       </div>
 
-      <!-- Recent form -->
-      <div class="bg-surface-container-high rounded-3xl p-6">
-        <p class="text-xs font-bold uppercase tracking-widest text-primary font-headline mb-4">Recent Form (last 5)</p>
-        <div class="flex flex-col gap-4">
-          <div>
-            <p class="text-xs font-bold text-on-surface mb-2">Vanaken</p>
-            <div class="flex gap-1.5">
-              <span class="form-W px-2.5 py-1 rounded-full text-xs font-bold uppercase">W</span>
-              <span class="form-W px-2.5 py-1 rounded-full text-xs font-bold uppercase">W</span>
-              <span class="form-D px-2.5 py-1 rounded-full text-xs font-bold uppercase">D</span>
-              <span class="form-W px-2.5 py-1 rounded-full text-xs font-bold uppercase">W</span>
-              <span class="form-L px-2.5 py-1 rounded-full text-xs font-bold uppercase">L</span>
-            </div>
-          </div>
-          <div>
-            <p class="text-xs font-bold text-on-surface mb-2">Skov Olsen</p>
-            <div class="flex gap-1.5">
-              <span class="form-W px-2.5 py-1 rounded-full text-xs font-bold uppercase">W</span>
-              <span class="form-D px-2.5 py-1 rounded-full text-xs font-bold uppercase">D</span>
-              <span class="form-W px-2.5 py-1 rounded-full text-xs font-bold uppercase">W</span>
-              <span class="form-W px-2.5 py-1 rounded-full text-xs font-bold uppercase">W</span>
-              <span class="form-D px-2.5 py-1 rounded-full text-xs font-bold uppercase">D</span>
-            </div>
+      <!-- ── 3-col grid: Player 1 | Stat Duel | Player 2 ──────── -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+
+        <!-- Player 1 card -->
+        <div class="lg:col-span-4" id="p1-card"></div>
+
+        <!-- Stat Duel -->
+        <div class="lg:col-span-4 flex flex-col gap-4">
+          <div class="bg-surface-container-high rounded-3xl p-6 flex-1">
+            <p class="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-6 font-headline text-center">Stat Comparison</p>
+            <div id="duel-rows" class="flex flex-col gap-5"></div>
+            <div id="duel-legend" class="flex justify-between mt-6 text-xs font-bold uppercase tracking-widest"></div>
           </div>
         </div>
-        <p class="text-xs text-outline mt-4">Team match results. Individual performance ratings pending.</p>
+
+        <!-- Player 2 card -->
+        <div class="lg:col-span-4" id="p2-card"></div>
+      </div><!-- /3-col grid -->
+
+      <!-- ── Full stats tables ──────────────────────────────────── -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div class="bg-surface-container-high rounded-3xl p-6">
+          <p id="p1-stats-title" class="text-xs font-bold uppercase tracking-widest text-primary font-headline mb-4">Player 1 Stats</p>
+          <div id="p1-stats-table" class="flex flex-col gap-2"></div>
+        </div>
+        <div class="bg-surface-container-high rounded-3xl p-6">
+          <p id="p2-stats-title" class="text-xs font-bold uppercase tracking-widest text-secondary font-headline mb-4">Player 2 Stats</p>
+          <div id="p2-stats-table" class="flex flex-col gap-2"></div>
+        </div>
       </div>
 
-      <!-- Add third player -->
-      <div class="bg-surface-container-high rounded-3xl p-6 flex flex-col items-center justify-center gap-4 text-center">
-        <div class="w-14 h-14 rounded-2xl bg-surface-container-highest flex items-center justify-center">
-          <span class="material-symbols-outlined text-2xl text-outline">person_add</span>
-        </div>
-        <div>
-          <p class="font-headline font-bold text-on-surface">Add Third Player</p>
-          <p class="text-xs text-on-surface-variant mt-1 max-w-[28ch]">Compare up to three players side-by-side. Three-way duel coming in v2.</p>
-        </div>
-        <button class="px-5 py-2.5 rounded-2xl bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors opacity-50 cursor-not-allowed" disabled aria-disabled="true">Coming Soon</button>
-      </div>
+      <!-- ── Data attribution ───────────────────────────────────── -->
+      <p class="text-xs text-outline text-center pb-4">
+        Stats sourced from
+        <a href="https://www.proleague.be" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline">proleague.be</a>
+        · Current season · <span id="fetched-at"></span>
+      </p>
 
-    </div>
+    </div><!-- /live-content -->
 
   </main>
 </div>
+
+<script>
+// ── Player Stats — live data from /api/player-stats/squad ─────────────────
+// Fetches squad + stats from the proleague-scraper microservice via the
+// Flask proxy to avoid browser CORS issues.
+
+let squadData = null;
+
+// Ordered list of stat keys shown in the duel comparison panel.
+// These keys are present for most outfield positions; goalkeeper-specific
+// keys (savesMade, cleansheets) are included and silently skipped when 0.
+const DUEL_STAT_KEYS = [
+  { key: 'goals',                    label: 'Goals' },
+  { key: 'assists',                  label: 'Assists' },
+  { key: 'gamesPlayed',              label: 'Games' },
+  { key: 'timePlayed',               label: 'Minutes' },
+  { key: 'totalSuccessfulPasses',    label: 'Passes' },
+  { key: 'savesMade',                label: 'Saves' },
+];
+
+function getStatValue(player, key) {
+  if (!player || !player.stats) return 0;
+  const entry = player.stats.find(s => s.key === key);
+  return entry ? (entry.value || 0) : 0;
+}
+
+function buildPlayerCard(player, accentClass, badgeClass) {
+  if (!player) return '<div class="rounded-3xl bg-surface-container-high p-8 text-center text-outline">No player selected</div>';
+  const nameParts = (player.name || '').split(' ');
+  const firstName = nameParts.slice(0, -1).join(' ') || nameParts[0] || '';
+  const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
+  const pos = player.position || player.field_position || '—';
+  const shirt = player.shirt_number != null ? `#${player.shirt_number}` : '';
+  const goals = getStatValue(player, 'goals');
+  const assists = getStatValue(player, 'assists');
+  const passes = getStatValue(player, 'totalSuccessfulPasses');
+  const games = getStatValue(player, 'gamesPlayed');
+  const imgUrl = player.image_url || '';
+  // Route through server-side proxy to avoid hotlink/CORS blocking by proleague.be CDN.
+  const imgSrc = imgUrl ? `/api/player-stats/image?url=${encodeURIComponent(imgUrl)}` : '';
+  const imgTag = imgSrc
+    ? `<img src="${imgSrc}" alt="${player.name}" class="player-img w-full h-full object-cover object-top" onerror="this.parentElement.style.background='#222a3d'"/>`
+    : '';
+
+  return `
+    <div class="rounded-3xl overflow-hidden bg-surface-container-high">
+      <div class="relative aspect-[4/5] overflow-hidden bg-surface-container-highest">
+        ${imgTag}
+        <div class="stadium-gradient absolute inset-0"></div>
+        <div class="absolute bottom-0 left-0 p-6">
+          <p class="font-headline font-black text-on-surface text-3xl italic leading-tight">${firstName}<br>${lastName}</p>
+          <p class="text-xs text-on-surface-variant mt-1 uppercase tracking-wider font-bold">${pos} ${shirt}</p>
+        </div>
+        <div class="absolute top-4 left-4 px-3 py-1.5 rounded-full ${badgeClass} text-xs font-bold tracking-widest">
+          ${player.competition || 'JPL'}
+        </div>
+      </div>
+      <div class="p-5 grid grid-cols-2 gap-3">
+        <div class="bg-surface-container rounded-xl p-3 text-center">
+          <p class="font-headline font-black ${accentClass} text-2xl">${goals}</p>
+          <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Goals</p>
+        </div>
+        <div class="bg-surface-container rounded-xl p-3 text-center">
+          <p class="font-headline font-black ${accentClass} text-2xl">${assists}</p>
+          <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Assists</p>
+        </div>
+        <div class="bg-surface-container rounded-xl p-3 text-center">
+          <p class="font-headline font-black ${accentClass} text-2xl">${passes}</p>
+          <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Passes</p>
+        </div>
+        <div class="bg-surface-container rounded-xl p-3 text-center">
+          <p class="font-headline font-black ${accentClass} text-2xl">${games}</p>
+          <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Games</p>
+        </div>
+      </div>
+    </div>`;
+}
+
+function buildDuelRows(p1, p2) {
+  if (!p1 || !p2) return '';
+  return DUEL_STAT_KEYS.map(({ key, label }) => {
+    const v1 = getStatValue(p1, key);
+    const v2 = getStatValue(p2, key);
+    const max = Math.max(v1, v2, 1);
+    const pct1 = Math.round((v1 / max) * 100);
+    const pct2 = Math.round((v2 / max) * 100);
+    return `
+      <div>
+        <div class="flex justify-between items-center mb-1.5">
+          <span class="font-headline font-black text-on-surface text-lg leading-none">${v1}</span>
+          <span class="text-xs font-bold uppercase tracking-widest text-outline">${label}</span>
+          <span class="font-headline font-black text-on-surface text-lg leading-none">${v2}</span>
+        </div>
+        <div class="relative flex items-center gap-1">
+          <div class="flex-1 stat-bar-track">
+            <div class="stat-bar-fill bg-primary-container ml-auto" style="width:${pct1}%"></div>
+          </div>
+          <div class="flex-1 stat-bar-track">
+            <div class="stat-bar-fill bg-secondary-container" style="width:${pct2}%"></div>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function buildStatsTable(player) {
+  if (!player || !player.stats || player.stats.length === 0) {
+    return '<p class="text-xs text-outline italic">No stats available</p>';
+  }
+  return player.stats.map(s => `
+    <div class="flex justify-between items-center py-1.5 border-b border-outline-variant/30 last:border-0">
+      <span class="text-xs text-on-surface-variant">${s.label}</span>
+      <span class="font-headline font-black text-on-surface text-sm">${s.value}</span>
+    </div>`).join('');
+}
+
+function renderComparison() {
+  if (!squadData) return;
+  const players = squadData.players.filter(p => !p.error);
+  const sel1 = document.getElementById('player1-select');
+  const sel2 = document.getElementById('player2-select');
+  const idx1 = parseInt(sel1.value, 10);
+  const idx2 = parseInt(sel2.value, 10);
+  const p1 = players[idx1];
+  const p2 = players[idx2];
+
+  document.getElementById('p1-card').innerHTML = buildPlayerCard(p1, 'text-primary', 'bg-primary-container text-on-primary');
+  document.getElementById('p2-card').innerHTML = buildPlayerCard(p2, 'text-on-surface', 'bg-secondary-container text-on-secondary-container');
+  document.getElementById('duel-rows').innerHTML = buildDuelRows(p1, p2);
+  document.getElementById('duel-legend').innerHTML = `
+    <span class="flex items-center gap-1.5 text-primary">
+      <span class="w-3 h-1.5 rounded-full bg-primary-container inline-block"></span>
+      ${p1 ? p1.name.split(' ').pop() : '—'}
+    </span>
+    <span class="flex items-center gap-1.5 text-on-surface-variant">
+      <span class="w-3 h-1.5 rounded-full bg-secondary-container inline-block"></span>
+      ${p2 ? p2.name.split(' ').pop() : '—'}
+    </span>`;
+  document.getElementById('p1-stats-title').textContent = (p1 ? p1.name : 'Player 1') + ' — All Stats';
+  document.getElementById('p2-stats-title').textContent = (p2 ? p2.name : 'Player 2') + ' — All Stats';
+  document.getElementById('p1-stats-table').innerHTML = buildStatsTable(p1);
+  document.getElementById('p2-stats-table').innerHTML = buildStatsTable(p2);
+}
+
+function populateSelectors(players) {
+  const sel1 = document.getElementById('player1-select');
+  const sel2 = document.getElementById('player2-select');
+  [sel1, sel2].forEach(sel => { sel.innerHTML = ''; });
+  players.forEach((p, i) => {
+    if (p.error) return;
+    const pos = p.position || p.field_position || '';
+    const label = `${p.name}${pos ? ' — ' + pos : ''}${p.shirt_number != null ? ' #' + p.shirt_number : ''}`;
+    [sel1, sel2].forEach(sel => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = label;
+      sel.appendChild(opt);
+    });
+  });
+  // Default: first two players
+  if (sel1.options.length > 1) sel2.value = sel2.options[1]?.value ?? sel2.options[0].value;
+  sel1.addEventListener('change', renderComparison);
+  sel2.addEventListener('change', renderComparison);
+}
+
+async function loadSquad() {
+  document.getElementById('loading-state').classList.remove('hidden');
+  document.getElementById('error-state').classList.add('hidden');
+  document.getElementById('live-content').classList.add('hidden');
+  document.getElementById('live-badge').classList.add('hidden');
+  document.getElementById('offline-badge').classList.add('hidden');
+
+  try {
+    const resp = await fetch('/api/player-stats/squad');
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.error || `HTTP ${resp.status}`);
+    }
+    squadData = await resp.json();
+    const players = (squadData.players || []).filter(p => !p.error);
+    if (players.length === 0) throw new Error('Squad returned 0 players.');
+
+    populateSelectors(squadData.players.filter(p => !p.error));
+    renderComparison();
+
+    if (squadData.fetched_at) {
+      const dt = new Date(squadData.fetched_at);
+      document.getElementById('fetched-at').textContent =
+        'Fetched ' + dt.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+    }
+
+    document.getElementById('loading-state').classList.add('hidden');
+    document.getElementById('live-content').classList.remove('hidden');
+    document.getElementById('live-badge').classList.remove('hidden');
+    document.getElementById('live-badge').classList.add('flex');
+  } catch (err) {
+    console.error('Player stats fetch failed:', err);
+    document.getElementById('loading-state').classList.add('hidden');
+    document.getElementById('error-state').classList.remove('hidden');
+    document.getElementById('error-state').classList.add('flex');
+    document.getElementById('error-msg').textContent = err.message || 'Unknown error';
+    document.getElementById('offline-badge').classList.remove('hidden');
+    document.getElementById('offline-badge').classList.add('flex');
+  }
+}
+
+loadSquad();
+</script>
 
 <!-- ── Mobile Bottom Navigation ───────────────────────────────── -->
 <nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-surface/80 backdrop-blur-xl z-50 md:hidden" aria-label="Mobile navigation">

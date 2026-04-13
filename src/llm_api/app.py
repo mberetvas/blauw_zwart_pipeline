@@ -1201,6 +1201,116 @@ def health() -> Any:
     return jsonify({"status": "ok"})
 
 
+# ---------------------------------------------------------------------------
+# Player stats proxy → proleague-scraper service
+# ---------------------------------------------------------------------------
+
+#: Internal URL of the proleague-scraper Compose service.
+#: Set PROLEAGUE_SCRAPER_URL in the environment (or docker-compose.yml).
+#: Falls back to localhost for direct local development outside Docker.
+PROLEAGUE_SCRAPER_URL = os.environ.get(
+    "PROLEAGUE_SCRAPER_URL", "http://proleague-scraper:8001"
+).rstrip("/")
+
+
+@app.get("/api/player-stats/squad")
+def player_stats_squad() -> Any:
+    """Proxy GET /squad from the proleague-scraper service.
+
+    Accepts an optional ``url`` query parameter to override the default squad URL.
+    Avoids CORS issues in the browser by routing all scraper calls through Flask.
+    """
+    squad_url = request.args.get("url", "").strip()
+    params = {"url": squad_url} if squad_url else {}
+    try:
+        resp = requests.get(
+            f"{PROLEAGUE_SCRAPER_URL}/squad",
+            params=params,
+            timeout=120,  # squad scrape fetches 25+ pages sequentially
+        )
+        resp.raise_for_status()
+        return jsonify(resp.json())
+    except requests.exceptions.ConnectionError:
+        return (
+            jsonify(
+                {"error": "Player stats scraper is unavailable. Is proleague-scraper running?"}
+            ),
+            503,
+        )
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "Player stats scraper timed out."}), 504
+    except requests.exceptions.RequestException as exc:
+        log.exception("Player stats squad proxy failed")
+        return jsonify({"error": f"Scraper request failed: {exc}"}), 502
+
+
+@app.get("/api/player-stats/player")
+def player_stats_player() -> Any:
+    """Proxy GET /player?url=<profile_url> from the proleague-scraper service."""
+    player_url = request.args.get("url", "").strip()
+    if not player_url:
+        return jsonify({"error": "url query parameter is required"}), 400
+    try:
+        resp = requests.get(
+            f"{PROLEAGUE_SCRAPER_URL}/player",
+            params={"url": player_url},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return jsonify(resp.json())
+    except requests.exceptions.ConnectionError:
+        return (
+            jsonify(
+                {"error": "Player stats scraper is unavailable. Is proleague-scraper running?"}
+            ),
+            503,
+        )
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "Player stats scraper timed out."}), 504
+    except requests.exceptions.RequestException as exc:
+        log.exception("Player stats player proxy failed")
+        return jsonify({"error": f"Scraper request failed: {exc}"}), 502
+
+
+@app.get("/api/player-stats/image")
+def player_stats_image() -> Any:
+    """Proxy a player image from proleague.be to the browser.
+
+    Fetches the image server-side and streams it back, bypassing browser-side
+    hotlink blocking and CORS restrictions from the proleague.be image CDN.
+    Only URLs whose hostname ends with ``proleague.be`` are accepted.
+    """
+    from urllib.parse import urlparse as _urlparse
+
+    image_url = request.args.get("url", "").strip()
+    if not image_url:
+        return jsonify({"error": "url parameter is required"}), 400
+
+    parsed = _urlparse(image_url)
+    if not parsed.netloc.lower().endswith("proleague.be"):
+        return jsonify({"error": "Only proleague.be image URLs are allowed"}), 403
+
+    try:
+        img_resp = requests.get(
+            image_url,
+            timeout=10,
+            headers={
+                "Referer": "https://www.proleague.be/",
+                "User-Agent": (
+                    "ClubBruggeAI-FanSim/1.0 "
+                    "(fan data pipeline; https://github.com/your-org/blauw_zwart_fan_sim_pipeline)"
+                ),
+            },
+        )
+        img_resp.raise_for_status()
+    except requests.exceptions.RequestException as exc:
+        log.warning("Image proxy failed for %s: %s", image_url, exc)
+        return jsonify({"error": f"Failed to fetch image: {exc}"}), 502
+
+    content_type = img_resp.headers.get("Content-Type", "image/jpeg")
+    return Response(img_resp.content, content_type=content_type)
+
+
 @app.get("/api/leaderboard")
 def leaderboard_api() -> Any:
     window = (request.args.get("window") or "all").strip().lower()

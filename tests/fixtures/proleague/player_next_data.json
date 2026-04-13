@@ -1,0 +1,77 @@
+{
+  "props": {
+    "pageProps": {
+      "type": "PLAYER_SINGLE",
+      "slug": "simon-mignolet-3219",
+      "data": {
+        "player": {
+          "id": "726ebb53-ca62-4d48-85f0-856c86c98780",
+          "name": "Simon Mignolet",
+          "nickname": "Simon Mignolet",
+          "birthDate": "1988-03-06",
+          "birthPlace": "Sint-Truiden",
+          "weight": 87,
+          "height": 193,
+          "nationality": {"id": "abc", "name": "België", "code": "BE"},
+          "secondNationality": null,
+          "preferredFoot": {"id": "def", "name": "Rechts"},
+          "position": {
+            "id": "ghi",
+            "name": "Doelmannen",
+            "singularName": "Doelman",
+            "shortName": null,
+            "position": 1,
+            "type": "player",
+            "fieldPosition": "goalkeeper"
+          },
+          "image": {
+            "id": "img1",
+            "url": "https://example.com/mignolet-original.png",
+            "height": 1080,
+            "width": 720,
+            "thumbnails": {
+              "xsmall": "https://example.com/mignolet-xsmall.png",
+              "xlarge": "https://example.com/mignolet-xlarge.png"
+            }
+          },
+          "slug": "simon-mignolet-3219",
+          "squads": [
+            {
+              "id": "squad1",
+              "shirtNumber": 22,
+              "team": {"id": "t1", "name": "Club Brugge", "slug": "club-brugge-kv-182"},
+              "position": {"singularName": "Doelman", "fieldPosition": "goalkeeper"}
+            }
+          ],
+          "stats": [
+            {
+              "id": "stat1",
+              "competition": {
+                "id": "18d6fee0-d3bb-4624-b4d2-ac5b16ab498c",
+                "name": "Jupiler Pro League",
+                "main": true
+              },
+              "stats": {
+                "savesMade": 32,
+                "cleansheets": 1,
+                "goalsConceded": 11,
+                "gamesPlayed": 11,
+                "timePlayed": 945,
+                "yellowCards": 1,
+                "redCards": 0,
+                "goals": 0,
+                "assists": 0,
+                "totalSuccessfulPasses": 287,
+                "totalUnsuccessfulPasses": 54
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "page": "/spillere/simon-mignolet-3219",
+  "query": {"params": ["spillere", "simon-mignolet-3219"]},
+  "buildId": "test-build-id",
+  "runtimeConfig": {}
+}

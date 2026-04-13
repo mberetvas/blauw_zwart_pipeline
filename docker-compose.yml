@@ -178,6 +178,32 @@ services:
       kafka-init:
         condition: service_completed_successfully
 
+  # ─── Pro League player-stats scraper ─────────────────────────────────────
+  # Fetches Club Brugge squad & player stats from proleague.be.
+  # Exposed on the internal Docker network only (no host port needed — llm-api proxies it).
+  # IMPORTANT: Operators must verify https://www.proleague.be/robots.txt and
+  # Terms of Use before running against the live site.
+  proleague-scraper:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.scraper
+    environment:
+      PYTHONUNBUFFERED: "1"
+      # Override the default squad URL if needed:
+      PROLEAGUE_SQUAD_URL: ${PROLEAGUE_SQUAD_URL:-https://www.proleague.be/teams/club-brugge-kv-182/squad}
+      # Write-access DB URL so scraped data can be persisted to player_stats table.
+      DATABASE_URL: ${DATABASE_URL}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   # ─── Natural-language Q&A API (Flask + Ollama Text-to-SQL) ──────────────
   # Requires Ollama running on the host with `gemma4:e2b` pulled:
   #   ollama pull gemma4:e2b
@@ -204,6 +230,8 @@ services:
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-mistralai/mistral-7b-instruct:free}
       # Persist Ollama/OpenRouter settings from the Club Settings UI across container restarts.
       LLM_CONFIG_PATH: ${LLM_CONFIG_PATH:-/data/llm_config.json}
+      # Internal URL of the player-stats scraper service (used by the /api/player-stats proxy).
+      PROLEAGUE_SCRAPER_URL: ${PROLEAGUE_SCRAPER_URL:-http://proleague-scraper:8001}
     ports:
       - "${LLM_API_PORT:-8080}:8080"
     # `host-gateway` makes host.docker.internal resolve to the Docker bridge IP
@@ -214,6 +242,8 @@ services:
       - llm-api-config:/data
     depends_on:
       postgres:
+        condition: service_healthy
+      proleague-scraper:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\""]
