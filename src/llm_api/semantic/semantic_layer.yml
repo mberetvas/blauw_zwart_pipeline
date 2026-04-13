@@ -1,0 +1,166 @@
+version: 1
+
+# ---------------------------------------------------------------------------
+# Subjects: primary analytics entities and which mart table owns their KPIs.
+# ---------------------------------------------------------------------------
+subjects:
+  - name: fan
+    primary_mart: mart_fan_loyalty
+    description: >
+      One row per fan. Use mart_fan_loyalty for all fan-level aggregated KPIs
+      (spend, attendance counts, favourite items and shops).
+    prefer_mart_when: >
+      Fan-level aggregates: total spend, merchandise spend, retail spend,
+      matches attended, purchase counts, favourite merch item, favourite shop.
+    prefer_event_tables_when: >
+      Event-level or row-level detail: individual transaction rows,
+      per-event timestamps, Kafka metadata (topic, partition, offset),
+      or match-level breakdown not available in the mart.
+
+# ---------------------------------------------------------------------------
+# Metrics: named, typed, with units — the canonical list for the LLM.
+# ---------------------------------------------------------------------------
+metrics:
+  - name: total_spend
+    table: mart_fan_loyalty
+    column: total_spend
+    aggregation: sum
+    unit: EUR
+    description: >
+      Combined lifetime spend (merch_total_spend + retail_total_spend).
+      Best column for ranking fans by overall commercial value.
+
+  - name: merch_total_spend
+    table: mart_fan_loyalty
+    column: merch_total_spend
+    aggregation: sum
+    unit: EUR
+    description: Lifetime stadium merchandise spend.
+
+  - name: retail_total_spend
+    table: mart_fan_loyalty
+    column: retail_total_spend
+    aggregation: sum
+    unit: EUR
+    description: >
+      Lifetime retail channel spend (jan_breydel_fan_shop, webshop,
+      bruges_city_shop). Does not include stadium merch.
+
+  - name: matches_attended
+    table: mart_fan_loyalty
+    column: matches_attended
+    aggregation: sum
+    unit: matches
+    description: >
+      Number of distinct matches the fan physically attended (ticket_scan events).
+
+  - name: merch_purchase_count
+    table: mart_fan_loyalty
+    column: merch_purchase_count
+    aggregation: sum
+    unit: transactions
+    description: Stadium merchandise purchase transactions.
+
+  - name: retail_purchase_count
+    table: mart_fan_loyalty
+    column: retail_purchase_count
+    aggregation: sum
+    unit: transactions
+    description: Retail channel purchase transactions.
+
+# ---------------------------------------------------------------------------
+# Dimensions: filter/group-by fields and which tables carry them.
+# ---------------------------------------------------------------------------
+dimensions:
+  - name: fan_id
+    tables:
+      - mart_fan_loyalty
+      - merch_purchase
+      - retail_purchase
+      - match_events
+    description: "Unique fan identifier (e.g. 'fan_00042')."
+
+  - name: match_id
+    tables:
+      - merch_purchase
+      - match_events
+    description: Match identifier for event-level queries.
+
+  - name: shop
+    tables:
+      - retail_purchase
+      - mart_fan_loyalty
+    description: >
+      Retail shop name: jan_breydel_fan_shop, webshop, or bruges_city_shop.
+      In mart_fan_loyalty, see favourite_shop.
+
+  - name: item
+    tables:
+      - merch_purchase
+      - retail_purchase
+    description: >
+      Purchased item (e.g. scarf, shirt, poster).
+      In mart_fan_loyalty, see favourite_merch_item and favourite_retail_item.
+
+  - name: event_type
+    tables:
+      - stg_fan_events_ingested
+      - match_events
+    description: >
+      Event type: merch_purchase, retail_purchase, ticket_scan.
+
+# ---------------------------------------------------------------------------
+# Join paths: only pairs safe for llm_reader (same schema, FK relationship).
+# ---------------------------------------------------------------------------
+join_paths:
+  - from_table: merch_purchase
+    to_table: mart_fan_loyalty
+    on: "merch_purchase.fan_id = mart_fan_loyalty.fan_id"
+    note: Event-level merch rows to fan summary.
+
+  - from_table: retail_purchase
+    to_table: mart_fan_loyalty
+    on: "retail_purchase.fan_id = mart_fan_loyalty.fan_id"
+    note: Event-level retail rows to fan summary.
+
+  - from_table: match_events
+    to_table: mart_fan_loyalty
+    on: "match_events.fan_id = mart_fan_loyalty.fan_id"
+    note: Match-level events to fan summary.
+
+# ---------------------------------------------------------------------------
+# Layering rules: data-driven guidance on which layer to use for each intent.
+# ---------------------------------------------------------------------------
+layering_rules:
+  - id: prefer_mart_for_fan_kpis
+    description: >
+      For fan-level KPIs (spend, attendance counts, favourite items/shops),
+      always prefer mart_fan_loyalty. It is pre-aggregated and is the
+      authoritative source for commercial analytics.
+
+  - id: use_event_tables_for_detail
+    description: >
+      Use merch_purchase, retail_purchase, or match_events only when the
+      question requires individual event rows, per-event timestamps, Kafka
+      metadata, or match-level detail not available in the mart.
+
+  - id: staging_is_raw
+    description: >
+      stg_fan_events_ingested is a raw staging pass-through. Avoid it
+      unless the question explicitly needs unparsed JSONB payload or Kafka
+      infrastructure fields (topic, partition, offset).
+
+# ---------------------------------------------------------------------------
+# Answer style: rules for the second-stage (NL answer) prompt.
+# ---------------------------------------------------------------------------
+answer_style:
+  currency_unit: EUR
+  decimal_places: 2
+  rules:
+    - "State monetary values with the EUR unit, e.g. €42.50, not just 42.5."
+    - "Round monetary values to 2 decimal places."
+    - "State count metrics (matches, transactions) as whole numbers."
+    - "If the query returned zero rows, say 'No data was found' — do not guess or hallucinate values."
+    - "Do not invent values not present in the data rows."
+    - "Reference specific fan IDs or item names from the result when relevant."
+    - "Keep the answer to 1–3 sentences unless the question explicitly asks for a list."

@@ -3,7 +3,7 @@
 <html class="dark" lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,400;0,500;0,600;0,700;0,900;1,400&amp;family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
@@ -63,9 +63,9 @@
                         "full": "0.75rem"
                     },
                     fontFamily: {
-                        "headline": ["Space Grotesk"],
-                        "body": ["Inter"],
-                        "label": ["Inter"]
+                        "headline": ["Chivo", "system-ui", "sans-serif"],
+                        "body": ["Source Sans 3", "system-ui", "sans-serif"],
+                        "label": ["Source Sans 3", "system-ui", "sans-serif"]
                     }
                 }
             }
@@ -88,11 +88,11 @@
 <body class="bg-background text-on-surface font-body overflow-x-hidden">
 <!-- TopNavBar -->
 <header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 w-full bg-[#0b1326] no-line-rule tonal-shift-only bg-[#131b2e]">
-<div class="text-xl font-black italic text-[#0572FF] tracking-tighter">CLUB BRUGGE AI</div>
+<div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
 <nav class="hidden md:flex gap-8 items-center">
-<a class="font-spaceGrotesk tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">Data Q&amp;A</a>
-<a class="font-spaceGrotesk tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">SHOP</a>
-<a class="font-spaceGrotesk tracking-wide uppercase font-bold text-[#b0c6ff] border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors duration-300" href="#">Fan Leaderboard</a>
+<a class="font-headline tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">Data Q&amp;A</a>
+<a class="font-headline tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">SHOP</a>
+<a class="font-headline tracking-wide uppercase font-bold text-[#b0c6ff] border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors duration-300" href="#">Fan Leaderboard</a>
 </nav>
 <div class="flex items-center gap-4">
 <button class="material-symbols-outlined text-[#0572FF] text-2xl">account_circle</button>
@@ -104,7 +104,7 @@
 <div class="w-16 h-16 rounded-full overflow-hidden bg-surface-container-highest mb-2">
 <img alt="Club Brugge Crest" data-alt="Official Club Brugge crest emblem with blue and black stripes in a premium metallic finish" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC73RekaqkAOhAIcfRYRPLiAH4fa0ohVPWxRb4ioAhsFpZ45tiGsNxrB2e81N_rNdHi-uUfzYOAMLT1B-ZaW7XfbUSULuRP69Auqcn4RcXHzLCnTK4DnRO6ncUjQWepmIbWrw7AJfeHx-fG5IhYV_qwaB8qosCA0FZfsGzY2AofJmKiLUd-Bnh-g3PtZI5tQAM7mnGL_XEojbVSgfySmzA50rSamzbqFUX1w_No9BKqy-49XzGBnkwRCO1GZW6AN426cHmWmm2kg8wZ"/>
 </div>
-<h2 class="font-headline font-bold text-lg text-on-surface">Stadium Nocturne</h2>
+<h2 class="font-headline font-bold text-lg text-on-surface">Jan Breydel AI</h2>
 <p class="text-xs text-primary opacity-80 uppercase tracking-widest font-bold">AI Assistant</p>
 </div>
 <button class="bg-[#0572FF] text-white py-3 px-6 rounded-xl font-bold uppercase tracking-wider text-xs active:scale-[0.98] transition-all mb-4">
@@ -164,15 +164,15 @@
 </div>
 <div class="grid grid-cols-3 gap-4">
 <div class="bg-surface-container-highest p-4 rounded-xl flex flex-col items-center">
-<span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Goals</span>
+<span class="text-xs font-bold text-outline uppercase tracking-widest mb-1">Goals</span>
 <span class="text-2xl font-headline font-black text-primary">12</span>
 </div>
 <div class="bg-surface-container-highest p-4 rounded-xl flex flex-col items-center">
-<span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Assists</span>
+<span class="text-xs font-bold text-outline uppercase tracking-widest mb-1">Assists</span>
 <span class="text-2xl font-headline font-black text-primary">8</span>
 </div>
 <div class="bg-surface-container-highest p-4 rounded-xl flex flex-col items-center">
-<span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Accuracy</span>
+<span class="text-xs font-bold text-outline uppercase tracking-widest mb-1">Accuracy</span>
 <span class="text-2xl font-headline font-black text-primary">89%</span>
 </div>
 </div>
@@ -186,7 +186,7 @@
 <div class="w-full space-y-8 relative z-10">
 <!-- Stat Bar: Shooting -->
 <div class="space-y-2">
-<div class="flex justify-between text-[10px] font-black tracking-widest uppercase">
+<div class="flex justify-between text-xs font-black tracking-widest uppercase">
 <span>82</span>
 <span class="text-on-surface/50">SHOOTING</span>
 <span>88</span>
@@ -198,7 +198,7 @@
 </div>
 <!-- Stat Bar: Passing -->
 <div class="space-y-2">
-<div class="flex justify-between text-[10px] font-black tracking-widest uppercase">
+<div class="flex justify-between text-xs font-black tracking-widest uppercase">
 <span>91</span>
 <span class="text-on-surface/50">PASSING</span>
 <span>84</span>
@@ -210,7 +210,7 @@
 </div>
 <!-- Stat Bar: Speed -->
 <div class="space-y-2">
-<div class="flex justify-between text-[10px] font-black tracking-widest uppercase">
+<div class="flex justify-between text-xs font-black tracking-widest uppercase">
 <span>74</span>
 <span class="text-on-surface/50">SPEED</span>
 <span>92</span>
@@ -222,7 +222,7 @@
 </div>
 <!-- Stat Bar: Defense -->
 <div class="space-y-2">
-<div class="flex justify-between text-[10px] font-black tracking-widest uppercase">
+<div class="flex justify-between text-xs font-black tracking-widest uppercase">
 <span>68</span>
 <span class="text-on-surface/50">DEFENSE</span>
 <span>45</span>
@@ -258,15 +258,15 @@
 </div>
 <div class="grid grid-cols-3 gap-4">
 <div class="bg-surface-container-highest p-4 rounded-xl flex flex-col items-center border-b-2 border-primary-container">
-<span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Goals</span>
+<span class="text-xs font-bold text-outline uppercase tracking-widest mb-1">Goals</span>
 <span class="text-2xl font-headline font-black text-primary">15</span>
 </div>
 <div class="bg-surface-container-highest p-4 rounded-xl flex flex-col items-center">
-<span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Assists</span>
+<span class="text-xs font-bold text-outline uppercase tracking-widest mb-1">Assists</span>
 <span class="text-2xl font-headline font-black text-primary">6</span>
 </div>
 <div class="bg-surface-container-highest p-4 rounded-xl flex flex-col items-center">
-<span class="text-[10px] font-bold text-outline uppercase tracking-widest mb-1">Accuracy</span>
+<span class="text-xs font-bold text-outline uppercase tracking-widest mb-1">Accuracy</span>
 <span class="text-2xl font-headline font-black text-primary">82%</span>
 </div>
 </div>
@@ -308,7 +308,7 @@
 <div class="bg-surface-container-low rounded-2xl p-6 flex items-center justify-center border-2 border-dashed border-outline-variant/30">
 <button class="flex flex-col items-center gap-2 text-outline hover:text-primary transition-colors">
 <span class="material-symbols-outlined text-3xl">add_circle</span>
-<span class="text-[10px] font-bold uppercase tracking-widest">Add Third Player</span>
+<span class="text-xs font-bold uppercase tracking-widest">Add Third Player</span>
 </button>
 </div>
 </section>
@@ -317,19 +317,19 @@
 <nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-[#0b1326]/80 backdrop-blur-xl z-50 md:hidden no-line-rule">
 <a class="flex flex-col items-center justify-center text-[#dae2fd] opacity-50 p-2" href="#">
 <span class="material-symbols-outlined">forum</span>
-<span class="font-inter text-[10px] uppercase font-bold tracking-widest mt-1">Chat</span>
+<span class="font-body text-xs uppercase font-bold tracking-widest mt-1">Chat</span>
 </a>
 <a class="flex flex-col items-center justify-center text-[#dae2fd] opacity-50 p-2" href="#">
 <span class="material-symbols-outlined">shopping_bag</span>
-<span class="font-inter text-[10px] uppercase font-bold tracking-widest mt-1">Shop</span>
+<span class="font-body text-xs uppercase font-bold tracking-widest mt-1">Shop</span>
 </a>
 <a class="flex flex-col items-center justify-center bg-[#0572FF] text-white rounded-xl p-2 scale-110" href="#">
 <span class="material-symbols-outlined">leaderboard</span>
-<span class="font-inter text-[10px] uppercase font-bold tracking-widest mt-1">Data</span>
+<span class="font-body text-xs uppercase font-bold tracking-widest mt-1">Data</span>
 </a>
 <a class="flex flex-col items-center justify-center text-[#dae2fd] opacity-50 p-2" href="#">
 <span class="material-symbols-outlined">person</span>
-<span class="font-inter text-[10px] uppercase font-bold tracking-widest mt-1">Profile</span>
+<span class="font-body text-xs uppercase font-bold tracking-widest mt-1">Profile</span>
 </a>
 </nav>
 </body></html>

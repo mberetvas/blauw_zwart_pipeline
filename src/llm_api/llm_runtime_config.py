@@ -23,6 +23,14 @@ from urllib.parse import urlparse
 
 log = logging.getLogger(__name__)
 
+# Default OpenRouter model IDs (suggestions + env fallback when OPENROUTER_MODEL is unset).
+DEFAULT_OPENROUTER_MODELS: tuple[str, ...] = (
+    "deepseek/deepseek-v3.2",
+    "google/gemini-3.1-flash-lite-preview",
+    "minimax/minimax-m2.5",
+    "x-ai/grok-4.1-fast",
+)
+
 _lock = threading.RLock()
 _state: dict[str, Any] = {}
 _CONFIG_PATH: Path | None = None
@@ -34,6 +42,7 @@ _MERGE_KEYS = frozenset(
         "ollama_timeout",
         "openrouter_base_url",
         "openrouter_model",
+        "openrouter_models",
         "openrouter_timeout",
         "openrouter_api_key",
         "default_provider",
@@ -49,6 +58,33 @@ _STR_KEYS = frozenset(
         "default_provider",
     }
 )
+
+
+def _openrouter_models_from_env() -> list[str]:
+    raw = os.environ.get("OPENROUTER_MODELS", "").strip()
+    if not raw:
+        return list(DEFAULT_OPENROUTER_MODELS)
+    items = [p.strip() for p in raw.split(",") if p.strip()]
+    return items if items else list(DEFAULT_OPENROUTER_MODELS)
+
+
+def coerce_openrouter_models(raw: Any) -> list[str]:
+    """Normalize API/JSON input into a non-empty list of model ids."""
+    if isinstance(raw, list):
+        items = [str(x).strip() for x in raw]
+    elif isinstance(raw, str):
+        items = [p.strip() for p in raw.split(",")]
+    else:
+        raise ValueError("openrouter_models must be a list of strings or a comma-separated string")
+    items = [x for x in items if x]
+    if not items:
+        raise ValueError("openrouter_models must contain at least one model id")
+    if len(items) > 64:
+        raise ValueError("openrouter_models supports at most 64 entries")
+    for m in items:
+        if len(m) > 256:
+            raise ValueError("each openrouter model id must be at most 256 characters")
+    return items
 
 
 def config_path() -> Path:
@@ -73,9 +109,11 @@ def _defaults_from_env() -> dict[str, Any]:
         "openrouter_base_url": os.environ.get(
             "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
         ).rstrip("/"),
-        "openrouter_model": os.environ.get(
-            "OPENROUTER_MODEL", "mistralai/mistral-7b-instruct:free"
-        ).strip(),
+        "openrouter_model": (
+            os.environ.get("OPENROUTER_MODEL", "").strip()
+            or DEFAULT_OPENROUTER_MODELS[0]
+        ),
+        "openrouter_models": _openrouter_models_from_env(),
         "openrouter_timeout": int(os.environ.get("OPENROUTER_TIMEOUT", "120")),
         "openrouter_api_key": os.environ.get("OPENROUTER_API_KEY", "").strip(),
         "default_provider": os.environ.get("LLM_PROVIDER", "ollama").strip().lower(),
@@ -97,6 +135,7 @@ def _validate_state(s: dict[str, Any]) -> None:
         raise ValueError("ollama_model must be a non-empty string (max 256 chars)")
     if not s["openrouter_model"] or len(s["openrouter_model"]) > 256:
         raise ValueError("openrouter_model must be a non-empty string (max 256 chars)")
+    s["openrouter_models"] = coerce_openrouter_models(s["openrouter_models"])
     ot = int(s["ollama_timeout"])
     rt = int(s["openrouter_timeout"])
     if not (1 <= ot <= 600 and 1 <= rt <= 600):
@@ -121,6 +160,12 @@ def _overlay_file(base: dict[str, Any], path: Path) -> dict[str, Any]:
         return out
     for key in _MERGE_KEYS:
         if key not in data or data[key] is None:
+            continue
+        if key == "openrouter_models":
+            try:
+                out["openrouter_models"] = coerce_openrouter_models(data[key])
+            except ValueError:
+                log.warning("Ignoring invalid openrouter_models in %s", path)
             continue
         if key.endswith("_timeout"):
             out[key] = int(data[key])
@@ -177,6 +222,7 @@ def to_public_config() -> dict[str, Any]:
         "ollama_timeout": s["ollama_timeout"],
         "openrouter_base_url": s["openrouter_base_url"],
         "openrouter_model": s["openrouter_model"],
+        "openrouter_models": list(s["openrouter_models"]),
         "openrouter_timeout": s["openrouter_timeout"],
         "openrouter_api_key_masked": masked,
         "openrouter_api_key_configured": configured,
@@ -214,6 +260,9 @@ def apply_llm_config_update(body: dict[str, Any]) -> dict[str, Any]:
         merged["ollama_timeout"] = int(body["ollama_timeout"])
     if "openrouter_timeout" in body and body["openrouter_timeout"] is not None:
         merged["openrouter_timeout"] = int(body["openrouter_timeout"])
+
+    if "openrouter_models" in body and body["openrouter_models"] is not None:
+        merged["openrouter_models"] = coerce_openrouter_models(body["openrouter_models"])
 
     if "openrouter_api_key" in body:
         raw = body["openrouter_api_key"]

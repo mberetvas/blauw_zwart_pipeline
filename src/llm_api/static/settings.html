@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Club Settings — Club Brugge AI</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,400;0,500;0,600;0,700;0,900;1,400&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script id="tailwind-config">
@@ -43,9 +43,9 @@ tailwind.config = {
         "full": "9999px"
       },
       fontFamily: {
-        "headline": ["Space Grotesk", "sans-serif"],
-        "body":     ["Inter", "sans-serif"],
-        "label":    ["Inter", "sans-serif"]
+        "headline": ["Chivo", "system-ui", "sans-serif"],
+        "body":     ["Source Sans 3", "system-ui", "sans-serif"],
+        "label":    ["Source Sans 3", "system-ui", "sans-serif"]
       }
     }
   }
@@ -57,12 +57,12 @@ tailwind.config = {
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #2d3449; border-radius: 10px; }
   .field-label {
-    font-size: 10px;
+    font-size: 0.75rem;
     font-weight: 700;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: #8c90a1;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: 'Chivo', system-ui, sans-serif;
   }
   .field-input {
     width: 100%;
@@ -71,7 +71,7 @@ tailwind.config = {
     background: #2d3449;
     color: #dae2fd;
     padding: 0.65rem 1rem;
-    font-size: 0.875rem;
+    font-size: 1rem;
     outline: none;
     border: none;
     transition: background 0.15s, box-shadow 0.15s;
@@ -89,7 +89,7 @@ tailwind.config = {
   <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
   <nav class="hidden md:flex gap-8">
     <a href="/" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Data Q&amp;A</a>
-    <span class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 cursor-not-allowed" aria-disabled="true">SHOP</span>
+    <a href="/player-stats" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Player Stats</a>
     <a href="/leaderboard" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Fan Leaderboard</a>
   </nav>
   <button type="button" class="material-symbols-outlined text-[#0572FF]" aria-label="Account">account_circle</button>
@@ -101,8 +101,8 @@ tailwind.config = {
       <span class="material-symbols-outlined text-2xl" style="font-variation-settings:'FILL' 1">stadium</span>
     </div>
     <div>
-      <div class="font-headline font-bold text-on-surface text-base leading-tight">Stadium Nocturne</div>
-      <div class="text-[10px] text-primary opacity-80 uppercase tracking-widest">Configuration</div>
+      <div class="font-headline font-bold text-on-surface text-base leading-tight">Jan Breydel AI</div>
+      <div class="text-xs text-primary opacity-80 uppercase tracking-widest">Configuration</div>
     </div>
   </div>
   <nav class="flex flex-col gap-1 flex-1">
@@ -115,11 +115,11 @@ tailwind.config = {
     <a href="/player-stats" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
       <span class="material-symbols-outlined">compare_arrows</span>Player Stats
     </a>
-    <a href="/settings" class="flex items-center gap-3 bg-surface-container-highest text-primary rounded-2xl px-4 py-3 text-sm font-medium" aria-current="page">
-      <span class="material-symbols-outlined">settings</span>Club Settings
-    </a>
   </nav>
   <div class="flex flex-col gap-1 border-t border-white/5 pt-4">
+    <a href="/settings" class="flex items-center gap-3 bg-surface-container-highest text-primary rounded-xl px-4 py-2 text-xs font-medium" aria-current="page">
+      <span class="material-symbols-outlined text-sm">settings</span>Club Settings
+    </a>
     <a href="#" class="flex items-center gap-3 text-on-surface opacity-40 px-4 py-2 hover:opacity-80 transition-opacity text-xs font-medium">
       <span class="material-symbols-outlined text-sm">help</span>Help
     </a>
@@ -130,7 +130,7 @@ tailwind.config = {
   <main class="max-w-3xl mx-auto px-4 md:px-8 py-10">
 
     <div class="mb-10">
-      <p class="text-[10px] font-bold tracking-[0.25em] text-primary uppercase mb-2 font-headline">Infrastructure</p>
+      <p class="text-xs font-bold tracking-[0.25em] text-primary uppercase mb-2 font-headline">Infrastructure</p>
       <h1 class="font-headline text-4xl md:text-5xl font-black italic tracking-tighter text-on-surface leading-tight">Club Settings</h1>
       <p class="text-sm text-on-surface-variant mt-3 max-w-[60ch] leading-relaxed">Configure Ollama and OpenRouter for the Text-to-SQL assistant. Values are stored on the server and apply immediately after save.</p>
       <p id="precedence-note" class="text-xs text-outline mt-4 max-w-[65ch] leading-relaxed"></p>
@@ -177,7 +177,13 @@ tailwind.config = {
         </div>
         <div>
           <label class="field-label" for="openrouter_model">Default model</label>
-          <input id="openrouter_model" name="openrouter_model" type="text" class="field-input" required autocomplete="off"/>
+          <input id="openrouter_model" name="openrouter_model" type="text" class="field-input" required autocomplete="off" list="openrouter-model-suggestions"/>
+          <datalist id="openrouter-model-suggestions">
+            <option value="deepseek/deepseek-v3.2">
+            <option value="google/gemini-3.1-flash-lite-preview">
+            <option value="minimax/minimax-m2.5">
+            <option value="x-ai/grok-4.1-fast">
+          </datalist>
         </div>
         <div>
           <label class="field-label" for="openrouter_timeout">Timeout (seconds)</label>
@@ -208,19 +214,19 @@ tailwind.config = {
 <nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-surface/80 backdrop-blur-xl z-50 md:hidden" aria-label="Mobile navigation">
   <a href="/" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
     <span class="material-symbols-outlined">forum</span>
-    <span class="text-[9px] uppercase font-bold tracking-widest">Chat</span>
+    <span class="text-xs uppercase font-bold tracking-widest">Chat</span>
   </a>
   <a href="#" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
     <span class="material-symbols-outlined">shopping_bag</span>
-    <span class="text-[9px] uppercase font-bold tracking-widest">Shop</span>
+    <span class="text-xs uppercase font-bold tracking-widest">Shop</span>
   </a>
   <a href="/leaderboard" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
     <span class="material-symbols-outlined">leaderboard</span>
-    <span class="text-[9px] uppercase font-bold tracking-widest">Data</span>
+    <span class="text-xs uppercase font-bold tracking-widest">Data</span>
   </a>
   <a href="/settings" class="flex flex-col items-center gap-1 bg-[#0572FF] text-white rounded-xl p-2 scale-110">
     <span class="material-symbols-outlined">settings</span>
-    <span class="text-[9px] uppercase font-bold tracking-widest">Settings</span>
+    <span class="text-xs uppercase font-bold tracking-widest">Settings</span>
   </a>
 </nav>
 
@@ -234,6 +240,17 @@ tailwind.config = {
   const keyStatus = document.getElementById("key-status");
   const keyInput = document.getElementById("openrouter_api_key");
   const clearKey = document.getElementById("clear_openrouter_key");
+
+  function fillOpenrouterDatalist(models) {
+    const dl = document.getElementById("openrouter-model-suggestions");
+    if (!dl || !Array.isArray(models) || !models.length) return;
+    dl.innerHTML = "";
+    for (const m of models) {
+      const opt = document.createElement("option");
+      opt.value = m;
+      dl.appendChild(opt);
+    }
+  }
 
   function showFlash(msg, ok) {
     flash.textContent = msg;
@@ -260,6 +277,7 @@ tailwind.config = {
     document.getElementById("ollama_model").value = c.ollama_model || "";
     document.getElementById("ollama_timeout").value = String(c.ollama_timeout ?? 120);
     document.getElementById("openrouter_base_url").value = c.openrouter_base_url || "";
+    fillOpenrouterDatalist(c.openrouter_models);
     document.getElementById("openrouter_model").value = c.openrouter_model || "";
     document.getElementById("openrouter_timeout").value = String(c.openrouter_timeout ?? 120);
     keyInput.value = "";

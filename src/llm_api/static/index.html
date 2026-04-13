@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Club Brugge AI — Fan Analytics</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,400;0,500;0,600;0,700;0,900;1,400&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script id="tailwind-config">
@@ -44,9 +44,9 @@ tailwind.config = {
         "full": "9999px"
       },
       fontFamily: {
-        "headline": ["Space Grotesk", "sans-serif"],
-        "body":     ["Inter", "sans-serif"],
-        "label":    ["Inter", "sans-serif"]
+        "headline": ["Chivo", "system-ui", "sans-serif"],
+        "body":     ["Source Sans 3", "system-ui", "sans-serif"],
+        "label":    ["Source Sans 3", "system-ui", "sans-serif"]
       }
     }
   }
@@ -75,16 +75,16 @@ tailwind.config = {
   /* ── AI header (avatar + label) ─────────────────────── */
   .msg-ai-hdr{display:flex;align-items:center;gap:.65rem}
   .msg-avatar{width:2rem;height:2rem;border-radius:50%;background:#0572FF;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-  .msg-label{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:.6rem;text-transform:uppercase;letter-spacing:.15em;color:#b0c6ff}
+  .msg-label{font-family:'Chivo',system-ui,sans-serif;font-weight:700;font-size:.75rem;text-transform:uppercase;letter-spacing:.12em;color:#b0c6ff}
   /* ── Timestamp ──────────────────────────────────────── */
-  .msg-meta{font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#414655;padding:0 .25rem;opacity:0;transition:opacity .2s}
+  .msg-meta{font-size:.6875rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#414655;padding:0 .25rem;opacity:0;transition:opacity .2s}
   .msg-wrap:hover .msg-meta{opacity:1}
   /* ── Bubble base ────────────────────────────────────── */
-  .msg{word-wrap:break-word;white-space:pre-wrap;position:relative;line-height:1.65;font-size:.9rem}
+  .msg{word-wrap:break-word;white-space:pre-wrap;position:relative;line-height:1.7;font-size:1rem}
   .msg.user{background:#548dff;color:#002761;border-radius:.5rem;border-bottom-right-radius:.125rem;max-width:80%;padding:1rem 1.25rem;box-shadow:0 4px 20px rgba(84,141,255,.2)}
   .msg.assistant{background:#222a3d;color:#dae2fd;border-radius:.5rem;border-bottom-left-radius:.125rem;max-width:90%;padding:1.25rem 1.5rem}
   .msg.error{background:rgba(147,0,10,.35);color:#ffb4ab;border-radius:.5rem;border-bottom-left-radius:.125rem;max-width:90%;padding:1rem 1.25rem}
-  .msg.error .err-label{color:#ffb4ab;font-weight:700;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.35rem}
+  .msg.error .err-label{color:#ffb4ab;font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.35rem}
   /* ── Thinking dots ──────────────────────────────────── */
   .msg.thinking{display:flex;align-items:center;gap:.4rem;background:#222a3d;border-radius:.5rem;border-bottom-left-radius:.125rem;padding:.85rem 1.25rem;width:fit-content}
   .dot{width:6px;height:8px;border-radius:1px;background:#b0c6ff;animation:blink 1.4s ease-in-out infinite}
@@ -93,7 +93,7 @@ tailwind.config = {
   /* ── Answer elements ────────────────────────────────── */
   .answer-text{margin-bottom:.5rem;padding-right:2.5rem}
   details{margin-top:.5rem;border-radius:.5rem;overflow:hidden;background:#171f33}
-  details summary{cursor:pointer;list-style:none;padding:.4rem .75rem;background:#222a3d;font-size:.72rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:#8c90a1;user-select:none;display:flex;align-items:center;gap:.4rem}
+  details summary{cursor:pointer;list-style:none;padding:.4rem .75rem;background:#222a3d;font-size:.75rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#8c90a1;user-select:none;display:flex;align-items:center;gap:.4rem}
   details summary::-webkit-details-marker{display:none}
   details summary::before{content:'▶';font-size:.5rem;transition:transform .15s;flex-shrink:0}
   details[open] summary::before{transform:rotate(90deg)}
@@ -101,20 +101,20 @@ tailwind.config = {
   details[open] summary{border-bottom:1px solid rgba(255,255,255,.04)}
   .sql-block{padding:.75rem 1rem;overflow-x:auto;font-family:'Consolas','Menlo',monospace;font-size:.78rem;line-height:1.6;color:#6ab0f5;background:#060e20}
   .data-wrap{overflow-x:auto;max-height:320px;overflow-y:auto}
-  .data-wrap table{border-collapse:collapse;font-size:.75rem;white-space:nowrap;min-width:100%}
+  .data-wrap table{border-collapse:collapse;font-size:.8125rem;white-space:nowrap;min-width:100%;font-variant-numeric:tabular-nums}
   .data-wrap th,.data-wrap td{padding:.3rem .65rem;border-bottom:1px solid rgba(255,255,255,.04);text-align:left}
-  .data-wrap th{position:sticky;top:0;background:#171f33;color:#8c90a1;font-weight:700;font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;font-family:'Space Grotesk',sans-serif}
+  .data-wrap th{position:sticky;top:0;background:#171f33;color:#8c90a1;font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;font-family:'Chivo',system-ui,sans-serif}
   .data-wrap td{color:#dae2fd;max-width:220px;overflow:hidden;text-overflow:ellipsis}
   .data-wrap tr:nth-child(even) td{background:rgba(255,255,255,.02)}
   .table-notice{padding:.35rem .65rem;font-size:.75rem;color:#8c90a1}
   .trace-block{padding:.9rem 1rem;display:flex;flex-direction:column;gap:.8rem}
   .trace-meta{display:flex;flex-wrap:wrap;gap:.45rem}
-  .trace-chip{display:inline-flex;align-items:center;border-radius:9999px;padding:.2rem .6rem;background:#222a3d;color:#b0c6ff;font-size:.62rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .trace-chip{display:inline-flex;align-items:center;border-radius:9999px;padding:.2rem .6rem;background:#222a3d;color:#b0c6ff;font-size:.6875rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
   .trace-chip.model{color:#dae2fd;background:#171f33;font-family:'Consolas','Menlo',monospace;text-transform:none;letter-spacing:0}
-  .trace-list{margin:0;padding-left:1rem;display:flex;flex-direction:column;gap:.45rem;color:#c2c6d8;font-size:.8rem;line-height:1.55}
+  .trace-list{margin:0;padding-left:1rem;display:flex;flex-direction:column;gap:.45rem;color:#c2c6d8;font-size:.875rem;line-height:1.62}
   .trace-list li::marker{color:#548dff}
   /* ── Copy button ────────────────────────────────────── */
-  .copy-btn{position:absolute;top:.5rem;right:.5rem;padding:.2rem .5rem;font-size:.62rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border:1px solid rgba(255,255,255,.1);border-radius:.25rem;background:#171f33;color:#414655;cursor:pointer;opacity:0;transition:opacity .15s,color .15s}
+  .copy-btn{position:absolute;top:.5rem;right:.5rem;padding:.2rem .5rem;font-size:.6875rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border:1px solid rgba(255,255,255,.1);border-radius:.25rem;background:#171f33;color:#414655;cursor:pointer;opacity:0;transition:opacity .15s,color .15s}
   .msg.assistant:hover .copy-btn,.msg.assistant:focus-within .copy-btn{opacity:1}
   .copy-btn:hover{color:#dae2fd}
   .copy-btn.copied{color:#b0c6ff}
@@ -122,9 +122,9 @@ tailwind.config = {
   #cancel{display:none}
   #cancel.visible{display:flex}
   /* ── LLM provider row ───────────────────────────────── */
-  #provider-sel{font-family:'Inter',sans-serif;font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;background:#222a3d;color:#c2c6d8;border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.22rem .65rem;outline:none;cursor:pointer;transition:border-color .15s}
+  #provider-sel{font-family:inherit;font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;background:#222a3d;color:#c2c6d8;border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.22rem .65rem;outline:none;cursor:pointer;transition:border-color .15s}
   #provider-sel:focus-visible{border-color:rgba(176,198,255,.4)}
-  #model-input{font-family:'Consolas','Menlo',monospace;font-size:.68rem;background:#222a3d;color:#dae2fd;border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.22rem .75rem;width:13rem;outline:none;transition:border-color .15s}
+  #model-input{font-family:'Consolas','Menlo',monospace;font-size:.75rem;background:#222a3d;color:#dae2fd;border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.22rem .75rem;width:13rem;outline:none;transition:border-color .15s}
   #model-input:focus-visible{border-color:rgba(176,198,255,.4)}
   #model-input::placeholder{color:#414655}
   /* ── No-line rule ───────────────────────────────────── */
@@ -138,7 +138,7 @@ tailwind.config = {
   <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
   <nav class="hidden md:flex gap-8">
     <a href="/" class="font-headline tracking-wide uppercase font-bold text-primary border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors">Data Q&amp;A</a>
-    <span class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 cursor-not-allowed" aria-disabled="true">SHOP</span>
+    <a href="/player-stats" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Player Stats</a>
     <a href="/leaderboard" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Fan Leaderboard</a>
   </nav>
   <button class="material-symbols-outlined text-[#0572FF]" aria-label="Account">account_circle</button>
@@ -151,8 +151,8 @@ tailwind.config = {
       <span class="material-symbols-outlined text-2xl" style="font-variation-settings:'FILL' 1">stadium</span>
     </div>
     <div>
-      <div class="font-headline font-bold text-on-surface text-base leading-tight">Stadium Nocturne</div>
-      <div class="text-[10px] text-primary opacity-80 uppercase tracking-widest">AI Assistant</div>
+      <div class="font-headline font-bold text-on-surface text-base leading-tight">Jan Breydel AI</div>
+      <div class="text-xs text-primary opacity-80 uppercase tracking-widest">AI Assistant</div>
     </div>
   </div>
   <button id="btn-clear" type="button"
@@ -170,11 +170,11 @@ tailwind.config = {
     <a href="/player-stats" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
       <span class="material-symbols-outlined">compare_arrows</span>Player Stats
     </a>
-    <a href="/settings" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
-      <span class="material-symbols-outlined">settings</span>Club Settings
-    </a>
   </nav>
   <div class="flex flex-col gap-1 border-t border-white/5 pt-4">
+    <a href="/settings" class="flex items-center gap-3 text-on-surface opacity-40 px-4 py-2 hover:opacity-80 transition-opacity text-xs font-medium">
+      <span class="material-symbols-outlined text-sm">settings</span>Club Settings
+    </a>
     <a href="#" class="flex items-center gap-3 text-on-surface opacity-40 px-4 py-2 hover:opacity-80 transition-opacity text-xs font-medium">
       <span class="material-symbols-outlined text-sm">help</span>Help
     </a>
@@ -196,15 +196,15 @@ tailwind.config = {
       <!-- Static welcome (mirrored in WELCOME_HTML JS template) -->
       <div id="welcome" class="flex flex-col gap-6 py-4 max-w-2xl">
         <div>
-          <p class="text-[10px] font-bold tracking-[0.2em] text-primary uppercase mb-3 font-headline">Club Brugge Analytics</p>
+          <p class="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-3 font-headline">Club Brugge Analytics</p>
           <h2 class="font-headline text-4xl md:text-5xl font-black italic tracking-tighter text-on-surface leading-none">Ask anything<br>about fan data.</h2>
-          <p class="text-sm text-on-surface-variant mt-4 max-w-[52ch] leading-relaxed">Match attendance, merchandise spend, fan segmentation &mdash; powered by AI analysis of the live dbt pipeline.</p>
+          <p class="text-base text-on-surface-variant mt-4 max-w-[65ch] leading-relaxed">Match attendance, merchandise spend, fan segmentation &mdash; powered by AI analysis of the live dbt pipeline.</p>
         </div>
         <div class="flex flex-wrap gap-2">
-          <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Which matches had the highest attendance?</button>
-          <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Top merchandise categories</button>
-          <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Fan spending by segment</button>
-          <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Highest revenue matches</button>
+          <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Which matches had the highest attendance?</button>
+          <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Top merchandise categories</button>
+          <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Fan spending by segment</button>
+          <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Highest revenue matches</button>
         </div>
       </div>
 
@@ -216,7 +216,7 @@ tailwind.config = {
 
         <!-- LLM provider / model row -->
         <div id="llm-settings" class="flex items-center gap-2 flex-wrap mb-3">
-          <span class="text-[10px] text-outline-variant font-medium tracking-widest uppercase select-none">via</span>
+          <span class="text-xs text-outline-variant font-medium tracking-widest uppercase select-none">via</span>
           <select id="provider-sel" aria-label="LLM provider">
             <option value="ollama">Ollama</option>
             <option value="openrouter">OpenRouter</option>
@@ -231,11 +231,10 @@ tailwind.config = {
             <option value="mistral">
           </datalist>
           <datalist id="openrouter-models">
-            <option value="mistralai/mistral-7b-instruct:free">
-            <option value="meta-llama/llama-3.2-3b-instruct:free">
-            <option value="google/gemma-3-4b-it:free">
-            <option value="qwen/qwen-2.5-7b-instruct:free">
-            <option value="microsoft/phi-3-mini-128k-instruct:free">
+            <option value="deepseek/deepseek-v3.2">
+            <option value="google/gemini-3.1-flash-lite-preview">
+            <option value="minimax/minimax-m2.5">
+            <option value="x-ai/grok-4.1-fast">
           </datalist>
         </div>
 
@@ -248,7 +247,7 @@ tailwind.config = {
               aria-label="Your question"></textarea>
             <!-- Cancel button (appears after 3s during a request) -->
             <button id="cancel" type="button"
-              class="absolute right-[52px] top-1/2 -translate-y-1/2 px-3 py-1 rounded-full bg-surface-container text-on-surface-variant text-[10px] font-bold uppercase tracking-wider hover:text-on-surface transition-colors items-center gap-1"
+              class="absolute right-[52px] top-1/2 -translate-y-1/2 px-3 py-1 rounded-full bg-surface-container text-on-surface-variant text-xs font-bold uppercase tracking-wider hover:text-on-surface transition-colors items-center gap-1"
               aria-label="Cancel request">Cancel</button>
             <!-- Send button -->
             <button id="send" type="submit"
@@ -259,10 +258,10 @@ tailwind.config = {
           </div>
           <!-- Quick suggestion chips (always visible) -->
           <div class="flex gap-2 mt-4 overflow-x-auto pb-1 no-scrollbar" id="bottom-chips">
-            <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="Who are the top 5 fans by total spend?">Top fans</button>
-            <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="Which matches had the highest attendance this season?">Attendance</button>
-            <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="Show total revenue by fan segment">Revenue</button>
-            <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="What are the top merchandise categories by units sold?">Merchandise</button>
+            <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="Who are the top 5 fans by total spend?">Top fans</button>
+            <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="Which matches had the highest attendance this season?">Attendance</button>
+            <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="Show total revenue by fan segment">Revenue</button>
+            <button class="bchip whitespace-nowrap px-4 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors" type="button" data-q="What are the top merchandise categories by units sold?">Merchandise</button>
           </div>
         </form>
 
@@ -276,19 +275,19 @@ tailwind.config = {
 <nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-surface/80 backdrop-blur-xl z-50 md:hidden no-line-rule" aria-label="Mobile navigation">
   <a href="/" class="flex flex-col items-center gap-1 bg-[#0572FF] text-white rounded-xl p-2 scale-110">
     <span class="material-symbols-outlined">forum</span>
-    <span class="text-[9px] uppercase font-bold tracking-widest">Chat</span>
+    <span class="text-xs uppercase font-bold tracking-widest">Chat</span>
   </a>
   <a href="#" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
     <span class="material-symbols-outlined">shopping_bag</span>
-    <span class="text-[9px] uppercase font-bold tracking-widest">Shop</span>
+    <span class="text-xs uppercase font-bold tracking-widest">Shop</span>
   </a>
   <a href="/leaderboard" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
     <span class="material-symbols-outlined">leaderboard</span>
-    <span class="text-[9px] uppercase font-bold tracking-widest">Data</span>
+    <span class="text-xs uppercase font-bold tracking-widest">Data</span>
   </a>
   <a href="/settings" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
     <span class="material-symbols-outlined">settings</span>
-    <span class="text-[9px] uppercase font-bold tracking-widest">Settings</span>
+    <span class="text-xs uppercase font-bold tracking-widest">Settings</span>
   </a>
 </nav>
 
@@ -315,6 +314,17 @@ tailwind.config = {
   let cancelTimer = null;
   const TIMEOUT_MS = 120_000;
 
+  function fillOpenrouterDatalist(models) {
+    const dl = document.getElementById("openrouter-models");
+    if (!dl || !Array.isArray(models) || !models.length) return;
+    dl.innerHTML = "";
+    for (const m of models) {
+      const opt = document.createElement("option");
+      opt.value = m;
+      dl.appendChild(opt);
+    }
+  }
+
   // ── Defaults from server if no local preference; else localStorage ──
   async function initLlmUiDefaults() {
     const raw = localStorage.getItem("llm_pref");
@@ -330,6 +340,7 @@ tailwind.config = {
         if (r.ok) {
           const c = await r.json();
           if (c.default_provider) providerEl.value = c.default_provider;
+          fillOpenrouterDatalist(c.openrouter_models);
           const dm =
             providerEl.value === "openrouter"
               ? c.openrouter_model
@@ -361,15 +372,15 @@ tailwind.config = {
   const WELCOME_HTML = `
     <div id="welcome" class="flex flex-col gap-6 py-4 max-w-2xl">
       <div>
-        <p class="text-[10px] font-bold tracking-[0.2em] text-primary uppercase mb-3 font-headline">Club Brugge Analytics</p>
+        <p class="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-3 font-headline">Club Brugge Analytics</p>
         <h2 class="font-headline text-4xl md:text-5xl font-black italic tracking-tighter text-on-surface leading-none">Ask anything<br>about fan data.</h2>
-        <p class="text-sm text-on-surface-variant mt-4 max-w-[52ch] leading-relaxed">Match attendance, merchandise spend, fan segmentation &mdash; powered by AI analysis of the live dbt pipeline.</p>
+        <p class="text-base text-on-surface-variant mt-4 max-w-[65ch] leading-relaxed">Match attendance, merchandise spend, fan segmentation &mdash; powered by AI analysis of the live dbt pipeline.</p>
       </div>
       <div class="flex flex-wrap gap-2">
-        <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Which matches had the highest attendance?</button>
-        <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Top merchandise categories</button>
-        <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Fan spending by segment</button>
-        <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-[10px] font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Highest revenue matches</button>
+        <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Which matches had the highest attendance?</button>
+        <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Top merchandise categories</button>
+        <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Fan spending by segment</button>
+        <button class="chip whitespace-nowrap px-4 py-2 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors duration-200" type="button">Highest revenue matches</button>
       </div>
     </div>`;
 
@@ -441,21 +452,137 @@ tailwind.config = {
     cancelTimer = setTimeout(() => cancelBtn.classList.add("visible"), 3000);
 
     try {
-      const res = await fetch("/api/ask", {
+      const res = await fetch("/api/ask/stream", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
         body: JSON.stringify({ question: q, provider: providerEl.value, model: modelEl.value.trim() }),
         signal: abortCtrl.signal,
       });
       clearTimeout(timeoutId);
-      const data = await res.json();
-      thinking.remove();
 
       if (!res.ok) {
+        thinking.remove();
+        let data = {};
+        try {
+          data = await res.json();
+        } catch (_) {
+          data = { error: "Request failed (" + res.status + ")." };
+        }
         showError(data);
+        announce("Request failed.");
       } else {
-        showAnswer(data);
-        announce("Answer received.");
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let msgEl = null;
+        let answerSpan = null;
+        let accumulated = "";
+        let metaReceived = false;
+        let streamDone = false;
+
+        function consumeSse(bufferStr) {
+          const out = [];
+          let rest = bufferStr;
+          let sep;
+          while ((sep = rest.indexOf("\n\n")) !== -1) {
+            const raw = rest.slice(0, sep);
+            rest = rest.slice(sep + 2);
+            let ev = "message";
+            let dataStr = "";
+            const lines = raw.split("\n");
+            for (let li = 0; li < lines.length; li++) {
+              const line = lines[li];
+              if (line.startsWith("event:")) ev = line.slice(6).trim();
+              else if (line.startsWith("data:")) dataStr = line.slice(5).trimStart();
+            }
+            if (dataStr === "") continue;
+            try {
+              out.push({ event: ev, data: JSON.parse(dataStr) });
+            } catch (_) {}
+          }
+          return { events: out, rest };
+        }
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const parsed = consumeSse(buffer);
+            buffer = parsed.rest;
+            for (let i = 0; i < parsed.events.length; i++) {
+              const { event, data: payload } = parsed.events[i];
+              if (event === "meta") {
+                thinking.remove();
+                metaReceived = true;
+                let shell =
+                  '<div class="answer-text"><span class="answer-stream" aria-live="polite"></span></div>'
+                  + buildMetaDetailsHtml(payload)
+                  + '<button class="copy-btn" type="button" aria-label="Copy answer" disabled>Copy</button>';
+                msgEl = appendMsg("assistant", shell);
+                answerSpan = msgEl.querySelector(".answer-stream");
+                announce("Streaming answer\u2026");
+              } else if (event === "answer_delta" && answerSpan && payload.text) {
+                accumulated += payload.text;
+                answerSpan.textContent = accumulated;
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+              } else if (event === "done") {
+                streamDone = true;
+                if (msgEl) {
+                  const copyBtn = msgEl.querySelector(".copy-btn");
+                  copyBtn.disabled = false;
+                  wireCopyButton(copyBtn, function () { return accumulated; });
+                }
+                announce("Answer complete.");
+              } else if (event === "error") {
+                thinking.remove();
+                const errMsg = payload.message || "Answer stream failed.";
+                if (!metaReceived) {
+                  showError({ error: errMsg });
+                } else if (msgEl) {
+                  const errDiv = document.createElement("div");
+                  errDiv.className = "mt-2 text-sm";
+                  errDiv.style.color = "#ffb4ab";
+                  errDiv.setAttribute("role", "alert");
+                  errDiv.textContent = errMsg;
+                  msgEl.appendChild(errDiv);
+                  const copyBtn = msgEl.querySelector(".copy-btn");
+                  if (copyBtn) {
+                    copyBtn.disabled = false;
+                    wireCopyButton(copyBtn, function () { return accumulated; });
+                  }
+                }
+                announce("Answer stream failed.");
+                try { reader.cancel(); } catch (_) {}
+                return;
+              }
+            }
+          }
+        } catch (readErr) {
+          thinking.remove();
+          if (readErr.name === "AbortError") throw readErr;
+          showError({ error: "Failed to read stream: " + readErr.message });
+          announce("Stream read error.");
+          return;
+        } finally {
+          try { reader.releaseLock(); } catch (_) {}
+        }
+
+        if (!metaReceived) {
+          thinking.remove();
+          showError({ error: "Empty response from server." });
+          announce("No data received.");
+        } else if (!streamDone && msgEl) {
+          const copyBtn = msgEl.querySelector(".copy-btn");
+          if (copyBtn) {
+            copyBtn.disabled = false;
+            wireCopyButton(copyBtn, function () { return accumulated; });
+          }
+          if (accumulated.length) announce("Answer complete.");
+        }
       }
     } catch (err) {
       clearTimeout(timeoutId);
@@ -550,43 +677,49 @@ tailwind.config = {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
-  // ── Render answer ─────────────────────────────────────────────
-  function showAnswer(data) {
-    const answerText = data.answer || "";
-    let html = '<div class="answer-text">' + escHtml(answerText) + "</div>";
-
-    if (data.trace) {
-      html += buildTraceHtml(data.trace);
-    }
-
+  function buildMetaDetailsHtml(data) {
+    let html = "";
+    if (data.trace) html += buildTraceHtml(data.trace);
     if (data.sql) {
       html += "<details><summary>SQL query</summary>"
             + '<div class="sql-block">' + escHtml(data.sql) + "</div></details>";
     }
-
     if (data.data_preview && data.data_preview.length) {
       html += "<details><summary>Data preview (" + data.data_preview.length + " rows)</summary>"
             + '<div class="data-wrap">' + buildTable(data.data_preview) + "</div></details>";
     }
+    return html;
+  }
 
+  function wireCopyButton(copyBtn, getText) {
+    if (!copyBtn) return;
+    if (!navigator.clipboard) {
+      copyBtn.remove();
+      return;
+    }
+    copyBtn.addEventListener("click", function () {
+      const text = typeof getText === "function" ? getText() : getText;
+      navigator.clipboard.writeText(text).then(function () {
+        copyBtn.textContent = "Copied!";
+        copyBtn.classList.add("copied");
+        setTimeout(function () {
+          copyBtn.textContent = "Copy";
+          copyBtn.classList.remove("copied");
+        }, 1500);
+      });
+    });
+  }
+
+  // ── Render answer (non-streaming JSON; e.g. other clients) ──
+  function showAnswer(data) {
+    const answerText = data.answer || "";
+    let html = '<div class="answer-text">' + escHtml(answerText) + "</div>";
+    html += buildMetaDetailsHtml(data);
     html += '<button class="copy-btn" type="button" aria-label="Copy answer">Copy</button>';
 
     const msgEl = appendMsg("assistant", html);
     const copyBtn = msgEl.querySelector(".copy-btn");
-    if (copyBtn && navigator.clipboard) {
-      copyBtn.addEventListener("click", () => {
-        navigator.clipboard.writeText(answerText).then(() => {
-          copyBtn.textContent = "Copied!";
-          copyBtn.classList.add("copied");
-          setTimeout(() => {
-            copyBtn.textContent = "Copy";
-            copyBtn.classList.remove("copied");
-          }, 1500);
-        });
-      });
-    } else if (copyBtn) {
-      copyBtn.remove();
-    }
+    wireCopyButton(copyBtn, answerText);
   }
 
   // ── Render error ──────────────────────────────────────────────

@@ -9,6 +9,8 @@ Flow
 5. Execute wrapped SQL (LIMIT 50, statement_timeout 10 s) as llm_reader.
 6. Prompt the LLM again with the result rows -> natural language answer.
 7. Return {"answer", "sql", "data_preview"}.
+
+POST /api/ask/stream — same steps 1–5, then streams the answer via SSE (meta, answer_delta, done).
 """
 
 from __future__ import annotations
@@ -17,12 +19,13 @@ import json
 import logging
 import os
 import re
+from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any
+from typing import Any, Iterator
 
 import psycopg2
 import requests
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 
 from .llm_runtime_config import (
     apply_llm_config_update,
@@ -31,6 +34,12 @@ from .llm_runtime_config import (
     to_public_config,
 )
 from .schema_context import build_schema_context_text
+from .semantic_layer import (
+    SemanticLayerError,
+    build_answer_semantic_context,
+    build_sql_semantic_context,
+    load_semantic_layer,
+)
 
 # ---------------------------------------------------------------------------
 # Configuration (environment variables)
@@ -68,13 +77,23 @@ init_llm_config()
 
 
 # ---------------------------------------------------------------------------
-# Schema context loader
+# Schema and semantic context loaders
 # ---------------------------------------------------------------------------
 
 
 def load_schema_context() -> str:
     """Merge configured dbt schema YAML(s) into a compact prompt-friendly description."""
     return build_schema_context_text()
+
+
+def load_semantic_context() -> tuple[str, str]:
+    """Load the semantic layer and return (sql_context, answer_context).
+
+    Returns ('', '') when the semantic layer file is absent (graceful degradation).
+    Raises SemanticLayerError when the file is explicitly configured but missing or invalid.
+    """
+    layer = load_semantic_layer()
+    return build_sql_semantic_context(layer), build_answer_semantic_context(layer)
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +195,8 @@ def _build_trace(
         notes.append("Validated the SQL as read-only before sending it to Postgres.")
     if row_count is not None:
         notes.append(
-            f"Executed the query with a 10 second timeout and outer LIMIT 50, returning {row_count} row(s)."
+            f"Executed the query with a 10 second timeout and outer LIMIT 50, "
+            f"returning {row_count} row(s)."
         )
     elif sql is not None:
         notes.append("Tried to execute the validated SQL against Postgres.")
@@ -208,7 +228,8 @@ def _validate_sql(sql: str) -> None:
         )
     if ";" in stripped:
         raise ValueError(
-            "Generated SQL must contain exactly one SELECT statement and cannot include ';' inside the query."
+            "Generated SQL must contain exactly one SELECT statement and cannot include "
+            "';' inside the query."
         )
     match = _MUTATING.search(stripped)
     if match:
@@ -254,6 +275,257 @@ def _execute_sql(sql: str) -> list[dict[str, Any]]:
             return [dict(zip(cols, row)) for row in cur.fetchall()]
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Ask pipeline (shared by /api/ask and /api/ask/stream)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AskPipelineOk:
+    """Successful SQL generation, validation, and execution; ready for answer step."""
+
+    question: str
+    provider: str
+    model: str
+    provider_label: str
+    raw_sql: str
+    sql: str
+    rows: list[dict[str, Any]]
+    data_preview: list[dict[str, Any]]
+    trace: dict[str, Any]
+    answer_prompt: str
+
+
+def _ask_run_through_execution(
+    body: dict[str, Any],
+) -> AskPipelineOk | tuple[dict[str, Any], int]:
+    """Validate request, generate SQL, validate SQL, execute. Returns Ok or (error dict, status)."""
+    question: str = (body.get("question") or "").strip()
+    if not question:
+        return ({"error": "question is required"}, 400)
+
+    s = get_llm_settings()
+    provider = (body.get("provider") or s["default_provider"]).strip().lower()
+    if provider not in KNOWN_PROVIDERS:
+        return (
+            {
+                "error": (
+                    f"Unknown provider '{provider}'. "
+                    f"Valid values: {sorted(KNOWN_PROVIDERS)}"
+                )
+            },
+            400,
+        )
+
+    model = (body.get("model") or "").strip() or (
+        s["ollama_model"] if provider == "ollama" else s["openrouter_model"]
+    )
+
+    if provider == "openrouter" and not s["openrouter_api_key"]:
+        return (
+            {
+                "error": (
+                    "OpenRouter is not configured. "
+                    "Set the API key under Club Settings or OPENROUTER_API_KEY in the environment."
+                )
+            },
+            503,
+        )
+
+    provider_label = _PROVIDER_DISPLAY.get(provider, provider)
+
+    try:
+        schema_context = load_schema_context()
+    except Exception as exc:
+        log.exception("Failed to load schema")
+        return ({"error": f"Schema load failed: {exc}"}, 500)
+
+    try:
+        sql_semantic_ctx, answer_semantic_ctx = load_semantic_context()
+    except SemanticLayerError as exc:
+        log.exception("Failed to load semantic layer")
+        return ({"error": f"Semantic layer load failed: {exc}"}, 500)
+
+    semantic_section = (
+        f"SEMANTIC LAYER:\n{sql_semantic_ctx}\n" if sql_semantic_ctx else ""
+    )
+    sql_prompt = (
+        "You are a PostgreSQL expert. Given the schema below, write a single "
+        "SELECT query that answers the question. Return ONLY the SQL — no "
+        "explanation, no markdown, no code fences.\n\n"
+        f"{semantic_section}"
+        f"Schema:\n{schema_context}\n"
+        f"Question: {question}\n\n"
+        "SQL:"
+    )
+    try:
+        raw_sql = complete(sql_prompt, provider, model)
+    except requests.exceptions.RequestException as exc:
+        log.exception("%s unreachable (SQL step)", provider_label)
+        error, status = _llm_request_error(provider_label, "SQL generation", exc)
+        return (
+            {
+                "error": error,
+                "trace": _build_trace(provider, provider_label, model),
+            },
+            status,
+        )
+
+    sql = _strip_fences(raw_sql)
+    log.info("Generated SQL (%s/%s): %s", provider, model, sql)
+    trace = _build_trace(
+        provider,
+        provider_label,
+        model,
+        raw_sql=raw_sql,
+        sql=sql,
+    )
+
+    try:
+        _validate_sql(sql)
+    except ValueError as exc:
+        return ({"error": str(exc), "raw_sql": raw_sql, "trace": trace}, 422)
+
+    try:
+        rows = _execute_sql(sql)
+    except psycopg2.Error as exc:
+        log.exception("Query execution failed")
+        err = str(exc)
+        if "password authentication failed" in err.lower():
+            err += (
+                " — check LLM_READER_DATABASE_URL matches LLM_READER_PASSWORD in "
+                ".env / docker-compose and the Postgres role password. "
+                "If Postgres was created before that init script existed, run: "
+                "ALTER ROLE llm_reader PASSWORD '<your-llm-reader-password>'; as a superuser, "
+                "or recreate the volume with docker compose down -v."
+            )
+        return (
+            {
+                "error": f"Query execution failed: {err}",
+                "sql": sql,
+                "trace": trace,
+            },
+            500,
+        )
+
+    preview = json.loads(json.dumps(rows[:10], default=_json_default))
+    answer_guidelines_section = (
+        f"{answer_semantic_ctx}\n" if answer_semantic_ctx else ""
+    )
+    answer_prompt = (
+        "You are a helpful data analyst for a football club. "
+        "Answer the question below using the data provided.\n\n"
+        f"{answer_guidelines_section}"
+        f"Question: {question}\n\n"
+        f"Data (JSON, up to 10 rows):\n{json.dumps(preview, indent=2)}\n\n"
+        "Answer:"
+    )
+    data_preview = json.loads(json.dumps(rows, default=_json_default))
+    trace_with_rows = _build_trace(
+        provider,
+        provider_label,
+        model,
+        raw_sql=raw_sql,
+        sql=sql,
+        row_count=len(rows),
+    )
+
+    return AskPipelineOk(
+        question=question,
+        provider=provider,
+        model=model,
+        provider_label=provider_label,
+        raw_sql=raw_sql,
+        sql=sql,
+        rows=rows,
+        data_preview=data_preview,
+        trace=trace_with_rows,
+        answer_prompt=answer_prompt,
+    )
+
+
+def _format_sse(event: str, data: dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, default=_json_default)}\n\n"
+
+
+def _streaming_timeout(total: int) -> tuple[int, int]:
+    """(connect, read) for streaming requests; read uses full provider timeout."""
+    c = min(30, max(1, total))
+    return (c, total)
+
+
+def _stream_ollama_answer(prompt: str, model: str) -> Iterator[str]:
+    s = get_llm_settings()
+    to = int(s["ollama_timeout"])
+    timeout = _streaming_timeout(to)
+    with requests.post(
+        f"{s['ollama_url']}/api/generate",
+        json={"model": model, "prompt": prompt, "stream": True},
+        stream=True,
+        timeout=timeout,
+    ) as resp:
+        resp.raise_for_status()
+        for line in resp.iter_lines(decode_unicode=True):
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                log.warning("Ollama stream: skip non-JSON line: %s", line[:200])
+                continue
+            piece = obj.get("response") or ""
+            if piece:
+                yield piece
+
+
+def _stream_openrouter_answer(prompt: str, model: str) -> Iterator[str]:
+    s = get_llm_settings()
+    to = int(s["openrouter_timeout"])
+    timeout = _streaming_timeout(to)
+    with requests.post(
+        f"{s['openrouter_base_url']}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {s['openrouter_api_key']}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": True,
+        },
+        stream=True,
+        timeout=timeout,
+    ) as resp:
+        resp.raise_for_status()
+        for line in resp.iter_lines(decode_unicode=True):
+            if not line:
+                continue
+            if not line.startswith("data:"):
+                continue
+            data = line[5:].lstrip()
+            if data == "[DONE]":
+                break
+            try:
+                obj = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            choices = obj.get("choices") or []
+            if not choices:
+                continue
+            delta = choices[0].get("delta") or {}
+            content = delta.get("content")
+            if content:
+                yield content
+
+
+def _iter_answer_stream(provider: str, model: str, answer_prompt: str) -> Iterator[str]:
+    """Yield non-empty UTF-8 text fragments from the provider's streaming answer API."""
+    if provider == "openrouter":
+        yield from _stream_openrouter_answer(answer_prompt, model)
+    else:
+        yield from _stream_ollama_answer(answer_prompt, model)
 
 
 # ---------------------------------------------------------------------------
@@ -306,144 +578,29 @@ def health() -> Any:
 @app.post("/api/ask")
 def ask() -> Any:
     body: dict[str, Any] = request.get_json(force=True) or {}
-    question: str = (body.get("question") or "").strip()
-    if not question:
-        return jsonify({"error": "question is required"}), 400
+    result = _ask_run_through_execution(body)
+    if isinstance(result, tuple):
+        payload, status = result
+        return jsonify(payload), status
 
-    s = get_llm_settings()
-    # Resolve and validate provider.
-    provider = (body.get("provider") or s["default_provider"]).strip().lower()
-    if provider not in KNOWN_PROVIDERS:
-        return jsonify(
-            {
-                "error": (
-                    f"Unknown provider '{provider}'. "
-                    f"Valid values: {sorted(KNOWN_PROVIDERS)}"
-                )
-            }
-        ), 400
-
-    # Resolve model (request override -> configured default for the provider).
-    model = (body.get("model") or "").strip() or (
-        s["ollama_model"] if provider == "ollama" else s["openrouter_model"]
-    )
-
-    # Guard: OpenRouter requires a server-side API key.
-    if provider == "openrouter" and not s["openrouter_api_key"]:
-        return jsonify(
-            {
-                "error": (
-                    "OpenRouter is not configured. "
-                    "Set the API key under Club Settings or OPENROUTER_API_KEY in the environment."
-                )
-            }
-        ), 503
-
-    provider_label = _PROVIDER_DISPLAY.get(provider, provider)
-
-    # 1. Load schema context.
+    ok = result
     try:
-        schema_context = load_schema_context()
-    except Exception as exc:
-        log.exception("Failed to load schema")
-        return jsonify({"error": f"Schema load failed: {exc}"}), 500
-
-    # 2. Prompt LLM for SQL.
-    sql_prompt = (
-        "You are a PostgreSQL expert. Given the schema below, write a single "
-        "SELECT query that answers the question. Return ONLY the SQL — no "
-        "explanation, no markdown, no code fences.\n\n"
-        "Prefer the mart relation mart_fan_loyalty for fan-level summaries (spend, "
-        "attendance, favourites). Use staging (e.g. stg_fan_events_ingested) or "
-        "intermediate relations (merch_purchase, retail_purchase, match_events) only "
-        "when the question needs raw or event-level detail (Kafka fields, per-event rows).\n\n"
-        f"Schema:\n{schema_context}\n"
-        f"Question: {question}\n\n"
-        "SQL:"
-    )
-    try:
-        raw_sql = complete(sql_prompt, provider, model)
+        answer = complete(ok.answer_prompt, ok.provider, ok.model)
     except requests.exceptions.RequestException as exc:
-        log.exception("%s unreachable (SQL step)", provider_label)
-        error, status = _llm_request_error(provider_label, "SQL generation", exc)
+        log.exception("%s unreachable (answer step)", ok.provider_label)
+        error, status = _llm_request_error(ok.provider_label, "answer", exc)
         return (
             jsonify(
                 {
                     "error": error,
-                    "trace": _build_trace(provider, provider_label, model),
-                }
-            ),
-            status,
-        )
-
-    sql = _strip_fences(raw_sql)
-    log.info("Generated SQL (%s/%s): %s", provider, model, sql)
-    trace = _build_trace(
-        provider,
-        provider_label,
-        model,
-        raw_sql=raw_sql,
-        sql=sql,
-    )
-
-    # 3. Validate SQL.
-    try:
-        _validate_sql(sql)
-    except ValueError as exc:
-        return jsonify({"error": str(exc), "raw_sql": raw_sql, "trace": trace}), 422
-
-    # 4. Execute against Postgres.
-    try:
-        rows = _execute_sql(sql)
-    except psycopg2.Error as exc:
-        log.exception("Query execution failed")
-        err = str(exc)
-        if "password authentication failed" in err.lower():
-            err += (
-                " — check LLM_READER_DATABASE_URL matches LLM_READER_PASSWORD in "
-                ".env / docker-compose and the Postgres role password. "
-                "If Postgres was created before that init script existed, run: "
-                "ALTER ROLE llm_reader PASSWORD '<your-llm-reader-password>'; as a superuser, "
-                "or recreate the volume with docker compose down -v."
-            )
-        return (
-            jsonify(
-                {
-                    "error": f"Query execution failed: {err}",
-                    "sql": sql,
-                    "trace": trace,
-                }
-            ),
-            500,
-        )
-
-    # 5. Prompt LLM for a natural-language answer.
-    preview = json.loads(json.dumps(rows[:10], default=_json_default))
-    answer_prompt = (
-        "You are a helpful data analyst for a football club. "
-        "Answer the question below in 1-3 clear sentences using the data provided. "
-        "Be specific: include numbers and names from the data.\n\n"
-        f"Question: {question}\n\n"
-        f"Data (JSON, up to 10 rows):\n{json.dumps(preview, indent=2)}\n\n"
-        "Answer:"
-    )
-    try:
-        answer = complete(answer_prompt, provider, model)
-    except requests.exceptions.RequestException as exc:
-        log.exception("%s unreachable (answer step)", provider_label)
-        error, status = _llm_request_error(provider_label, "answer", exc)
-        return (
-            jsonify(
-                {
-                    "error": error,
-                    "sql": sql,
+                    "sql": ok.sql,
                     "trace": _build_trace(
-                        provider,
-                        provider_label,
-                        model,
-                        raw_sql=raw_sql,
-                        sql=sql,
-                        row_count=len(rows),
+                        ok.provider,
+                        ok.provider_label,
+                        ok.model,
+                        raw_sql=ok.raw_sql,
+                        sql=ok.sql,
+                        row_count=len(ok.rows),
                     ),
                 }
             ),
@@ -453,18 +610,69 @@ def ask() -> Any:
     return jsonify(
         {
             "answer": answer,
-            "sql": sql,
-            "data_preview": json.loads(json.dumps(rows, default=_json_default)),
+            "sql": ok.sql,
+            "data_preview": ok.data_preview,
             "trace": _build_trace(
-                provider,
-                provider_label,
-                model,
-                raw_sql=raw_sql,
-                sql=sql,
-                row_count=len(rows),
+                ok.provider,
+                ok.provider_label,
+                ok.model,
+                raw_sql=ok.raw_sql,
+                sql=ok.sql,
+                row_count=len(ok.rows),
                 answered=True,
             ),
         }
+    )
+
+
+@app.post("/api/ask/stream")
+def ask_stream() -> Any:
+    body: dict[str, Any] = request.get_json(force=True) or {}
+    pipeline = _ask_run_through_execution(body)
+    if isinstance(pipeline, tuple):
+        payload, status = pipeline
+        return jsonify(payload), status
+
+    ok = pipeline
+
+    @stream_with_context
+    def event_stream() -> Iterator[str]:
+        yield _format_sse(
+            "meta",
+            {
+                "sql": ok.sql,
+                "data_preview": ok.data_preview,
+                "trace": ok.trace,
+            },
+        )
+        try:
+            for fragment in _iter_answer_stream(
+                ok.provider, ok.model, ok.answer_prompt
+            ):
+                if fragment:
+                    yield _format_sse("answer_delta", {"text": fragment})
+        except requests.exceptions.RequestException as exc:
+            log.exception("%s unreachable (answer stream)", ok.provider_label)
+            msg, _ = _llm_request_error(ok.provider_label, "answer", exc)
+            yield _format_sse("error", {"message": msg})
+            return
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            log.exception("Answer stream parse error")
+            yield _format_sse(
+                "error",
+                {"message": f"Answer stream failed: {exc}"},
+            )
+            return
+        yield _format_sse("done", {})
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+    return Response(
+        event_stream(),
+        mimetype="text/event-stream",
+        headers=headers,
     )
 
 

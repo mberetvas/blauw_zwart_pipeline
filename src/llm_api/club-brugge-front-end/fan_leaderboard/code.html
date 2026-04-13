@@ -3,7 +3,7 @@
 <html class="dark" lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&amp;family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,400;0,500;0,600;0,700;0,900;1,400&amp;family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
@@ -68,9 +68,9 @@
                       "full": "0.75rem"
               },
               "fontFamily": {
-                      "headline": ["Space Grotesk"],
-                      "body": ["Inter"],
-                      "label": ["Inter"]
+                      "headline": ["Chivo", "system-ui", "sans-serif"],
+                      "body": ["Source Sans 3", "system-ui", "sans-serif"],
+                      "label": ["Source Sans 3", "system-ui", "sans-serif"]
               }
             },
           },
@@ -91,11 +91,11 @@
 <body class="bg-background text-on-surface font-body selection:bg-primary/30">
 <!-- TopNavBar -->
 <nav class="fixed top-0 w-full z-50 bg-[#0b1326] dark:bg-[#0b1326] flex justify-between items-center px-6 py-4 w-full no-line-rule tonal-shift-only bg-[#131b2e]">
-<div class="text-xl font-black italic text-[#0572FF] tracking-tighter">CLUB BRUGGE AI</div>
+<div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
 <div class="hidden md:flex items-center gap-8">
-<a class="font-spaceGrotesk tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">Data Q&amp;A</a>
-<a class="font-spaceGrotesk tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">SHOP</a>
-<a class="font-spaceGrotesk tracking-wide uppercase font-bold text-[#b0c6ff] border-b-2 border-[#0572FF] pb-1" href="#">Fan Leaderboard</a>
+<a class="font-headline tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">Data Q&amp;A</a>
+<a class="font-headline tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">SHOP</a>
+<a class="font-headline tracking-wide uppercase font-bold text-[#b0c6ff] border-b-2 border-[#0572FF] pb-1" href="#">Fan Leaderboard</a>
 </div>
 <div class="flex items-center gap-4">
 <button class="material-symbols-outlined text-[#0572FF] scale-95 duration-200">account_circle</button>
@@ -108,8 +108,8 @@
 <img alt="Crest" class="w-6 h-6" data-alt="Official Club Brugge blue and black striped crest with refined metallic texture" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCUtRJVLBq6DWnsqtSbRq1AkYJATzgteR4uZBTP8Q0iYrgbzjtWKGlyqcXqGF1WK2GhIdZqsDFI16WiIOadyjmfW5_P7h3q-kPeO44qfXWKXIMikgKqyAwmsIuB87-a27VeWxxPdGUSMC3motJpYHq9rF5HUbYaFdHz4bMrLge1uTwaMQgukPaNZvPAnkucpwVajqXCcgLI3WaEe5vqxEADxXfjlsSlPB_vBdoNShXbGemO31ZtKQCN5-zaKgbvcsnb8gV1nadAjgSs"/>
 </div>
 <div>
-<p class="font-headline font-bold text-sm tracking-tight">Stadium Nocturne</p>
-<p class="text-[10px] opacity-60 uppercase tracking-widest">AI Assistant</p>
+<p class="font-headline font-bold text-sm tracking-tight">Jan Breydel AI</p>
+<p class="text-xs opacity-60 uppercase tracking-widest">AI Assistant</p>
 </div>
 </div>
 <button class="mx-4 py-3 px-4 rounded-xl bg-primary-container text-on-primary-container font-headline font-bold text-sm hover:opacity-90 transition-all active:scale-[0.98]">
@@ -212,7 +212,7 @@
 <div class="bg-surface-container-highest rounded-3xl p-6 relative overflow-hidden">
 <div class="flex justify-between items-start">
 <div>
-<span class="bg-primary/20 text-primary text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full mb-3 inline-block">FAN OF THE MONTH</span>
+<span class="bg-primary/20 text-primary text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full mb-3 inline-block">FAN OF THE MONTH</span>
 <h3 class="font-headline text-2xl font-bold mb-2">Marc Van Damme</h3>
 <p class="text-on-surface-variant text-sm max-w-[200px]">Highest engagement in match-day AI chat analysis for October.</p>
 </div>
@@ -233,7 +233,7 @@
 </div>
 <div class="overflow-y-auto max-h-[600px] flex-1">
 <!-- Header Labels -->
-<div class="grid grid-cols-12 px-8 py-4 text-[10px] font-black text-on-surface-variant tracking-[0.2em] uppercase bg-surface-container/50">
+<div class="grid grid-cols-12 px-8 py-4 text-xs font-black text-on-surface-variant tracking-[0.2em] uppercase bg-surface-container/50">
 <div class="col-span-2">Rank</div>
 <div class="col-span-5">Fan Profile</div>
 <div class="col-span-3">Level</div>
@@ -250,7 +250,7 @@
 </div>
 <div>
 <p class="font-bold text-sm">You (BruggeFan_88)</p>
-<p class="text-[10px] text-primary uppercase font-bold">Rising Star</p>
+<p class="text-xs text-primary uppercase font-bold">Rising Star</p>
 </div>
 </div>
 <div class="col-span-3">
@@ -321,19 +321,19 @@
 <nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-[#0b1326]/80 backdrop-blur-xl z-50 md:hidden no-line-rule">
 <div class="flex flex-col items-center justify-center text-[#dae2fd] opacity-50 p-2 hover:opacity-100 transition-all">
 <span class="material-symbols-outlined">forum</span>
-<span class="font-inter text-[10px] uppercase font-bold tracking-widest mt-1">Chat</span>
+<span class="font-body text-xs uppercase font-bold tracking-widest mt-1">Chat</span>
 </div>
 <div class="flex flex-col items-center justify-center text-[#dae2fd] opacity-50 p-2 hover:opacity-100 transition-all">
 <span class="material-symbols-outlined">shopping_bag</span>
-<span class="font-inter text-[10px] uppercase font-bold tracking-widest mt-1">Shop</span>
+<span class="font-body text-xs uppercase font-bold tracking-widest mt-1">Shop</span>
 </div>
 <div class="flex flex-col items-center justify-center bg-[#0572FF] text-white rounded-xl p-2 scale-110 duration-300">
 <span class="material-symbols-outlined">leaderboard</span>
-<span class="font-inter text-[10px] uppercase font-bold tracking-widest mt-1">Data</span>
+<span class="font-body text-xs uppercase font-bold tracking-widest mt-1">Data</span>
 </div>
 <div class="flex flex-col items-center justify-center text-[#dae2fd] opacity-50 p-2 hover:opacity-100 transition-all">
 <span class="material-symbols-outlined">person</span>
-<span class="font-inter text-[10px] uppercase font-bold tracking-widest mt-1">Profile</span>
+<span class="font-body text-xs uppercase font-bold tracking-widest mt-1">Profile</span>
 </div>
 </nav>
 <!-- Sticky "Your Rank" Bar (Tablet/Mobile fallback) -->

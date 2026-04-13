@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 @pytest.fixture()
@@ -80,6 +81,8 @@ def test_llm_config_routes_mask_and_persist_key(llm_app_module) -> None:
     public_body = get_response.get_json()
     assert public_body["openrouter_api_key_masked"] == "****1234"
     assert public_body["openrouter_api_key_configured"] is True
+    assert isinstance(public_body.get("openrouter_models"), list)
+    assert len(public_body["openrouter_models"]) >= 1
 
     persisted = json.loads(Path(public_body["config_file"]).read_text(encoding="utf-8"))
     assert persisted["openrouter_api_key"] == "sk-test-1234"
@@ -112,3 +115,217 @@ def test_ask_route_accepts_cte_sql_and_returns_answer(
     assert body["sql"] == "WITH latest AS (SELECT 1 AS fan_id)\nSELECT fan_id FROM latest"
     assert body["answer"] == "Fan 1 is the latest supporter in the result set."
     assert body["data_preview"] == [{"fan_id": 1}]
+
+
+def _parse_sse_events(text: str) -> list[tuple[str, dict]]:
+    events: list[tuple[str, dict]] = []
+    for block in text.split("\n\n"):
+        if not block.strip():
+            continue
+        ev = "message"
+        data_line: str | None = None
+        for line in block.split("\n"):
+            if line.startswith("event:"):
+                ev = line[6:].strip()
+            elif line.startswith("data:"):
+                data_line = line[5:].lstrip()
+        if data_line is not None and data_line != "":
+            events.append((ev, json.loads(data_line)))
+    return events
+
+
+def test_ask_stream_returns_sse_meta_deltas_done(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(llm_app_module, "load_schema_context", lambda: "Table: fans")
+
+    def fake_complete(prompt: str, provider: str, model: str) -> str:
+        if "SQL:" in prompt:
+            return (
+                "```sql\nWITH latest AS (SELECT 1 AS fan_id)\n"
+                "SELECT fan_id FROM latest;\n```"
+            )
+        raise AssertionError("complete must not be used for the answer step in /stream")
+
+    monkeypatch.setattr(llm_app_module, "complete", fake_complete)
+    monkeypatch.setattr(llm_app_module, "_execute_sql", lambda sql: [{"fan_id": 1}])
+    monkeypatch.setattr(
+        llm_app_module,
+        "_iter_answer_stream",
+        lambda provider, model, answer_prompt: iter(["Hel", "lo"]),
+    )
+
+    response = llm_app_module.app.test_client().post(
+        "/api/ask/stream",
+        json={"question": "Who is the latest fan?", "provider": "ollama"},
+    )
+
+    assert response.status_code == 200
+    assert response.content_type is not None
+    assert "text/event-stream" in response.content_type
+    assert response.headers.get("Cache-Control") == "no-cache"
+
+    text = response.get_data(as_text=True)
+    events = _parse_sse_events(text)
+    types = [e[0] for e in events]
+    assert types == ["meta", "answer_delta", "answer_delta", "done"]
+
+    meta = events[0][1]
+    assert meta["sql"] == "WITH latest AS (SELECT 1 AS fan_id)\nSELECT fan_id FROM latest"
+    assert meta["data_preview"] == [{"fan_id": 1}]
+    assert "trace" in meta
+
+    assert events[1][1]["text"] == "Hel"
+    assert events[2][1]["text"] == "lo"
+    assert events[3][1] == {}
+
+
+def test_ask_stream_pre_stream_validation_returns_json(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(llm_app_module, "load_schema_context", lambda: "Table: fans")
+    monkeypatch.setattr(
+        llm_app_module,
+        "complete",
+        lambda prompt, provider, model: (
+            "DROP TABLE fans;" if "SQL:" in prompt else "n/a"
+        ),
+    )
+
+    response = llm_app_module.app.test_client().post(
+        "/api/ask/stream",
+        json={"question": "bad?", "provider": "ollama"},
+    )
+
+    assert response.status_code == 422
+    body = response.get_json()
+    assert body is not None
+    assert "error" in body
+    assert "text/event-stream" not in (response.content_type or "")
+
+
+# ---------------------------------------------------------------------------
+# Semantic layer integration tests
+# ---------------------------------------------------------------------------
+
+
+def _write_minimal_semantic_yaml(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "version": 1,
+        "subjects": [
+            {
+                "name": "fan",
+                "primary_mart": "mart_fan_loyalty",
+                "description": "Fan KPIs.",
+                "prefer_mart_when": "spend",
+                "prefer_event_tables_when": "event detail",
+            }
+        ],
+        "metrics": [
+            {
+                "name": "total_spend",
+                "table": "mart_fan_loyalty",
+                "column": "total_spend",
+                "aggregation": "sum",
+                "unit": "EUR",
+                "description": "Total spend.",
+            }
+        ],
+        "dimensions": [],
+        "join_paths": [],
+        "layering_rules": [
+            {"id": "prefer_mart", "description": "Prefer mart for fan KPIs."}
+        ],
+        "answer_style": {
+            "currency_unit": "EUR",
+            "decimal_places": 2,
+            "rules": ["State monetary values with EUR unit."],
+        },
+    }
+    path.write_text(yaml.dump(data), encoding="utf-8")
+
+
+def test_sql_prompt_includes_semantic_section(
+    llm_app_module, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The prompt sent to `complete` must contain 'SEMANTIC LAYER' when a valid YAML is present."""
+    semantic_file = tmp_path / "semantic_layer.yml"
+    _write_minimal_semantic_yaml(semantic_file)
+    monkeypatch.setenv("SEMANTIC_LAYER_FILE", str(semantic_file))
+
+    captured_prompts: list[str] = []
+
+    def fake_complete(prompt: str, provider: str, model: str) -> str:
+        captured_prompts.append(prompt)
+        if "SQL:" in prompt:
+            return "SELECT 1 AS fan_id"
+        return "One fan found."
+
+    monkeypatch.setattr(llm_app_module, "load_schema_context", lambda: "Table: fans")
+    monkeypatch.setattr(llm_app_module, "complete", fake_complete)
+    monkeypatch.setattr(llm_app_module, "_execute_sql", lambda sql: [{"fan_id": 1}])
+
+    response = llm_app_module.app.test_client().post(
+        "/api/ask",
+        json={"question": "Who spent the most?", "provider": "ollama"},
+    )
+
+    assert response.status_code == 200
+    sql_prompt = next(p for p in captured_prompts if "SQL:" in p)
+    assert "SEMANTIC LAYER" in sql_prompt
+    assert "mart_fan_loyalty" in sql_prompt
+
+
+def test_answer_prompt_includes_answer_guidelines(
+    llm_app_module, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The answer prompt sent to `complete` must contain 'ANSWER GUIDELINES'."""
+    semantic_file = tmp_path / "semantic_layer.yml"
+    _write_minimal_semantic_yaml(semantic_file)
+    monkeypatch.setenv("SEMANTIC_LAYER_FILE", str(semantic_file))
+
+    captured_prompts: list[str] = []
+
+    def fake_complete(prompt: str, provider: str, model: str) -> str:
+        captured_prompts.append(prompt)
+        if "SQL:" in prompt:
+            return "SELECT 1 AS fan_id"
+        return "One fan."
+
+    monkeypatch.setattr(llm_app_module, "load_schema_context", lambda: "Table: fans")
+    monkeypatch.setattr(llm_app_module, "complete", fake_complete)
+    monkeypatch.setattr(llm_app_module, "_execute_sql", lambda sql: [{"fan_id": 1}])
+
+    response = llm_app_module.app.test_client().post(
+        "/api/ask",
+        json={"question": "Who spent the most?", "provider": "ollama"},
+    )
+
+    assert response.status_code == 200
+    answer_prompt = next(p for p in captured_prompts if "Answer:" in p)
+    assert "ANSWER GUIDELINES" in answer_prompt
+    assert "EUR" in answer_prompt
+
+
+def test_semantic_load_failure_returns_500(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If load_semantic_context raises SemanticLayerError, /api/ask returns HTTP 500."""
+    from llm_api.semantic_layer import SemanticLayerError  # noqa: PLC0415
+
+    def boom() -> tuple[str, str]:
+        raise SemanticLayerError("test: semantic file is corrupt")
+
+    monkeypatch.setattr(llm_app_module, "load_schema_context", lambda: "Table: fans")
+    monkeypatch.setattr(llm_app_module, "load_semantic_context", boom)
+
+    response = llm_app_module.app.test_client().post(
+        "/api/ask",
+        json={"question": "Who spent the most?", "provider": "ollama"},
+    )
+
+    assert response.status_code == 500
+    body = response.get_json()
+    assert "error" in body
+    assert "semantic" in body["error"].lower()
