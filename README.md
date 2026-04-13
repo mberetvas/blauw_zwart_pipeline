@@ -29,6 +29,8 @@ Synthetic fan-event pipeline for Club Brugge KV simulations. The package name in
 | `docker-compose.yml` | Starts the local operator stack | `docker compose up -d` |
 | `justfile` | Convenience wrappers for common local tasks | `just <recipe>` |
 
+For how those services connect and how events move through Kafka and Postgres into dbt and **`llm-api`**, see the diagrams under [Compose pipeline](#compose-pipeline).
+
 `fan_events` exposes three subcommands:
 
 | Subcommand | Purpose | Primary deeper doc |
@@ -161,7 +163,73 @@ Defaults are Compose-oriented: `broker:29092`, topic `fan_events`, consumer grou
 
 ## Compose pipeline
 
-`docker-compose.yml` defines these services:
+The Compose file runs Kafka (KRaft), Postgres, synthetic **`fan_events stream`** publishing, **`fan_ingest`**, periodic dbt, pgAdmin, and the Flask **`llm-api`**. The diagrams below show topology and data flow; the tables that follow list each service, defaults, and operator commands.
+
+**Diagram A — Compose service map:** services, persisted volumes, startup dependencies (`service_healthy` / `kafka-init` completion), and the ingest topic between **`producer`**, **`broker`**, and **`ingest`**.
+
+```mermaid
+flowchart TB
+  subgraph vols["Named volumes"]
+    V_KAFKA["kafka-data"]
+    V_PG["postgres-data"]
+    V_LLM["llm-api-config"]
+  end
+
+  broker["broker — Kafka 4.x KRaft<br/>Compose clients: broker:29092<br/>Host clients: localhost:9092"]
+  kafka_init["kafka-init — one-shot<br/>creates KAFKA_TOPIC default fan_events"]
+  producer["producer — fan_events stream"]
+  ingest["ingest — fan_ingest"]
+  postgres["postgres — Postgres 18<br/>init: docker/postgres/init/"]
+  dbt_sched["dbt-scheduler"]
+  pgadmin["pgadmin"]
+  llm_api["llm-api — Flask UI + API"]
+
+  broker --- V_KAFKA
+  postgres --- V_PG
+  llm_api --- V_LLM
+
+  kafka_init -->|"depends_on: broker healthy"| broker
+  producer -->|"depends_on: broker healthy"| broker
+  producer -->|"depends_on: postgres healthy"| postgres
+  producer -->|"depends_on: kafka-init done"| kafka_init
+  ingest -->|"depends_on: broker healthy"| broker
+  ingest -->|"depends_on: postgres healthy"| postgres
+  ingest -->|"depends_on: kafka-init done"| kafka_init
+
+  dbt_sched -->|"depends_on: postgres healthy"| postgres
+  pgadmin -->|"depends_on: postgres healthy"| postgres
+  llm_api -->|"depends_on: postgres healthy"| postgres
+
+  producer -->|"produce KAFKA_TOPIC default fan_events"| broker
+  broker -->|"consume same topic"| ingest
+```
+
+**Diagram B — End-to-end data flow:** synthetic NDJSON from the container **`producer`** (or optionally from the host) through Kafka and **`fan_ingest`** into Postgres, dbt marts refreshed by **`dbt-scheduler`**, and read-only queries from **`llm-api`**. **Ollama** runs on the host and is reached from the container via `host.docker.internal` (see [API](#api)).
+
+```mermaid
+flowchart LR
+  subgraph host_ext["Host (outside Compose)"]
+    host_producer["Optional: fan_events stream<br/>localhost:9092"]
+    ollama["Ollama<br/>host.docker.internal"]
+  end
+
+  subgraph stack["Docker Compose"]
+    producer["producer<br/>fan_events stream"]
+    broker["broker<br/>topic fan_events"]
+    ingest["fan_ingest"]
+    pg[("Postgres 18")]
+    dbt["dbt-scheduler<br/>DBT_RUN_SELECTOR default +mart_fan_loyalty"]
+    llm["llm-api<br/>LLM_READER_DATABASE_URL"]
+  end
+
+  producer -->|"NDJSON produce"| broker
+  host_producer -.->|"optional produce"| broker
+  broker -->|"consume"| ingest
+  ingest -->|"write ingested / raw layer"| pg
+  dbt -->|"build / refresh marts"| pg
+  llm -->|"read-only SELECT / WITH"| pg
+  ollama -.->|"LLM HTTP when provider is Ollama"| llm
+```
 
 | Service name | Purpose |
 |--------------|---------|

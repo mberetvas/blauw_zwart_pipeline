@@ -201,9 +201,10 @@ tailwind.config = {
               <p id="fan-of-month-matches" class="font-headline font-black text-primary text-xl">--</p>
               <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Matches</p>
             </div>
-            <div class="bg-surface-container rounded-xl py-3">
-              <p id="fan-of-month-spend" class="font-headline font-black text-primary text-xl">--</p>
-              <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Spend</p>
+            <div class="bg-surface-container rounded-xl py-3 px-1.5 min-h-[5.5rem] flex flex-col justify-center">
+              <p id="fan-of-month-items" class="font-headline font-black text-primary text-xl leading-none">--</p>
+              <p class="text-xs text-outline uppercase tracking-wider mt-1">Items bought</p>
+              <p id="fan-of-month-last-item" class="text-[11px] text-on-surface-variant mt-1.5 leading-snug line-clamp-2" title="">Last purchase: —</p>
             </div>
             <div class="bg-surface-container rounded-xl py-3">
               <p id="fan-of-month-referrals" class="font-headline font-black text-primary text-xl">--</p>
@@ -217,13 +218,13 @@ tailwind.config = {
       <section class="lg:col-span-7" aria-labelledby="rankings-heading">
         <div class="flex items-center justify-between mb-6">
           <h2 id="rankings-heading" class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary">Top 25 Fans</h2>
-          <div class="flex gap-2">
-            <button class="px-3 py-1.5 rounded-full bg-primary-container text-on-primary text-xs font-bold uppercase tracking-widest" aria-pressed="true">All Time</button>
-            <button class="px-3 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest opacity-60 cursor-not-allowed" disabled title="Coming soon: season windows need time-bounded marts.">This Season</button>
-            <button class="px-3 py-1.5 rounded-full bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest opacity-60 cursor-not-allowed" disabled title="Coming soon: month windows need time-bounded marts.">This Month</button>
+          <div class="flex flex-wrap gap-2 justify-end" role="group" aria-label="Leaderboard time range">
+            <button type="button" id="lb-filter-all" class="lb-window-btn px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-opacity hover:opacity-100 bg-primary-container text-on-primary" aria-pressed="true" data-window="all">All Time</button>
+            <button type="button" id="lb-filter-season" class="lb-window-btn px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-opacity hover:opacity-100 bg-secondary-container text-on-secondary-container opacity-80" aria-pressed="false" data-window="season">This Season</button>
+            <button type="button" id="lb-filter-month" class="lb-window-btn px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-opacity hover:opacity-100 bg-secondary-container text-on-secondary-container opacity-80" aria-pressed="false" data-window="month">This Month</button>
           </div>
         </div>
-        <p class="text-xs text-outline uppercase tracking-[0.18em] mb-4 font-headline">Only the all-time leaderboard is live in v1.</p>
+        <p id="lb-window-hint" class="text-xs text-outline uppercase tracking-[0.18em] mb-4 font-headline">All-time uses mart_fan_loyalty; season (1 Aug–31 Jul UTC) and this calendar month use live ticket and purchase events.</p>
 
         <div class="bg-surface-container-low rounded-3xl overflow-hidden">
           <!-- Column headers -->
@@ -240,7 +241,7 @@ tailwind.config = {
           </ul>
 
           <div class="px-6 py-4 bg-surface-container">
-            <p class="w-full text-center text-xs font-bold uppercase tracking-widest text-outline">Top 25 fans from the current all-time mart snapshot</p>
+            <p id="lb-footer-caption" class="w-full text-center text-xs font-bold uppercase tracking-widest text-outline">Top 25 fans from the current all-time mart snapshot</p>
           </div>
         </div>
       </section>
@@ -270,7 +271,7 @@ tailwind.config = {
     <span class="text-xs text-outline mt-0.5" id="floating-points-formula">1,000 attendance bonus + 150 x matches + spend + 5 x merch + 5 x retail</span>
   </div>
   <div class="flex flex-col items-end gap-1">
-    <span class="px-2 py-1 rounded-full bg-primary-container text-on-primary text-xs font-bold tracking-wider">ALL TIME</span>
+    <span id="floating-window-badge" class="px-2 py-1 rounded-full bg-primary-container text-on-primary text-xs font-bold tracking-wider">ALL TIME</span>
     <span class="text-xs text-on-surface-variant" id="floating-as-of">Awaiting refresh...</span>
   </div>
 </div>
@@ -280,10 +281,6 @@ tailwind.config = {
   <a href="/" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
     <span class="material-symbols-outlined">forum</span>
     <span class="text-xs uppercase font-bold tracking-widest">Chat</span>
-  </a>
-  <a href="#" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
-    <span class="material-symbols-outlined">shopping_bag</span>
-    <span class="text-xs uppercase font-bold tracking-widest">Shop</span>
   </a>
   <a href="/leaderboard" class="flex flex-col items-center gap-1 bg-[#0572FF] text-white rounded-xl p-2 scale-110">
     <span class="material-symbols-outlined">leaderboard</span>
@@ -306,10 +303,14 @@ tailwind.config = {
     const fanOfMonthNameEl = document.getElementById("fan-of-month-name");
     const fanOfMonthSummaryEl = document.getElementById("fan-of-month-summary");
     const fanOfMonthMatchesEl = document.getElementById("fan-of-month-matches");
-    const fanOfMonthSpendEl = document.getElementById("fan-of-month-spend");
+    const fanOfMonthItemsEl = document.getElementById("fan-of-month-items");
+    const fanOfMonthLastItemEl = document.getElementById("fan-of-month-last-item");
     const fanOfMonthReferralsEl = document.getElementById("fan-of-month-referrals");
     const floatingAsOfEl = document.getElementById("floating-as-of");
     const floatingFormulaEl = document.getElementById("floating-points-formula");
+    const floatingWindowBadgeEl = document.getElementById("floating-window-badge");
+    const footerCaptionEl = document.getElementById("lb-footer-caption");
+    const filterButtons = Array.from(document.querySelectorAll(".lb-window-btn"));
     const achievementCardEl = document.getElementById("achievement-card");
     const achievementKickerEl = document.getElementById("achievement-kicker");
     const achievementTitleEl = document.getElementById("achievement-title");
@@ -317,16 +318,6 @@ tailwind.config = {
     const achievementPointsEl = document.getElementById("achievement-points");
 
     const numberFormatter = new Intl.NumberFormat("en-US");
-    const compactNumberFormatter = new Intl.NumberFormat("en-US", {
-      notation: "compact",
-      maximumFractionDigits: 1,
-    });
-    const currencyFormatter = new Intl.NumberFormat("nl-BE", {
-      style: "currency",
-      currency: "EUR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    });
     const asOfFormatter = new Intl.DateTimeFormat("en-GB", {
       dateStyle: "medium",
       timeStyle: "short",
@@ -358,8 +349,35 @@ tailwind.config = {
     };
 
     const formatPoints = (value) => `${numberFormatter.format(Number(value ?? 0))} pts`;
-    const formatCurrency = (value) => currencyFormatter.format(Number(value ?? 0));
-    const formatCompactCurrency = (value) => `€${compactNumberFormatter.format(Number(value ?? 0))}`;
+    const WINDOW_LABELS = { all: "ALL TIME", season: "THIS SEASON", month: "THIS MONTH" };
+    const FOOTER_BY_WINDOW = {
+      all: "Top 25 fans from the current all-time mart snapshot",
+      season: "Top 25 fans by the same points formula, limited to the current season window (UTC)",
+      month: "Top 25 fans by the same points formula, limited to the current calendar month (UTC)",
+    };
+
+    let activeWindow = "all";
+
+    const setFilterUi = (windowKey) => {
+      activeWindow = windowKey;
+      filterButtons.forEach((btn) => {
+        const w = btn.getAttribute("data-window");
+        const on = w === windowKey;
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+        btn.classList.toggle("bg-primary-container", on);
+        btn.classList.toggle("text-on-primary", on);
+        btn.classList.toggle("bg-secondary-container", !on);
+        btn.classList.toggle("text-on-secondary-container", !on);
+        btn.classList.toggle("opacity-80", !on);
+      });
+      if (floatingWindowBadgeEl) {
+        floatingWindowBadgeEl.textContent = WINDOW_LABELS[windowKey] || windowKey.toUpperCase();
+      }
+      if (footerCaptionEl) {
+        footerCaptionEl.textContent = FOOTER_BY_WINDOW[windowKey] || FOOTER_BY_WINDOW.all;
+      }
+    };
+
     const formatAsOf = (isoString) => {
       const value = new Date(isoString);
       if (Number.isNaN(value.getTime())) {
@@ -451,51 +469,89 @@ tailwind.config = {
         fanOfMonthNameEl.textContent = "No monthly winner yet";
         fanOfMonthSummaryEl.textContent = "Waiting for attendance data.";
         fanOfMonthMatchesEl.textContent = "--";
-        fanOfMonthSpendEl.textContent = "--";
+        fanOfMonthItemsEl.textContent = "--";
+        fanOfMonthLastItemEl.textContent = "Last purchase: —";
+        fanOfMonthLastItemEl.removeAttribute("title");
         fanOfMonthReferralsEl.textContent = "--";
         return;
       }
       const metrics = fan.subtitle_metrics || {};
       const matchesValue = metrics.matches;
       const referralsValue = metrics.referrals;
+      const merchCount = Number(fan.merch_purchase_count ?? 0);
+      const retailCount = Number(fan.retail_purchase_count ?? 0);
+      const itemsFromFan = merchCount + retailCount;
+      const itemsTotal =
+        metrics.items_purchased != null ? Number(metrics.items_purchased) : itemsFromFan;
+      const lastRaw =
+        metrics.last_purchased_item != null && String(metrics.last_purchased_item).trim() !== ""
+          ? String(metrics.last_purchased_item).trim()
+          : null;
       fanOfMonthAvatarEl.textContent = initialsFor(fan.display_name);
       fanOfMonthNameEl.textContent = fan.display_name;
       fanOfMonthSummaryEl.textContent = fan.summary || "Live leaderboard highlight";
       fanOfMonthMatchesEl.textContent = matchesValue == null ? "—" : numberFormatter.format(matchesValue);
-      fanOfMonthSpendEl.textContent = formatCompactCurrency(metrics.spend_eur ?? fan.total_spend);
+      fanOfMonthItemsEl.textContent = numberFormatter.format(itemsTotal);
+      if (lastRaw) {
+        fanOfMonthLastItemEl.textContent = `Last: ${lastRaw}`;
+        fanOfMonthLastItemEl.setAttribute("title", lastRaw);
+      } else {
+        fanOfMonthLastItemEl.textContent = "Last purchase: —";
+        fanOfMonthLastItemEl.removeAttribute("title");
+      }
       fanOfMonthReferralsEl.textContent = referralsValue == null ? "—" : numberFormatter.format(referralsValue);
     };
 
-    try {
-      const response = await fetch("/api/leaderboard?window=all", {
-        headers: { "Accept": "application/json" },
+    const loadLeaderboard = async (windowKey) => {
+      errorEl.textContent = "";
+      errorEl.hidden = true;
+      errorEl.classList.add("hidden");
+      setFilterUi(windowKey);
+      loadingEl.hidden = false;
+      loadingEl.classList.remove("hidden");
+
+      try {
+        const response = await fetch(
+          `/api/leaderboard?window=${encodeURIComponent(windowKey)}`,
+          { headers: { "Accept": "application/json" } },
+        );
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || "Leaderboard request failed.");
+        }
+
+        asOfEl.textContent = formatAsOf(payload.as_of);
+        floatingAsOfEl.textContent = formatAsOf(payload.as_of).replace("Updated ", "");
+        if (payload.points_formula) {
+          floatingFormulaEl.textContent = payload.points_formula;
+        }
+
+        renderPodium(payload.podium || []);
+        renderRankings(payload.rankings || []);
+        renderFanOfMonth(payload.fan_of_the_month);
+        renderAchievement(payload.achievement);
+      } catch (error) {
+        renderPodium([]);
+        renderRankings([]);
+        renderFanOfMonth(null);
+        setError(error instanceof Error ? error.message : "Unable to load the leaderboard.");
+        asOfEl.textContent = "Live leaderboard unavailable";
+        floatingAsOfEl.textContent = "Unavailable";
+      } finally {
+        loadingEl.hidden = true;
+        loadingEl.classList.add("hidden");
+      }
+    };
+
+    filterButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const w = btn.getAttribute("data-window");
+        if (!w || w === activeWindow) return;
+        loadLeaderboard(w);
       });
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error || "Leaderboard request failed.");
-      }
+    });
 
-      asOfEl.textContent = formatAsOf(payload.as_of);
-      floatingAsOfEl.textContent = formatAsOf(payload.as_of).replace("Updated ", "");
-      if (payload.points_formula) {
-        floatingFormulaEl.textContent = payload.points_formula;
-      }
-
-      renderPodium(payload.podium || []);
-      renderRankings(payload.rankings || []);
-      renderFanOfMonth(payload.fan_of_the_month);
-      renderAchievement(payload.achievement);
-    } catch (error) {
-      renderPodium([]);
-      renderRankings([]);
-      renderFanOfMonth(null);
-      setError(error instanceof Error ? error.message : "Unable to load the leaderboard.");
-      asOfEl.textContent = "Live leaderboard unavailable";
-      floatingAsOfEl.textContent = "Unavailable";
-    } finally {
-      loadingEl.hidden = true;
-      loadingEl.classList.add("hidden");
-    }
+    await loadLeaderboard("all");
   });
 </script>
 

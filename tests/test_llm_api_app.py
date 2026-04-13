@@ -483,6 +483,7 @@ def test_build_leaderboard_payload_shapes_rankings(
             "total_spend": Decimal("575.10"),
             "merch_purchase_count": 4,
             "retail_purchase_count": 2,
+            "last_purchased_item": "Home shirt",
             "points": 1490,
         },
     )
@@ -506,6 +507,8 @@ def test_build_leaderboard_payload_shapes_rankings(
     assert payload["rankings"][0]["display_name"] == "Fan 00002"
     assert payload["fan_of_the_month"]["fan_id"] == "fan_00003"
     assert payload["fan_of_the_month"]["subtitle_metrics"]["matches"] == 4
+    assert payload["fan_of_the_month"]["subtitle_metrics"]["items_purchased"] == 6
+    assert payload["fan_of_the_month"]["subtitle_metrics"]["last_purchased_item"] == "Home shirt"
     assert payload["fan_of_the_month"]["subtitle_metrics"]["referrals"] is None
     assert payload["fan_of_the_month"]["fallback"] is False
     assert payload["achievement"] is None
@@ -552,9 +555,12 @@ def test_leaderboard_route_returns_json_payload(
                 "points": 1550,
                 "matches_attended": 10,
                 "total_spend": Decimal("520.25"),
+                "merch_purchase_count": 3,
+                "retail_purchase_count": 5,
                 "subtitle_metrics": {
                     "matches": 4,
-                    "spend_eur": Decimal("520.25"),
+                    "items_purchased": 8,
+                    "last_purchased_item": "Scarf",
                     "referrals": None,
                 },
                 "summary": "4 ticket scans this month · Referrals not tracked",
@@ -571,15 +577,75 @@ def test_leaderboard_route_returns_json_payload(
     assert body["window"] == "all"
     assert body["rankings"][0]["fan_id"] == "fan_00002"
     assert body["rankings"][0]["total_spend"] == 520.25
-    assert body["fan_of_the_month"]["subtitle_metrics"]["spend_eur"] == 520.25
+    assert body["fan_of_the_month"]["subtitle_metrics"]["items_purchased"] == 8
+    assert body["fan_of_the_month"]["subtitle_metrics"]["last_purchased_item"] == "Scarf"
 
 
 def test_leaderboard_route_rejects_unsupported_window(llm_app_module) -> None:
-    response = llm_app_module.app.test_client().get("/api/leaderboard?window=season")
+    response = llm_app_module.app.test_client().get("/api/leaderboard?window=daily")
 
     assert response.status_code == 400
     body = response.get_json()
     assert "Unsupported leaderboard window" in body["error"]
+
+
+def test_leaderboard_season_bounds_utc(llm_app_module) -> None:
+    aug = datetime(2026, 8, 15, 12, 0, 0, tzinfo=timezone.utc)
+    start, end = llm_app_module._leaderboard_season_bounds_utc(aug)
+    assert start == datetime(2026, 8, 1, tzinfo=timezone.utc)
+    assert end == datetime(2027, 8, 1, tzinfo=timezone.utc)
+
+    april = datetime(2026, 4, 13, tzinfo=timezone.utc)
+    start2, end2 = llm_app_module._leaderboard_season_bounds_utc(april)
+    assert start2 == datetime(2025, 8, 1, tzinfo=timezone.utc)
+    assert end2 == datetime(2026, 8, 1, tzinfo=timezone.utc)
+
+
+def test_leaderboard_month_bounds_accepts_reference(llm_app_module) -> None:
+    ref = datetime(2026, 3, 15, 22, 0, 0, tzinfo=timezone.utc)
+    start, end = llm_app_module._leaderboard_month_bounds_utc(ref)
+    assert start == datetime(2026, 3, 1, tzinfo=timezone.utc)
+    assert end == datetime(2026, 4, 1, tzinfo=timezone.utc)
+
+
+def test_build_leaderboard_payload_month_uses_bounded_fetch(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    called: list[tuple[datetime, datetime]] = []
+
+    def fake_bounded(t0: datetime, t1: datetime, limit: int = 25) -> list[dict[str, object]]:
+        called.append((t0, t1))
+        assert limit == llm_app_module.LEADERBOARD_LIMIT
+        return _sample_leaderboard_rows()
+
+    monkeypatch.setattr(llm_app_module, "_fetch_leaderboard_rows_bounded", fake_bounded)
+    monkeypatch.setattr(
+        llm_app_module,
+        "_leaderboard_month_bounds_utc",
+        lambda: (
+            datetime(2026, 4, 1, tzinfo=timezone.utc),
+            datetime(2026, 5, 1, tzinfo=timezone.utc),
+        ),
+    )
+    monkeypatch.setattr(
+        llm_app_module,
+        "_fetch_leaderboard_as_of_bounded",
+        lambda t0, t1: datetime(2026, 4, 13, 19, 0, tzinfo=timezone.utc),
+    )
+    monkeypatch.setattr(
+        llm_app_module,
+        "_fetch_fan_of_the_month",
+        lambda: None,
+    )
+    monkeypatch.setattr(llm_app_module, "_fetch_last_purchased_item", lambda fan_id: None)
+
+    payload = llm_app_module._build_leaderboard_payload("month")
+
+    assert len(called) == 1
+    assert called[0][0] == datetime(2026, 4, 1, tzinfo=timezone.utc)
+    assert called[0][1] == datetime(2026, 5, 1, tzinfo=timezone.utc)
+    assert payload["window"] == "month"
+    assert payload["rankings"][0]["fan_id"] == "fan_00002"
 
 
 def test_leaderboard_route_returns_503_without_database_url(

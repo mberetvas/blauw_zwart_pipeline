@@ -11,7 +11,8 @@ Flow
 7. Return {"answer", "sql", "data_preview"}.
 
 POST /api/ask/stream — same steps 1–5, then streams the answer via SSE (meta, answer_delta, done).
-GET /api/leaderboard — read-only fan leaderboard from mart_fan_loyalty.
+GET /api/leaderboard — read-only fan leaderboard from mart_fan_loyalty (all-time)
+    or time-windowed rollups from match_events / merch_purchase / retail_purchase (month, season).
 """
 
 from __future__ import annotations
@@ -56,7 +57,7 @@ DATABASE_URL = (
 
 KNOWN_PROVIDERS: frozenset[str] = frozenset({"ollama", "openrouter"})
 _PROVIDER_DISPLAY = {"ollama": "Ollama", "openrouter": "OpenRouter"}
-LEADERBOARD_SUPPORTED_WINDOWS: frozenset[str] = frozenset({"all"})
+LEADERBOARD_SUPPORTED_WINDOWS: frozenset[str] = frozenset({"all", "month", "season"})
 LEADERBOARD_LIMIT = 25
 LEADERBOARD_ATTENDANCE_BONUS = 1000
 LEADERBOARD_MATCH_POINTS = 150
@@ -339,20 +340,40 @@ def _leaderboard_order_sql(alias: str) -> str:
     )
 
 
-def _leaderboard_month_bounds_utc() -> tuple[datetime, datetime]:
-    """Return the current UTC month start and next month start."""
-    month_start = datetime.now(timezone.utc).replace(
-        day=1,
-        hour=0,
-        minute=0,
-        second=0,
-        microsecond=0,
-    )
+def _leaderboard_month_bounds_utc(
+    reference: datetime | None = None,
+) -> tuple[datetime, datetime]:
+    """Return the UTC calendar month [start, end) for the reference instant (default: now)."""
+    ref = reference or datetime.now(timezone.utc)
+    if ref.tzinfo is None:
+        ref = ref.replace(tzinfo=timezone.utc)
+    else:
+        ref = ref.astimezone(timezone.utc)
+    month_start = ref.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     if month_start.month == 12:
         next_month_start = month_start.replace(year=month_start.year + 1, month=1)
     else:
         next_month_start = month_start.replace(month=month_start.month + 1)
     return month_start, next_month_start
+
+
+def _leaderboard_season_bounds_utc(
+    reference: datetime | None = None,
+) -> tuple[datetime, datetime]:
+    """Return European football season bounds [start, end) in UTC: 1 Aug → next 1 Aug."""
+    ref = reference or datetime.now(timezone.utc)
+    if ref.tzinfo is None:
+        ref = ref.replace(tzinfo=timezone.utc)
+    else:
+        ref = ref.astimezone(timezone.utc)
+    year = ref.year
+    if ref.month >= 8:
+        start = datetime(year, 8, 1, tzinfo=timezone.utc)
+        end = datetime(year + 1, 8, 1, tzinfo=timezone.utc)
+    else:
+        start = datetime(year - 1, 8, 1, tzinfo=timezone.utc)
+        end = datetime(year, 8, 1, tzinfo=timezone.utc)
+    return start, end
 
 
 def _fan_display_name(fan_id: str) -> str:
@@ -421,6 +442,158 @@ def _fetch_leaderboard_rows(limit: int = LEADERBOARD_LIMIT) -> list[dict[str, An
     return _run_read_query(sql, (limit,))
 
 
+def _fetch_leaderboard_rows_bounded(
+    window_start: datetime,
+    window_end: datetime,
+    limit: int = LEADERBOARD_LIMIT,
+) -> list[dict[str, Any]]:
+    """Top fans for [window_start, window_end) using live fact tables (UTC bounds)."""
+    points_sql = _leaderboard_points_sql("loy")
+    order_sql = _leaderboard_order_sql("leaderboard")
+    sql = f"""
+        WITH bounds AS (
+            SELECT %s::timestamptz AS t0, %s::timestamptz AS t1
+        ),
+        att AS (
+            SELECT
+                me.fan_id,
+                COUNT(DISTINCT me.match_id)::integer AS matches_attended
+            FROM match_events AS me
+            CROSS JOIN bounds AS b
+            WHERE me.event_type = 'ticket_scan'
+              AND me.event_time >= b.t0
+              AND me.event_time < b.t1
+              AND me.match_id IS NOT NULL
+              AND me.match_id <> ''
+            GROUP BY me.fan_id
+        ),
+        merch AS (
+            SELECT
+                mp.fan_id,
+                COUNT(*)::integer AS merch_purchase_count,
+                COALESCE(SUM(mp.amount), 0)::numeric(12, 2) AS merch_spend
+            FROM merch_purchase AS mp
+            CROSS JOIN bounds AS b
+            WHERE COALESCE(mp.event_time, mp.ingested_at) >= b.t0
+              AND COALESCE(mp.event_time, mp.ingested_at) < b.t1
+            GROUP BY mp.fan_id
+        ),
+        retail AS (
+            SELECT
+                rp.fan_id,
+                COUNT(*)::integer AS retail_purchase_count,
+                COALESCE(SUM(rp.amount), 0)::numeric(12, 2) AS retail_spend
+            FROM retail_purchase AS rp
+            CROSS JOIN bounds AS b
+            WHERE COALESCE(rp.event_time, rp.ingested_at) >= b.t0
+              AND COALESCE(rp.event_time, rp.ingested_at) < b.t1
+            GROUP BY rp.fan_id
+        ),
+        fans AS (
+            SELECT fan_id FROM att
+            UNION
+            SELECT fan_id FROM merch
+            UNION
+            SELECT fan_id FROM retail
+        ),
+        lo AS (
+            SELECT
+                f.fan_id,
+                COALESCE(a.matches_attended, 0) AS matches_attended,
+                (COALESCE(m.merch_spend, 0) + COALESCE(r.retail_spend, 0))::numeric(12, 2)
+                    AS total_spend,
+                COALESCE(m.merch_purchase_count, 0) AS merch_purchase_count,
+                COALESCE(r.retail_purchase_count, 0) AS retail_purchase_count
+            FROM fans AS f
+            LEFT JOIN att AS a ON a.fan_id = f.fan_id
+            LEFT JOIN merch AS m ON m.fan_id = f.fan_id
+            LEFT JOIN retail AS r ON r.fan_id = f.fan_id
+        ),
+        leaderboard AS (
+            SELECT
+                lo.fan_id,
+                lo.matches_attended,
+                lo.total_spend,
+                lo.merch_purchase_count,
+                lo.retail_purchase_count,
+                {points_sql} AS points
+            FROM lo AS lo
+        ),
+        ranked AS (
+            SELECT
+                ROW_NUMBER() OVER (
+                    ORDER BY {order_sql}
+                ) AS rank,
+                leaderboard.fan_id,
+                leaderboard.matches_attended,
+                leaderboard.total_spend,
+                leaderboard.merch_purchase_count,
+                leaderboard.retail_purchase_count,
+                leaderboard.points
+            FROM leaderboard
+        )
+        SELECT
+            rank,
+            fan_id,
+            matches_attended,
+            total_spend,
+            merch_purchase_count,
+            retail_purchase_count,
+            points
+        FROM ranked
+        WHERE rank <= %s
+        ORDER BY rank
+    """
+    return _run_read_query(sql, (window_start, window_end, limit))
+
+
+def _fetch_leaderboard_as_of_bounded(
+    window_start: datetime,
+    window_end: datetime,
+) -> datetime:
+    """Latest event timestamp inside the window, or server time if the window is empty."""
+    rows = _run_read_query(
+        """
+        WITH bounds AS (
+            SELECT %s::timestamptz AS t0, %s::timestamptz AS t1
+        )
+        SELECT COALESCE(
+            GREATEST(
+                (
+                    SELECT MAX(me.event_time)
+                    FROM match_events AS me
+                    CROSS JOIN bounds AS b
+                    WHERE me.event_type = 'ticket_scan'
+                      AND me.event_time >= b.t0
+                      AND me.event_time < b.t1
+                ),
+                (
+                    SELECT MAX(COALESCE(mp.event_time, mp.ingested_at))
+                    FROM merch_purchase AS mp
+                    CROSS JOIN bounds AS b
+                    WHERE COALESCE(mp.event_time, mp.ingested_at) >= b.t0
+                      AND COALESCE(mp.event_time, mp.ingested_at) < b.t1
+                ),
+                (
+                    SELECT MAX(COALESCE(rp.event_time, rp.ingested_at))
+                    FROM retail_purchase AS rp
+                    CROSS JOIN bounds AS b
+                    WHERE COALESCE(rp.event_time, rp.ingested_at) >= b.t0
+                      AND COALESCE(rp.event_time, rp.ingested_at) < b.t1
+                )
+            ),
+            NOW()
+        ) AS as_of
+        FROM bounds
+        """,
+        (window_start, window_end),
+    )
+    value = rows[0]["as_of"]
+    if isinstance(value, datetime):
+        return value
+    return datetime.now(timezone.utc)
+
+
 def _fetch_leaderboard_as_of() -> datetime:
     """Return the freshest mart watermark, or server time if the mart is empty."""
     rows = _run_read_query(
@@ -435,12 +608,50 @@ def _fetch_leaderboard_as_of() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _fetch_last_purchased_item(fan_id: str) -> str | None:
+    """Return the item name from the fan's most recently ingested purchase row."""
+    rows = _run_read_query(
+        """
+        SELECT item AS last_purchased_item
+        FROM (
+            SELECT fan_id, item, ingested_at
+            FROM merch_purchase
+            WHERE fan_id = %s
+            UNION ALL
+            SELECT fan_id, item, ingested_at
+            FROM retail_purchase
+            WHERE fan_id = %s
+        ) purchases
+        ORDER BY ingested_at DESC NULLS LAST, item ASC
+        LIMIT 1
+        """,
+        (fan_id, fan_id),
+    )
+    if not rows:
+        return None
+    value = rows[0].get("last_purchased_item")
+    if value is None:
+        return None
+    return str(value)
+
+
 def _fetch_fan_of_the_month() -> dict[str, Any] | None:
     """Return the current UTC month fan based on ticket scans, with points tie-breakers."""
     month_start, next_month_start = _leaderboard_month_bounds_utc()
     points_sql = _leaderboard_points_sql("loyalty")
     sql = f"""
-        WITH month_scans AS (
+        WITH last_purchase_by_fan AS (
+            SELECT DISTINCT ON (fan_id)
+                fan_id,
+                item AS last_purchased_item
+            FROM (
+                SELECT fan_id, item, ingested_at FROM merch_purchase
+                UNION ALL
+                SELECT fan_id, item, ingested_at FROM retail_purchase
+            ) purchases
+            ORDER BY fan_id, ingested_at DESC NULLS LAST, item ASC
+        ),
+        month_scans AS (
             SELECT
                 fan_id,
                 COUNT(*)::integer AS month_ticket_scans
@@ -458,6 +669,7 @@ def _fetch_fan_of_the_month() -> dict[str, Any] | None:
                 loyalty.total_spend,
                 loyalty.merch_purchase_count,
                 loyalty.retail_purchase_count,
+                lp.last_purchased_item,
                 {points_sql} AS points,
                 ROW_NUMBER() OVER (
                     ORDER BY month_scans.month_ticket_scans DESC,
@@ -469,6 +681,8 @@ def _fetch_fan_of_the_month() -> dict[str, Any] | None:
             FROM month_scans
             JOIN mart_fan_loyalty AS loyalty
               ON loyalty.fan_id = month_scans.fan_id
+            LEFT JOIN last_purchase_by_fan AS lp
+              ON lp.fan_id = month_scans.fan_id
         )
         SELECT
             fan_id,
@@ -477,6 +691,7 @@ def _fetch_fan_of_the_month() -> dict[str, Any] | None:
             total_spend,
             merch_purchase_count,
             retail_purchase_count,
+            last_purchased_item,
             points
         FROM ranked
         WHERE month_rank = 1
@@ -504,15 +719,27 @@ def _fan_of_the_month_payload(
         if month_scans is not None
         else "No ticket scans recorded this month yet — showing the current all-time leader."
     )
+    merch_count = int(source["merch_purchase_count"])
+    retail_count = int(source["retail_purchase_count"])
+    items_purchased = merch_count + retail_count
+    if "last_purchased_item" in source:
+        last_item = source.get("last_purchased_item")
+    else:
+        last_item = _fetch_last_purchased_item(fan_id)
+    if last_item is not None:
+        last_item = str(last_item)
     return {
         "fan_id": fan_id,
         "display_name": display_name,
         "points": int(source["points"]),
         "matches_attended": int(source["matches_attended"]),
         "total_spend": source["total_spend"],
+        "merch_purchase_count": merch_count,
+        "retail_purchase_count": retail_count,
         "subtitle_metrics": {
             "matches": month_scans if month_scans is not None else int(source["matches_attended"]),
-            "spend_eur": source["total_spend"],
+            "items_purchased": items_purchased,
+            "last_purchased_item": last_item,
             "referrals": None,
         },
         "summary": summary,
@@ -528,13 +755,30 @@ def _build_leaderboard_payload(window: str) -> dict[str, Any]:
             f"Valid values: {sorted(LEADERBOARD_SUPPORTED_WINDOWS)}"
         )
 
-    rankings = [_leaderboard_entry_from_row(row) for row in _fetch_leaderboard_rows()]
+    if window == "all":
+        rankings = [_leaderboard_entry_from_row(row) for row in _fetch_leaderboard_rows()]
+        as_of_dt = _fetch_leaderboard_as_of()
+    elif window == "month":
+        t0, t1 = _leaderboard_month_bounds_utc()
+        rankings = [
+            _leaderboard_entry_from_row(row)
+            for row in _fetch_leaderboard_rows_bounded(t0, t1)
+        ]
+        as_of_dt = _fetch_leaderboard_as_of_bounded(t0, t1)
+    else:
+        t0, t1 = _leaderboard_season_bounds_utc()
+        rankings = [
+            _leaderboard_entry_from_row(row)
+            for row in _fetch_leaderboard_rows_bounded(t0, t1)
+        ]
+        as_of_dt = _fetch_leaderboard_as_of_bounded(t0, t1)
+
     podium = rankings[:3]
     fan_of_the_month = _fan_of_the_month_payload(
         _fetch_fan_of_the_month(),
         podium[0] if podium else None,
     )
-    as_of = _fetch_leaderboard_as_of().astimezone(timezone.utc).isoformat()
+    as_of = as_of_dt.astimezone(timezone.utc).isoformat()
     return {
         "window": window,
         "as_of": as_of.replace("+00:00", "Z"),

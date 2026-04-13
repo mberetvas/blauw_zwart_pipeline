@@ -3,9 +3,13 @@
 <html class="dark" lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Club Brugge AI - Fan Leaderboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,400;0,500;0,600;0,700;0,900;1,400&amp;family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        document.documentElement.classList.add('js');
+    </script>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script id="tailwind-config">
         tailwind.config = {
@@ -77,28 +81,368 @@
         }
     </script>
 <style>
+        :root {
+            --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+            --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --duration-instant: 140ms;
+            --duration-state: 240ms;
+            --duration-enter: 560ms;
+            --duration-hero: 760ms;
+        }
+        html {
+            color-scheme: dark;
+        }
         .material-symbols-outlined {
             font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
         }
         .no-line-rule { border: none !important; }
         .tonal-shift-only { border: none; }
         .glass-card {
-            background: rgba(45, 52, 73, 0.6);
+            background: linear-gradient(135deg, rgba(45, 52, 73, 0.82), rgba(19, 27, 46, 0.68));
             backdrop-filter: blur(20px);
+            box-shadow: 0 22px 48px rgba(3, 9, 20, 0.35);
+        }
+        .js [data-reveal] {
+            opacity: 0;
+            transform: translate3d(0, 28px, 0) scale(0.985);
+            transition:
+                opacity var(--duration-enter) var(--ease-out-quart),
+                transform var(--duration-enter) var(--ease-out-expo);
+            transition-delay: var(--reveal-delay, 0ms);
+            will-change: transform, opacity;
+        }
+        .js [data-reveal="left"] {
+            transform: translate3d(-36px, 0, 0) scale(0.985);
+        }
+        .js [data-reveal="right"] {
+            transform: translate3d(36px, 0, 0) scale(0.985);
+        }
+        .js [data-reveal="up"] {
+            transform: translate3d(0, 42px, 0) scale(0.97);
+        }
+        .js [data-reveal].is-visible {
+            opacity: 1;
+            transform: translate3d(0, 0, 0) scale(1);
+        }
+        .leaderboard-shell::before {
+            content: "";
+            position: absolute;
+            inset: -12rem auto auto -10rem;
+            width: 32rem;
+            height: 32rem;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(84, 141, 255, 0.18) 0%, rgba(84, 141, 255, 0) 72%);
+            pointer-events: none;
+            animation: shell-drift 14s ease-in-out infinite;
+        }
+        .leaderboard-shell::after {
+            content: "";
+            position: absolute;
+            right: -10rem;
+            bottom: 8rem;
+            width: 28rem;
+            height: 28rem;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(176, 198, 255, 0.12) 0%, rgba(176, 198, 255, 0) 70%);
+            pointer-events: none;
+            animation: shell-drift 18s ease-in-out infinite reverse;
+        }
+        .nav-link {
+            position: relative;
+        }
+        .nav-link::after {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: -0.35rem;
+            height: 2px;
+            background: #0572FF;
+            transform: scaleX(0);
+            transform-origin: left center;
+            transition: transform var(--duration-state) var(--ease-out-quart);
+        }
+        .nav-link:hover::after,
+        .nav-link:focus-visible::after,
+        .nav-link.is-active::after {
+            transform: scaleX(1);
+        }
+        .icon-button {
+            transition:
+                transform var(--duration-state) var(--ease-out-quart),
+                color var(--duration-state) var(--ease-out-quart),
+                background-color var(--duration-state) var(--ease-out-quart),
+                box-shadow var(--duration-state) var(--ease-out-quart);
+        }
+        .icon-button:hover,
+        .icon-button:focus-visible {
+            transform: translate3d(0, -2px, 0) scale(1.04);
+            color: #b0c6ff;
+            box-shadow: 0 12px 30px rgba(5, 114, 255, 0.2);
+        }
+        .icon-button:active {
+            transform: scale(0.96);
+        }
+        .achievement-card {
+            position: relative;
+            isolation: isolate;
+            transition:
+                transform 320ms var(--ease-out-quart),
+                box-shadow 320ms var(--ease-out-quart);
+        }
+        .achievement-card::after {
+            content: "";
+            position: absolute;
+            inset: auto -20% -45% auto;
+            width: 10rem;
+            height: 10rem;
+            border-radius: 999px;
+            background: radial-gradient(circle, rgba(84, 141, 255, 0.3) 0%, rgba(84, 141, 255, 0) 70%);
+            opacity: 0;
+            transition: opacity 320ms var(--ease-out-quart);
+            z-index: -1;
+        }
+        .achievement-card:hover,
+        .achievement-card:focus-within {
+            transform: translate3d(0, -4px, 0);
+            box-shadow: 0 24px 48px rgba(5, 114, 255, 0.16);
+        }
+        .achievement-card:hover::after,
+        .achievement-card:focus-within::after {
+            opacity: 1;
+        }
+        .achievement-icon {
+            transition: transform 320ms var(--ease-out-quart), box-shadow 320ms var(--ease-out-quart);
+            animation: badge-orbit 5s ease-in-out infinite;
+        }
+        .achievement-card:hover .achievement-icon,
+        .achievement-card:focus-within .achievement-icon {
+            transform: rotate(-6deg) scale(1.06);
+            box-shadow: 0 16px 30px rgba(5, 114, 255, 0.18);
+        }
+        .podium-stage {
+            isolation: isolate;
+        }
+        .hero-glow {
+            opacity: 0.24;
+            transition: transform 360ms var(--ease-out-quart), opacity 360ms var(--ease-out-quart);
+            animation: hero-glow 8s ease-in-out infinite;
+            will-change: transform, opacity;
+        }
+        .podium-entry {
+            opacity: 0;
+            transform: translate3d(0, 36px, 0) scale(0.97);
+        }
+        .js .podium-stage.is-visible .podium-entry {
+            opacity: 1;
+            transform: translate3d(0, 0, 0) scale(1);
+            transition:
+                opacity var(--duration-enter) var(--ease-out-quart),
+                transform var(--duration-hero) var(--ease-out-expo);
+            transition-delay: calc(140ms + (var(--podium-order, 1) * 90ms));
+        }
+        .podium-avatar,
+        .podium-score,
+        .podium-badge {
+            transition:
+                transform 280ms var(--ease-out-quart),
+                box-shadow 280ms var(--ease-out-quart),
+                filter 280ms var(--ease-out-quart);
+        }
+        .podium-entry:hover .podium-avatar,
+        .podium-entry:focus-within .podium-avatar {
+            transform: translate3d(0, -6px, 0) scale(1.03);
+            box-shadow: 0 18px 38px rgba(5, 114, 255, 0.2);
+        }
+        .podium-entry:hover .podium-score,
+        .podium-entry:focus-within .podium-score {
+            transform: translate3d(0, -4px, 0);
+        }
+        .podium-step {
+            transform-origin: center bottom;
+            transform: scaleY(0.16);
+        }
+        .js .podium-stage.is-visible .podium-step {
+            transform: scaleY(1);
+            transition: transform var(--duration-hero) var(--ease-out-expo);
+            transition-delay: calc(220ms + (var(--podium-order, 1) * 100ms));
+        }
+        .podium-entry--winner .podium-avatar {
+            animation: champion-aura 3.8s ease-in-out infinite;
+        }
+        .podium-entry--winner .podium-badge {
+            animation: badge-pulse 2.8s ease-in-out infinite;
+        }
+        .rank-row {
+            position: relative;
+            overflow: hidden;
+            transition:
+                transform var(--duration-state) var(--ease-out-quart),
+                background-color var(--duration-state) var(--ease-out-quart),
+                box-shadow var(--duration-state) var(--ease-out-quart);
+        }
+        .rank-row::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, rgba(84, 141, 255, 0.18), rgba(84, 141, 255, 0.06) 48%, transparent 76%);
+            opacity: 0;
+            transition: opacity var(--duration-state) var(--ease-out-quart);
+            pointer-events: none;
+        }
+        .rank-row:hover,
+        .rank-row:focus-within {
+            transform: translate3d(10px, 0, 0);
+            box-shadow: 0 18px 42px rgba(5, 114, 255, 0.08);
+        }
+        .rank-row:hover::before,
+        .rank-row:focus-within::before,
+        .rank-row--self::before {
+            opacity: 1;
+        }
+        .rank-row--self {
+            margin: 0.75rem;
+            border-radius: 1.25rem;
+            background: linear-gradient(90deg, rgba(84, 141, 255, 0.14), rgba(84, 141, 255, 0.04) 58%, rgba(84, 141, 255, 0.02));
+            box-shadow: inset 0 0 0 1px rgba(176, 198, 255, 0.1), 0 22px 44px rgba(5, 114, 255, 0.08);
+        }
+        .row-rank,
+        .row-points,
+        .row-avatar {
+            transition:
+                transform var(--duration-state) var(--ease-out-quart),
+                opacity var(--duration-state) var(--ease-out-quart),
+                box-shadow var(--duration-state) var(--ease-out-quart);
+        }
+        .rank-row:hover .row-rank,
+        .rank-row:focus-within .row-rank {
+            transform: translate3d(4px, 0, 0);
+            opacity: 0.94;
+        }
+        .rank-row:hover .row-points,
+        .rank-row:focus-within .row-points {
+            transform: translate3d(-4px, 0, 0);
+        }
+        .rank-row:hover .row-avatar,
+        .rank-row:focus-within .row-avatar {
+            transform: scale(1.06);
+            box-shadow: 0 12px 28px rgba(5, 114, 255, 0.14);
+        }
+        .level-meter {
+            overflow: hidden;
+        }
+        .js .level-meter__fill {
+            width: 100%;
+            transform-origin: left center;
+            transform: scaleX(0);
+        }
+        .js .rank-row.is-visible .level-meter__fill,
+        .js .rank-row--self.is-visible .level-meter__fill {
+            transform: scaleX(var(--fill-scale, 1));
+            transition: transform 820ms var(--ease-out-expo);
+            transition-delay: 260ms;
+        }
+        .floating-rank {
+            animation: dock-float 4.6s ease-in-out infinite;
+            transition:
+                transform var(--duration-state) var(--ease-out-quart),
+                box-shadow var(--duration-state) var(--ease-out-quart);
+        }
+        .floating-rank:hover,
+        .floating-rank:focus-within {
+            transform: translate3d(0, -6px, 0);
+            box-shadow: 0 26px 54px rgba(5, 114, 255, 0.2);
+        }
+        .rank-jump {
+            background: rgba(84, 141, 255, 0.16);
+        }
+        .rank-jump:hover,
+        .rank-jump:focus-visible {
+            background: rgba(84, 141, 255, 0.28);
+        }
+        @keyframes hero-glow {
+            0%, 100% {
+                opacity: 0.22;
+                transform: translate3d(0, 0, 0) scale(1);
+            }
+            50% {
+                opacity: 0.42;
+                transform: translate3d(0, -10px, 0) scale(1.05);
+            }
+        }
+        @keyframes champion-aura {
+            0%, 100% {
+                box-shadow: 0 0 32px rgba(5, 114, 255, 0.22);
+                filter: saturate(1);
+            }
+            50% {
+                box-shadow: 0 0 44px rgba(5, 114, 255, 0.42);
+                filter: saturate(1.08);
+            }
+        }
+        @keyframes badge-pulse {
+            0%, 100% {
+                transform: translate3d(0, 0, 0) scale(1);
+            }
+            50% {
+                transform: translate3d(0, -3px, 0) scale(1.06);
+            }
+        }
+        @keyframes badge-orbit {
+            0%, 100% {
+                transform: rotate(0deg) translate3d(0, 0, 0);
+            }
+            50% {
+                transform: rotate(-4deg) translate3d(0, -3px, 0);
+            }
+        }
+        @keyframes dock-float {
+            0%, 100% {
+                transform: translate3d(0, 0, 0);
+            }
+            50% {
+                transform: translate3d(0, -4px, 0);
+            }
+        }
+        @keyframes shell-drift {
+            0%, 100% {
+                transform: translate3d(0, 0, 0) scale(1);
+            }
+            50% {
+                transform: translate3d(18px, -12px, 0) scale(1.05);
+            }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+            .js [data-reveal] {
+                opacity: 1 !important;
+                transform: none !important;
+            }
+            .hero-glow,
+            .leaderboard-shell::before,
+            .leaderboard-shell::after {
+                animation: none !important;
+            }
         }
     </style>
 </head>
-<body class="bg-background text-on-surface font-body selection:bg-primary/30">
+<body class="bg-background text-on-surface font-body selection:bg-primary/30 overflow-x-hidden">
 <!-- TopNavBar -->
 <nav class="fixed top-0 w-full z-50 bg-[#0b1326] dark:bg-[#0b1326] flex justify-between items-center px-6 py-4 w-full no-line-rule tonal-shift-only bg-[#131b2e]">
 <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
 <div class="hidden md:flex items-center gap-8">
-<a class="font-headline tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">Data Q&amp;A</a>
-<a class="font-headline tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">SHOP</a>
-<a class="font-headline tracking-wide uppercase font-bold text-[#b0c6ff] border-b-2 border-[#0572FF] pb-1" href="#">Fan Leaderboard</a>
+<a class="nav-link font-headline tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">Data Q&amp;A</a>
+<a class="nav-link font-headline tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">SHOP</a>
+<a class="nav-link is-active font-headline tracking-wide uppercase font-bold text-[#b0c6ff] pb-1" href="#">Fan Leaderboard</a>
 </div>
 <div class="flex items-center gap-4">
-<button class="material-symbols-outlined text-[#0572FF] scale-95 duration-200">account_circle</button>
+<button class="icon-button material-symbols-outlined text-[#0572FF] scale-95 duration-200 rounded-full p-1" type="button">account_circle</button>
 </div>
 </nav>
 <!-- SideNavBar -->
@@ -136,18 +480,18 @@
 </div>
 </aside>
 <!-- Main Content -->
-<main class="min-h-screen pt-24 pb-24 lg:pl-64 lg:pr-8 px-4 max-w-7xl mx-auto">
+<main class="leaderboard-shell min-h-screen pt-24 pb-24 lg:pl-64 lg:pr-8 px-4 max-w-7xl mx-auto relative">
 <!-- Header & Achievement Callout -->
-<div class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
+<div class="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6 relative z-10" data-delay="80" data-reveal="left" data-reveal-onload="">
 <div>
 <h1 class="font-headline text-4xl md:text-6xl font-black italic tracking-tighter uppercase text-on-surface">
                     Leaderboard
                 </h1>
 <p class="text-primary font-medium tracking-widest text-xs uppercase mt-2">Season: Blue &amp; Black Dominance</p>
 </div>
-<div class="glass-card rounded-xl p-4 flex items-center gap-4 max-w-sm">
+<div class="achievement-card glass-card rounded-xl p-4 flex items-center gap-4 max-w-sm">
 <div class="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
+<span class="achievement-icon material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">workspace_premium</span>
 </div>
 <div>
 <p class="text-xs font-bold text-primary uppercase tracking-wider">Recent Achievement</p>
@@ -158,58 +502,58 @@
 <div class="grid grid-cols-1 xl:grid-cols-12 gap-8">
 <!-- Podium Section -->
 <div class="xl:col-span-5 flex flex-col gap-6">
-<div class="relative h-[480px] bg-surface-container-low rounded-3xl overflow-hidden flex flex-col justify-end p-8">
-<div class="absolute top-0 left-0 w-full h-full opacity-20 pointer-events-none" style="background: radial-gradient(circle at 50% -20%, #0572FF 0%, transparent 70%);"></div>
+<div class="podium-stage relative h-[480px] bg-surface-container-low rounded-3xl overflow-hidden flex flex-col justify-end p-8" data-delay="160" data-hero-panel="" data-reveal="up" data-reveal-onload="">
+<div class="hero-glow absolute top-0 left-0 w-full h-full pointer-events-none" data-hero-glow="" style="background: radial-gradient(circle at 50% -20%, #0572FF 0%, transparent 70%);"></div>
 <!-- Podium Visual -->
 <div class="relative flex items-end justify-center gap-2 md:gap-4 h-full">
 <!-- 2nd Place -->
-<div class="flex flex-col items-center gap-3 w-1/3">
+<div class="podium-entry flex flex-col items-center gap-3 w-1/3" style="--podium-order: 2;">
 <div class="relative">
-<div class="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-slate-400 overflow-hidden bg-surface-container-highest">
+<div class="podium-avatar w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-slate-400 overflow-hidden bg-surface-container-highest">
 <img alt="Fan 2" class="w-full h-full object-cover" data-alt="Portrait of a young man wearing a Club Brugge scarf in a dark stadium lighting setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDSBBYi6zsfZnx7V2YlwzcAfCELM1zFtgs-7eX4dY6kAvtGx2MbxZeYDB7Lo5lq0T8EXBUClEPYsxan7BKZKA9I7GSLwx7qMIH1JdnU8ftm5fyf8E42D-oL1g2nIC6boUHOSJAunOMaHIcAX383i2mLKMYCo9Nt63477nJ7ZR6JzudSO8sgbphlFivtn1SpLy-PSVv3-zPCPaUTU4OOzs00hxxEFD4zaGUdY8FlPtHuqBarLBlWoVu8A5cm5iTN4KBfzc2LauRBfxya"/>
 </div>
-<div class="absolute -bottom-2 -right-2 bg-slate-400 text-background w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs">2</div>
+<div class="podium-badge absolute -bottom-2 -right-2 bg-slate-400 text-background w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs">2</div>
 </div>
 <div class="text-center">
 <p class="font-bold text-sm truncate w-full">S. Mignolet Fan</p>
-<p class="text-primary font-black text-lg">14,200</p>
+<p class="podium-score text-primary font-black text-lg">14,200</p>
 </div>
-<div class="w-full bg-slate-400/20 h-24 rounded-t-xl"></div>
+<div class="podium-step w-full bg-slate-400/20 h-24 rounded-t-xl"></div>
 </div>
 <!-- 1st Place -->
-<div class="flex flex-col items-center gap-3 w-1/3 z-10">
+<div class="podium-entry podium-entry--winner flex flex-col items-center gap-3 w-1/3 z-10" style="--podium-order: 1;">
 <div class="relative -top-8">
-<div class="w-20 h-20 md:w-28 md:h-28 rounded-full border-4 border-[#0572FF] overflow-hidden bg-surface-container-highest shadow-[0_0_40px_rgba(5,114,255,0.4)]">
+<div class="podium-avatar w-20 h-20 md:w-28 md:h-28 rounded-full border-4 border-[#0572FF] overflow-hidden bg-surface-container-highest shadow-[0_0_40px_rgba(5,114,255,0.4)]">
 <img alt="Fan 1" class="w-full h-full object-cover" data-alt="Close up of a focused fan with blue face paint, cinematic stadium lighting, bokeh background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDMWvmUbFHteQBMGRjkiFnAWz40Gq5a9_JmFCpgzalZn9vU5oWe1bxItcdTJVoIpCR9_oB0VVzNDdbFPAt_oP0GeDGrSd6SP3bYCYRb2PDkK_yP4-LpmTpOA8k4QHNIc_OZRu862JOAOMYkWprI8C0E578_wm9oW6Dp6dEVFCUq1pRYZ5ycPFLm9ZL0Qni8h3MDVPASDAmWPQ3_a6qlinOGLeB4CSRZCjJYhM5N7dCE5uKj3wiLRuc7SS0IL_PX3ItYjPD691SlTLZe"/>
 </div>
-<div class="absolute -bottom-2 -right-2 bg-[#0572FF] text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">1</div>
+<div class="podium-badge absolute -bottom-2 -right-2 bg-[#0572FF] text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">1</div>
 </div>
 <div class="text-center -mt-6">
 <p class="font-bold text-base truncate w-full">Kylian_Brugge</p>
-<p class="text-primary font-black text-2xl">18,540</p>
+<p class="podium-score text-primary font-black text-2xl">18,540</p>
 </div>
-<div class="w-full bg-primary/30 h-40 rounded-t-xl flex items-start justify-center pt-4">
+<div class="podium-step w-full bg-primary/30 h-40 rounded-t-xl flex items-start justify-center pt-4">
 <span class="material-symbols-outlined text-primary text-3xl">star</span>
 </div>
 </div>
 <!-- 3rd Place -->
-<div class="flex flex-col items-center gap-3 w-1/3">
+<div class="podium-entry flex flex-col items-center gap-3 w-1/3" style="--podium-order: 3;">
 <div class="relative">
-<div class="w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-amber-700/50 overflow-hidden bg-surface-container-highest">
+<div class="podium-avatar w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-amber-700/50 overflow-hidden bg-surface-container-highest">
 <img alt="Fan 3" class="w-full h-full object-cover" data-alt="Young woman smiling, wearing a blue and black Brugge jersey, soft focus city lights background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAOr78JILbWmeXUpqT5FIG2Lo8_cO1rcD5DoScIQy_8X4TpaLCqxRxg0pMmR8B8NOJB_E_9kG30EN9Fl7Cgohc7eAIEL_uCH-jxd7os8-D79T5fv7xePXoU5KFwXXLrzHSQwAqdUPXdpXJA4CKBsrfZPM8XC1TX_rUUCdq15z05XTFfiaOZt1z0cZ6BHnExTC8r8IMef6AI_NzLl07iZ6Ueticqjcmf-pYKLY7LDOx8RpAu1pWkAbGZKzYKLD08JHCzPqzA9wjDirOt"/>
 </div>
-<div class="absolute -bottom-2 -right-2 bg-amber-700 text-white w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs">3</div>
+<div class="podium-badge absolute -bottom-2 -right-2 bg-amber-700 text-white w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs">3</div>
 </div>
 <div class="text-center">
 <p class="font-bold text-sm truncate w-full">Jan_Breydel_King</p>
-<p class="text-primary font-black text-lg">12,850</p>
+<p class="podium-score text-primary font-black text-lg">12,850</p>
 </div>
-<div class="w-full bg-amber-700/20 h-16 rounded-t-xl"></div>
+<div class="podium-step w-full bg-amber-700/20 h-16 rounded-t-xl"></div>
 </div>
 </div>
 </div>
 <!-- Fan of the Month Card -->
-<div class="bg-surface-container-highest rounded-3xl p-6 relative overflow-hidden">
+<div class="bg-surface-container-highest rounded-3xl p-6 relative overflow-hidden" data-delay="260" data-reveal="left">
 <div class="flex justify-between items-start">
 <div>
 <span class="bg-primary/20 text-primary text-xs font-black uppercase tracking-widest px-3 py-1 rounded-full mb-3 inline-block">FAN OF THE MONTH</span>
@@ -224,11 +568,11 @@
 </div>
 <!-- List Section -->
 <div class="xl:col-span-7 flex flex-col">
-<div class="bg-surface-container-low rounded-3xl overflow-hidden flex flex-col h-full">
+<div class="bg-surface-container-low rounded-3xl overflow-hidden flex flex-col h-full relative z-10" data-delay="180" data-reveal="right" data-reveal-onload="">
 <div class="px-8 py-6 flex justify-between items-center bg-surface-container">
 <h2 class="font-headline font-bold text-xl uppercase tracking-wider">Rankings</h2>
 <div class="flex gap-2">
-<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary">filter_list</span>
+<button aria-label="Filter leaderboard" class="icon-button material-symbols-outlined text-on-surface-variant rounded-full p-2" type="button">filter_list</button>
 </div>
 </div>
 <div class="overflow-y-auto max-h-[600px] flex-1">
@@ -242,10 +586,10 @@
 <!-- Ranking Items -->
 <div class="divide-y divide-white/5">
 <!-- User Highlighted Row -->
-<div class="grid grid-cols-12 px-8 py-5 items-center bg-primary/10 border-l-4 border-primary">
-<div class="col-span-2 font-headline font-black text-xl italic text-primary">#42</div>
+<div class="rank-row rank-row--self grid grid-cols-12 px-8 py-5 items-center" data-delay="80" data-reveal="up">
+<div class="row-rank col-span-2 font-headline font-black text-xl italic text-primary">#42</div>
 <div class="col-span-5 flex items-center gap-3">
-<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden border border-primary/30">
+<div class="row-avatar w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden border border-primary/30">
 <img alt="Your Avatar" class="w-full h-full object-cover" data-alt="Abstract minimalist representation of a profile placeholder with blue glowing edges" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGNLlFZ2ddQO1rfIMiQh-f5aSTUNTgX9usT6Ht9wZM8R4o73p4pKrl3uYamJ-0nDt1-P5swQqmKpn5K_EPVu91Kvcw786I62HC0N7y2EL32zLoRzgPl-k3e28NDTXVt7WiddD1pMeGXxaRdFhBfXqTCxqIU78GiyVIIKWTQy2drHqvdAOD0G-uegOlBMxIKmTDWPh03XMd_Y3EGvpnZ-S1hAoXPzjCFh-kTfQfRXPLvTCVmx97tup36-_hS3xNIvhxRCOsVOtiv3zH"/>
 </div>
 <div>
@@ -256,60 +600,60 @@
 <div class="col-span-3">
 <div class="flex items-center gap-2">
 <span class="text-xs font-bold">LVL 24</span>
-<div class="h-1 flex-1 bg-surface-container-highest rounded-full overflow-hidden">
-<div class="h-full bg-primary w-[70%]"></div>
+<div class="level-meter h-1 flex-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="level-meter__fill h-full bg-primary" style="--fill-scale: 0.7;"></div>
 </div>
 </div>
 </div>
-<div class="col-span-2 text-right font-headline font-bold text-primary">8,940</div>
+<div class="row-points col-span-2 text-right font-headline font-bold text-primary">8,940</div>
 </div>
 <!-- List Item 4 -->
-<div class="grid grid-cols-12 px-8 py-5 items-center hover:bg-surface-container-high transition-colors">
-<div class="col-span-2 font-headline font-bold text-lg opacity-40">04</div>
+<div class="rank-row grid grid-cols-12 px-8 py-5 items-center hover:bg-surface-container-high transition-colors" data-delay="120" data-reveal="up">
+<div class="row-rank col-span-2 font-headline font-bold text-lg opacity-40">04</div>
 <div class="col-span-5 flex items-center gap-3">
-<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
+<div class="row-avatar w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
 <img alt="Fan" class="w-full h-full object-cover" data-alt="Portrait of a fan with a vintage blue and black jersey in a dimly lit setting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA54HdSHC9uBQ0jeE0d_MbZ3IdRXFxgphkez8YL3r9pkbISI1rv9hX2AnGBifnWPb8V1VJvWcnuOSw96q_xbEKfQCHXFp2JNpb4hCVKCfDuVOTLtd16yOAB2Bq0FKsd3xOSrmWC-clS5-VTzdZaEM2AGYjAtXlMxpTqz7DCD9oi_RSrCG_AwoLj4SYN4ZacPgmdEN5YtXuhMlenkBXa2z5ParcXxyRHlxzdsGV65GMehe8rpP_va-tpSCCaZk0Lw6m1XFczrrzSUDnj"/>
 </div>
 <p class="font-bold text-sm">Lukas_Vande</p>
 </div>
 <div class="col-span-3 text-xs font-medium opacity-60">Elite Member</div>
-<div class="col-span-2 text-right font-headline font-bold">11,200</div>
+<div class="row-points col-span-2 text-right font-headline font-bold">11,200</div>
 </div>
 <!-- List Item 5 -->
-<div class="grid grid-cols-12 px-8 py-5 items-center hover:bg-surface-container-high transition-colors">
-<div class="col-span-2 font-headline font-bold text-lg opacity-40">05</div>
+<div class="rank-row grid grid-cols-12 px-8 py-5 items-center hover:bg-surface-container-high transition-colors" data-delay="160" data-reveal="up">
+<div class="row-rank col-span-2 font-headline font-bold text-lg opacity-40">05</div>
 <div class="col-span-5 flex items-center gap-3">
-<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
+<div class="row-avatar w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
 <img alt="Fan" class="w-full h-full object-cover" data-alt="Man in his 30s with short hair wearing a modern football jacket, stadium lights background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDd9SCRkGSYCl2q9HC1eW1MSNwhr1VTpLFQobdH3I61rwpbATFbbBsruhlfsrRrDtDvN6_HhsoZq-7_e8pglgLDnOdPHykRyXRBWF39VL0SX7-jhLGuJrfdD4ql8NhCOOtO8QYb9iWrq9E7eJSFsj7iO-5Gzg4UUr-tSjqf-0HcUBWHsdWOdc0-a9dlSEaHYeDzTU2HC8Pa-bbALR-d6qAcmUvP9inIF5Oq6efvfC1PTtOpRtdBfK2LYyEevZUY3odkzQ3pz0jrX9y0"/>
 </div>
 <p class="font-bold text-sm">Pieter.Brugge</p>
 </div>
 <div class="col-span-3 text-xs font-medium opacity-60">Season Holder</div>
-<div class="col-span-2 text-right font-headline font-bold">10,850</div>
+<div class="row-points col-span-2 text-right font-headline font-bold">10,850</div>
 </div>
 <!-- List Item 6 -->
-<div class="grid grid-cols-12 px-8 py-5 items-center hover:bg-surface-container-high transition-colors">
-<div class="col-span-2 font-headline font-bold text-lg opacity-40">06</div>
+<div class="rank-row grid grid-cols-12 px-8 py-5 items-center hover:bg-surface-container-high transition-colors" data-delay="200" data-reveal="up">
+<div class="row-rank col-span-2 font-headline font-bold text-lg opacity-40">06</div>
 <div class="col-span-5 flex items-center gap-3">
-<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
+<div class="row-avatar w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
 <img alt="Fan" class="w-full h-full object-cover" data-alt="Fan cheering in the stands with a blue and black flag draped over shoulders" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDe9uAu-MTyKYBwu1eX8hZ0sS_aDFEdu3KSjBZDDPtqA7Pqkf_eGyQJ0Vr0Rwvk3b7BChMHFdRHOvHhKm26hjAF7xahXSkFC8ywiZkGu0gfCdU5uIKeM3RxN3v0noyOs0fQa1WexF2-8H6rnipxR7d4m6jtlqS_VZ3agu-39JXx1atr4tXdPpOnyz_g81jpDQNney-spL4jZP_LbfqpBCI3kYCqLdfRi_FDXod9WXjiNXAb7vaBzZqvA458NWWzt1PTVcAh5yAsL75I"/>
 </div>
 <p class="font-bold text-sm">Thomas_FCB</p>
 </div>
 <div class="col-span-3 text-xs font-medium opacity-60">Data Expert</div>
-<div class="col-span-2 text-right font-headline font-bold">10,400</div>
+<div class="row-points col-span-2 text-right font-headline font-bold">10,400</div>
 </div>
 <!-- List Item 7 -->
-<div class="grid grid-cols-12 px-8 py-5 items-center hover:bg-surface-container-high transition-colors">
-<div class="col-span-2 font-headline font-bold text-lg opacity-40">07</div>
+<div class="rank-row grid grid-cols-12 px-8 py-5 items-center hover:bg-surface-container-high transition-colors" data-delay="240" data-reveal="up">
+<div class="row-rank col-span-2 font-headline font-bold text-lg opacity-40">07</div>
 <div class="col-span-5 flex items-center gap-3">
-<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
+<div class="row-avatar w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
 <img alt="Fan" class="w-full h-full object-cover" data-alt="Close up of eyes reflecting stadium floodlights, intense atmosphere" src="https://lh3.googleusercontent.com/aida-public/AB6AXuANUY7p0PquVGjndHzhdDwLCrsSgnQmCmwebKygOC1HGF-irLwty_Wj9I6jB4PxGkI_OGH4GuuEadJNPYkrmx2OUNymJS6VFgFSmP4LhAYBKHFQyeMZC_qBdJz0k1HAxoby5p3-If_qdAkGW_OLjugfgvfufuZYD6dFTnAs1O3wNbXlZDp5wO-zc-u0ao8PkYB9xl3mX5CWfmZROktmg9yOehbLKsQF4V_MnGzWGXRO716gE17ShuiZudQsiKAREmRMJjFCcv_6fguC"/>
 </div>
 <p class="font-bold text-sm">Sofie_Blue</p>
 </div>
 <div class="col-span-3 text-xs font-medium opacity-60">Top Predictor</div>
-<div class="col-span-2 text-right font-headline font-bold">9,920</div>
+<div class="row-points col-span-2 text-right font-headline font-bold">9,920</div>
 </div>
 </div>
 </div>
@@ -337,7 +681,7 @@
 </div>
 </nav>
 <!-- Sticky "Your Rank" Bar (Tablet/Mobile fallback) -->
-<div class="fixed bottom-20 left-4 right-4 md:bottom-8 md:right-8 md:left-auto md:w-80 glass-card p-4 rounded-2xl shadow-2xl z-40 border border-white/5 animate-pulse-subtle">
+<div class="floating-rank fixed bottom-20 left-4 right-4 md:bottom-8 md:right-8 md:left-auto md:w-80 glass-card p-4 rounded-2xl shadow-2xl z-40 border border-white/5" data-delay="320" data-reveal="up" data-reveal-onload="">
 <div class="flex items-center justify-between">
 <div class="flex items-center gap-3">
 <div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center font-bold text-on-primary">42</div>
@@ -346,9 +690,76 @@
 <p class="text-sm font-black italic">8,940 pts</p>
 </div>
 </div>
-<button class="bg-primary/20 p-2 rounded-lg text-primary">
+<button class="icon-button rank-jump p-2 rounded-lg text-primary" type="button">
 <span class="material-symbols-outlined">arrow_upward</span>
 </button>
 </div>
 </div>
+<script>
+        (() => {
+            const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+            const revealTargets = Array.from(document.querySelectorAll('[data-reveal]'));
+
+            const show = (element) => {
+                if (!element.classList.contains('is-visible')) {
+                    element.classList.add('is-visible');
+                }
+            };
+
+            revealTargets.forEach((element) => {
+                const delay = Number(element.dataset.delay || 0);
+                element.style.setProperty('--reveal-delay', `${delay}ms`);
+            });
+
+            if (reducedMotion.matches) {
+                revealTargets.forEach(show);
+                return;
+            }
+
+            const immediateTargets = revealTargets.filter((element) => element.hasAttribute('data-reveal-onload'));
+            const observedTargets = revealTargets.filter((element) => !element.hasAttribute('data-reveal-onload'));
+
+            requestAnimationFrame(() => {
+                immediateTargets.forEach((element) => show(element));
+            });
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        show(entry.target);
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, {
+                threshold: 0.18,
+                rootMargin: '0px 0px -12% 0px'
+            });
+
+            observedTargets.forEach((element) => observer.observe(element));
+
+            const heroPanel = document.querySelector('[data-hero-panel]');
+            const heroGlow = document.querySelector('[data-hero-glow]');
+            let glowFrame = 0;
+
+            if (heroPanel && heroGlow) {
+                heroPanel.addEventListener('pointermove', (event) => {
+                    const bounds = heroPanel.getBoundingClientRect();
+                    const x = ((event.clientX - bounds.left) / bounds.width) - 0.5;
+                    const y = ((event.clientY - bounds.top) / bounds.height) - 0.5;
+
+                    cancelAnimationFrame(glowFrame);
+                    glowFrame = requestAnimationFrame(() => {
+                        heroGlow.style.transform = `translate3d(${x * 22}px, ${y * 16}px, 0) scale(1.05)`;
+                        heroGlow.style.opacity = '0.4';
+                    });
+                });
+
+                heroPanel.addEventListener('pointerleave', () => {
+                    cancelAnimationFrame(glowFrame);
+                    heroGlow.style.transform = 'translate3d(0, 0, 0) scale(1)';
+                    heroGlow.style.opacity = '';
+                });
+            }
+        })();
+    </script>
 </body></html>
