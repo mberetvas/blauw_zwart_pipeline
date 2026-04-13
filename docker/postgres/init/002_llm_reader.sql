@@ -3,11 +3,18 @@
 -- The llm_reader role gets SELECT on every current and future table/view
 -- in the dbt marts schema. The schema is pre-created here so grants and
 -- default-privilege rules are in place before dbt materialises anything.
+\getenv llm_reader_password LLM_READER_PASSWORD
+\if :{?llm_reader_password}
+\else
+\set llm_reader_password 'llm_reader_pass'
+\endif
 
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'llm_reader') THEN
-        CREATE ROLE llm_reader LOGIN PASSWORD 'llm_reader_pass';
+        EXECUTE format('CREATE ROLE llm_reader LOGIN PASSWORD %L', :'llm_reader_password');
+    ELSE
+        EXECUTE format('ALTER ROLE llm_reader PASSWORD %L', :'llm_reader_password');
     END IF;
 END
 $$;

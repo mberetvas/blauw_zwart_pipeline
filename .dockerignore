@@ -12,6 +12,8 @@ __pycache__/
 .mypy_cache/
 .env
 .env.*
+tests/
+specs/
 logs/
 out/
 target/

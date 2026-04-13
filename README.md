@@ -182,7 +182,8 @@ The Compose defaults in `.env.example` line up like this:
 | `KAFKA_TOPIC` | `fan_events` |
 | `KAFKA_CONSUMER_GROUP` | `fan-ingest-local` |
 | `DATABASE_URL` | `postgresql://postgres:changeme@postgres:5432/fan_pipeline` |
-| `LLM_READER_DATABASE_URL` | `postgresql://llm_reader:llm_reader_pass@postgres:5432/fan_pipeline` |
+| `LLM_READER_PASSWORD` | `change-this-dev-password` |
+| `LLM_READER_DATABASE_URL` | `postgresql://llm_reader:change-this-dev-password@postgres:5432/fan_pipeline` |
 | `DBT_RUN_SELECTOR` | `+mart_fan_loyalty` |
 
 Useful operator commands:
@@ -229,9 +230,10 @@ Runtime config is persisted through `LLM_CONFIG_PATH` in Compose (`/data/llm_con
 ### Run it in Compose
 
 1. Copy `.env.example` to `.env`.
-2. Start the stack with `docker compose up -d`.
-3. If you use Ollama, pull the default model on the host: `ollama pull gemma4:e2b`.
-4. Wait for `dbt-scheduler` to materialize the marts: `docker compose logs -f dbt-scheduler`.
+2. Change `LLM_READER_PASSWORD` in `.env` if you do not want the documented dev-only default.
+3. Start the stack with `docker compose up -d`.
+4. If you use Ollama, pull the default model on the host: `ollama pull gemma4:e2b`.
+5. Wait for `dbt-scheduler` to materialize the marts: `docker compose logs -f dbt-scheduler`.
 
 Then open the UI at <http://localhost:8080> or call the API directly:
 
@@ -259,7 +261,7 @@ uv run python -m llm_api.app
 | `PUT` | `/api/llm-config` | Persist runtime config changes |
 | `POST` | `/api/ask` | Question to SQL to answer flow |
 
-The API executes read-only `SELECT` queries only, wraps results in an outer `LIMIT 50`, and sets `statement_timeout` to 10 seconds on each DB session.
+The API executes read-only `SELECT` / `WITH ... SELECT` queries only, wraps results in an outer `LIMIT 50`, and sets `statement_timeout` to 10 seconds on each DB session.
 
 ## dbt and analytics
 

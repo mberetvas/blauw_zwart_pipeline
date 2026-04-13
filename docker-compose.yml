@@ -191,9 +191,9 @@ services:
       dockerfile: docker/Dockerfile.api
     env_file: .env
     environment:
-      # Same interpolation for both so the API and Compose stay aligned (overrides env_file).
-      LLM_READER_DATABASE_URL: ${LLM_READER_DATABASE_URL:-postgresql://llm_reader:llm_reader_pass@postgres:5432/fan_pipeline}
-      DATABASE_URL: ${LLM_READER_DATABASE_URL:-postgresql://llm_reader:llm_reader_pass@postgres:5432/fan_pipeline}
+      # Keep the service URL aligned with the password provisioned in postgres init.
+      LLM_READER_DATABASE_URL: ${LLM_READER_DATABASE_URL}
+      DATABASE_URL: ${LLM_READER_DATABASE_URL}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma4:e2b}
       # LLM provider selection: ollama (default) or openrouter.

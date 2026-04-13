@@ -216,9 +216,10 @@ def _build_trace(
 def _validate_sql(sql: str) -> None:
     """Raise ValueError if sql is not a safe, read-only SELECT statement."""
     stripped = sql.strip()
-    if not stripped.upper().lstrip("(\n\r\t ").startswith("SELECT"):
+    starts_with = stripped.upper().lstrip("(\n\r\t ")
+    if not (starts_with.startswith("SELECT") or starts_with.startswith("WITH")):
         raise ValueError(
-            "Generated SQL must begin with SELECT. "
+            "Generated SQL must begin with SELECT or WITH. "
             f"Received: {stripped[:120]!r}"
         )
     if ";" in stripped:
@@ -411,10 +412,10 @@ def ask() -> Any:
         err = str(exc)
         if "password authentication failed" in err.lower():
             err += (
-                " — check LLM_READER_DATABASE_URL matches the password in "
-                "docker/postgres/init/002_llm_reader.sql (default llm_reader_pass). "
+                " — check LLM_READER_DATABASE_URL matches LLM_READER_PASSWORD in "
+                ".env / docker-compose and the Postgres role password. "
                 "If Postgres was created before that init script existed, run: "
-                "ALTER ROLE llm_reader PASSWORD 'llm_reader_pass'; as a superuser, "
+                "ALTER ROLE llm_reader PASSWORD '<your-llm-reader-password>'; as a superuser, "
                 "or recreate the volume with docker compose down -v."
             )
         return (
