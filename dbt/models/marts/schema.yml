@@ -114,3 +114,44 @@ models:
           Used internally by dbt to identify which fans need reprocessing on the
           next incremental run. Not directly useful for end-user Q&A.
         data_type: timestamp with time zone
+
+  - name: mart_player_season_summary
+    description: >
+      Pro League player season summary mart: one row per player with flattened profile fields,
+      pivoted competition statistics (goals, assists, minutes, passing, duels, defensive and
+      goalkeeper metrics where present), and derived rates (per 90, pass accuracy, duel win %).
+      Built from int_player_profile and int_player_stat_lines. Prefer this table over raw JSON
+      staging for rankings, filters, and aggregates. Refreshed as a table on each dbt run.
+    config:
+      tags: [mart, player_stats, proleague]
+    columns:
+      - name: player_id
+        description: Pro League site player identifier (primary key of this mart).
+        data_type: text
+        tests:
+          - not_null
+          - unique
+      - name: slug
+        data_type: text
+        tests:
+          - not_null
+      - name: name
+        data_type: text
+        tests:
+          - not_null
+      - name: competition
+        data_type: text
+      - name: goals
+        data_type: numeric
+      - name: assists
+        data_type: numeric
+      - name: minutes_played
+        data_type: numeric
+      - name: pass_accuracy_pct
+        data_type: numeric
+      - name: goals_per_90
+        data_type: numeric
+      - name: scraped_at
+        data_type: timestamp with time zone
+        tests:
+          - not_null
