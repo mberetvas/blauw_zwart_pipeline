@@ -658,3 +658,105 @@ def test_leaderboard_route_returns_503_without_database_url(
     assert response.status_code == 503
     body = response.get_json()
     assert "No database URL" in body["error"]
+
+
+# ---------------------------------------------------------------------------
+# /api/player-stats/squad  — DB-backed reads
+# ---------------------------------------------------------------------------
+
+
+def _sample_player_rows() -> list[dict]:
+    from datetime import datetime, timezone
+
+    return [
+        {
+            "player_id": "p-001",
+            "slug": "hans-vanaken",
+            "name": "Hans Vanaken",
+            "position": "Midfielder",
+            "field_position": "CM",
+            "shirt_number": 20,
+            "image_url": "https://cdn.proleague.be/hans.jpg",
+            "profile": {"nationality": "Belgian"},
+            "stats": [
+                {"key": "goals", "label": "Goals", "value": 8},
+                {"key": "assists", "label": "Assists", "value": 12},
+            ],
+            "competition": "JPL",
+            "source_url": "https://www.proleague.be/players/hans-vanaken",
+            "scraped_at": datetime(2026, 4, 13, 18, 0, 0, tzinfo=timezone.utc).isoformat(),
+        }
+    ]
+
+
+def test_squad_route_returns_players_when_data_exists(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(llm_app_module, "_fetch_players_from_db", _sample_player_rows)
+
+    response = llm_app_module.app.test_client().get("/api/player-stats/squad")
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["db_backed"] is True
+    players = body["players"]
+    assert len(players) == 1
+    p = players[0]
+    assert p["player_id"] == "p-001"
+    assert p["name"] == "Hans Vanaken"
+    assert p["shirt_number"] == 20
+    assert isinstance(p["stats"], list)
+    assert p["stats"][0]["key"] == "goals"
+    assert body["fetched_at"] == "2026-04-13T18:00:00+00:00"
+
+
+def test_squad_route_returns_200_with_empty_list_when_table_is_empty(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Empty public.player_stats → HTTP 200 empty-pipeline state (not an error)."""
+    monkeypatch.setattr(llm_app_module, "_fetch_players_from_db", lambda: [])
+
+    response = llm_app_module.app.test_client().get("/api/player-stats/squad")
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["players"] == []
+    assert body["db_backed"] is True
+
+
+def test_squad_route_returns_503_when_db_url_missing(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No DATABASE_URL → _fetch_players_from_db raises OperationalError → HTTP 503."""
+    import psycopg2
+
+    def raise_no_url() -> list:
+        raise psycopg2.OperationalError("No database URL configured")
+
+    monkeypatch.setattr(llm_app_module, "_fetch_players_from_db", raise_no_url)
+
+    response = llm_app_module.app.test_client().get("/api/player-stats/squad")
+
+    assert response.status_code == 503
+    body = response.get_json()
+    assert "error" in body
+    assert "Database unavailable" in body["error"]
+
+
+def test_squad_route_returns_500_on_db_query_error(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """psycopg2.Error during query → HTTP 500, not silent empty list."""
+    import psycopg2
+
+    def raise_db_error() -> list:
+        raise psycopg2.ProgrammingError("relation \"public.player_stats\" does not exist")
+
+    monkeypatch.setattr(llm_app_module, "_fetch_players_from_db", raise_db_error)
+
+    response = llm_app_module.app.test_client().get("/api/player-stats/squad")
+
+    assert response.status_code == 500
+    body = response.get_json()
+    assert "error" in body
+    assert "Database query failed" in body["error"]

@@ -1229,23 +1229,24 @@ DEFAULT_SQUAD_URL = "https://www.proleague.be/teams/club-brugge-kv-182/squad"
 def _fetch_players_from_db() -> list[dict]:
     """Return all rows from public.player_stats using the read-only DB connection.
 
-    Returns an empty list when the table is empty or the DB is unreachable.
+    Returns an empty list only when the table exists but contains no rows.
+    Raises psycopg2.OperationalError when DATABASE_URL is not configured.
+    Raises psycopg2.Error on any other database failure (caller maps to HTTP status).
     """
     import json as _json
 
     if not DATABASE_URL:
-        return []
+        raise psycopg2.OperationalError(
+            "No database URL configured: set LLM_READER_DATABASE_URL or DATABASE_URL "
+            "(see .env.example and docker/postgres/init/002_llm_reader.sql)."
+        )
+    conn = psycopg2.connect(DATABASE_URL)
     try:
-        conn = psycopg2.connect(DATABASE_URL)
-        try:
-            with conn.cursor() as cur:
-                cur.execute(_SELECT_PLAYERS_SQL)
-                rows = cur.fetchall()
-        finally:
-            conn.close()
-    except psycopg2.Error as exc:
-        log.warning("player_stats DB read failed: %s", exc)
-        return []
+        with conn.cursor() as cur:
+            cur.execute(_SELECT_PLAYERS_SQL)
+            rows = cur.fetchall()
+    finally:
+        conn.close()
 
     players = []
     for row in rows:
@@ -1278,10 +1279,18 @@ def player_stats_squad() -> Any:
     """Return Club Brugge squad data from the Postgres ``player_stats`` table.
 
     Data is populated asynchronously by the daily proleague-scheduler → Kafka →
-    proleague-ingest pipeline.  Returns an empty squad with a clear status message
-    until the first daily scrape cycle has completed.
+    proleague-ingest pipeline.  Returns an empty squad (HTTP 200) when the table
+    exists but is empty (pipeline hasn't run yet).  Returns HTTP 503/500 on DB
+    errors so the browser shows the error state rather than the empty-pipeline state.
     """
-    players = _fetch_players_from_db()
+    try:
+        players = _fetch_players_from_db()
+    except psycopg2.OperationalError as exc:
+        log.error("player_stats_squad: DB unavailable: %s", exc)
+        return jsonify({"error": f"Database unavailable: {exc}"}), 503
+    except psycopg2.Error as exc:
+        log.exception("player_stats_squad: DB query failed")
+        return jsonify({"error": f"Database query failed: {exc}"}), 500
     latest = max(
         (p["scraped_at"] for p in players if p.get("scraped_at")),
         default=None,
