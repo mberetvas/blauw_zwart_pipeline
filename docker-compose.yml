@@ -66,6 +66,27 @@ services:
       - "1"
     restart: "no"
 
+  # Create the player_stats scraper topic before the scheduler or ingest consumer start.
+  # Partition count must stay aligned with broker KAFKA_NUM_PARTITIONS.
+  kafka-init-scraper:
+    image: apache/kafka:4.2.0
+    depends_on:
+      broker:
+        condition: service_healthy
+    command:
+      - /opt/kafka/bin/kafka-topics.sh
+      - --bootstrap-server
+      - broker:29092
+      - --create
+      - --if-not-exists
+      - --topic
+      - ${SCRAPER_KAFKA_TOPIC:-player_stats}
+      - --partitions
+      - ${KAFKA_NUM_PARTITIONS:-3}
+      - --replication-factor
+      - "1"
+    restart: "no"
+
   postgres:
     # Pin: Docker Hub library/postgres — `18-alpine` tracks latest PG 18 on Alpine.
     # Major upgrade: remove/rename `postgres-data` volume or run pg_upgrade (not done here).
@@ -178,9 +199,9 @@ services:
       kafka-init:
         condition: service_completed_successfully
 
-  # ─── Pro League player-stats scraper ─────────────────────────────────────
-  # Fetches Club Brugge squad & player stats from proleague.be.
-  # Exposed on the internal Docker network only (no host port needed — llm-api proxies it).
+  # ─── Pro League player-stats scraper (HTTP read layer) ───────────────────
+  # Serves /squad and /player from the DB / live fetch.
+  # Squad data is populated by proleague-scheduler → Kafka → proleague-ingest.
   # IMPORTANT: Operators must verify https://www.proleague.be/robots.txt and
   # Terms of Use before running against the live site.
   proleague-scraper:
@@ -189,9 +210,6 @@ services:
       dockerfile: docker/Dockerfile.scraper
     environment:
       PYTHONUNBUFFERED: "1"
-      # Override the default squad URL if needed:
-      PROLEAGUE_SQUAD_URL: ${PROLEAGUE_SQUAD_URL:-https://www.proleague.be/teams/club-brugge-kv-182/squad}
-      # Write-access DB URL so scraped data can be persisted to player_stats table.
       DATABASE_URL: ${DATABASE_URL}
     restart: unless-stopped
     depends_on:
@@ -203,6 +221,53 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  # ─── Pro League scheduler (daily scrape → Kafka producer) ────────────────
+  # Runs scrape_squad once on startup (SCRAPER_RUN_ON_STARTUP=1) then every
+  # SCRAPER_INTERVAL_HOURS hours.  Publishes one Kafka message per player to
+  # SCRAPER_KAFKA_TOPIC; the proleague-ingest consumer persists them to Postgres.
+  # IMPORTANT: see proleague-scraper note above re robots.txt / Terms of Use.
+  proleague-scheduler:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.scraper
+    command: ["python", "-m", "proleague_scraper.scheduler"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PROLEAGUE_SQUAD_URL: ${PROLEAGUE_SQUAD_URL:-https://www.proleague.be/teams/club-brugge-kv-182/squad}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-broker:29092}
+      SCRAPER_KAFKA_TOPIC: ${SCRAPER_KAFKA_TOPIC:-player_stats}
+      SCRAPER_INTERVAL_HOURS: ${SCRAPER_INTERVAL_HOURS:-24}
+      # Set to "1" to run immediately on container start (default); "0" to wait one full interval.
+      SCRAPER_RUN_ON_STARTUP: ${SCRAPER_RUN_ON_STARTUP:-1}
+    restart: unless-stopped
+    depends_on:
+      broker:
+        condition: service_healthy
+      kafka-init-scraper:
+        condition: service_completed_successfully
+
+  # ─── Pro League ingest (Kafka consumer → Postgres) ───────────────────────
+  # Subscribes to SCRAPER_KAFKA_TOPIC and upserts player rows into player_stats.
+  # Consumer group SCRAPER_KAFKA_CONSUMER_GROUP is distinct from fan-ingest-local.
+  proleague-ingest:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.scraper-ingest
+    environment:
+      PYTHONUNBUFFERED: "1"
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-broker:29092}
+      SCRAPER_KAFKA_TOPIC: ${SCRAPER_KAFKA_TOPIC:-player_stats}
+      SCRAPER_KAFKA_CONSUMER_GROUP: ${SCRAPER_KAFKA_CONSUMER_GROUP:-scraper-ingest-local}
+      DATABASE_URL: ${DATABASE_URL}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
+      kafka-init-scraper:
+        condition: service_completed_successfully
 
   # ─── Natural-language Q&A API (Flask + Ollama Text-to-SQL) ──────────────
   # Requires Ollama running on the host with `gemma4:e2b` pulled:
@@ -230,7 +295,8 @@ services:
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-mistralai/mistral-7b-instruct:free}
       # Persist Ollama/OpenRouter settings from the Club Settings UI across container restarts.
       LLM_CONFIG_PATH: ${LLM_CONFIG_PATH:-/data/llm_config.json}
-      # Internal URL of the player-stats scraper service (used by the /api/player-stats proxy).
+      # Internal URL of the scraper service (used by /api/player-stats/player and /image proxy).
+      # /api/player-stats/squad now reads from Postgres directly — no scraper dependency at startup.
       PROLEAGUE_SCRAPER_URL: ${PROLEAGUE_SCRAPER_URL:-http://proleague-scraper:8001}
     ports:
       - "${LLM_API_PORT:-8080}:8080"
@@ -242,8 +308,6 @@ services:
       - llm-api-config:/data
     depends_on:
       postgres:
-        condition: service_healthy
-      proleague-scraper:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\""]

@@ -1,0 +1,15 @@
+# Consumer image: reads the player_stats Kafka topic and upserts rows into Postgres.
+# pip-based (like Dockerfile.scraper) with a dedicated requirements file.
+FROM python:3.12-slim-bookworm
+
+WORKDIR /app
+
+COPY docker/requirements.scraper-ingest.txt /tmp/requirements.scraper-ingest.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.scraper-ingest.txt
+
+# Include only the runtime packages needed by this consumer.
+COPY src/proleague_scraper ./proleague_scraper
+COPY src/proleague_ingest  ./proleague_ingest
+
+ENV PYTHONUNBUFFERED=1
+CMD ["python", "-m", "proleague_ingest.main"]

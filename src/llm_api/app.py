@@ -1202,46 +1202,95 @@ def health() -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Player stats proxy → proleague-scraper service
+# Player stats — DB-backed reads + scraper proxy for single-player live fetch
 # ---------------------------------------------------------------------------
 
 #: Internal URL of the proleague-scraper Compose service.
-#: Set PROLEAGUE_SCRAPER_URL in the environment (or docker-compose.yml).
-#: Falls back to localhost for direct local development outside Docker.
+#: Used only for the /api/player-stats/player and /api/player-stats/image routes.
 PROLEAGUE_SCRAPER_URL = os.environ.get(
     "PROLEAGUE_SCRAPER_URL", "http://proleague-scraper:8001"
 ).rstrip("/")
 
+# SQL to read all player rows from the public schema.
+# llm_reader has search_path=dbt_dev so the schema qualifier is explicit.
+_SELECT_PLAYERS_SQL = """
+SELECT player_id, slug, name, position, field_position, shirt_number,
+       image_url, profile, stats, competition, source_url, scraped_at
+FROM public.player_stats
+ORDER BY name
+"""
+
+DEFAULT_SQUAD_URL = "https://www.proleague.be/teams/club-brugge-kv-182/squad"
+
+
+def _fetch_players_from_db() -> list[dict]:
+    """Return all rows from public.player_stats using the read-only DB connection.
+
+    Returns an empty list when the table is empty or the DB is unreachable.
+    """
+    import json as _json
+
+    if not DATABASE_URL:
+        return []
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(_SELECT_PLAYERS_SQL)
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+    except psycopg2.Error as exc:
+        log.warning("player_stats DB read failed: %s", exc)
+        return []
+
+    players = []
+    for row in rows:
+        (
+            player_id, slug, name, position, field_position, shirt_number,
+            image_url, profile, stats, competition, source_url, scraped_at,
+        ) = row
+        players.append(
+            {
+                "player_id": player_id,
+                "slug": slug,
+                "name": name,
+                "position": position or "",
+                "field_position": field_position or "",
+                "shirt_number": shirt_number,
+                "image_url": image_url or "",
+                # psycopg2 returns JSONB as Python dicts/lists already.
+                "profile": profile if isinstance(profile, dict) else _json.loads(profile or "{}"),
+                "stats": stats if isinstance(stats, list) else _json.loads(stats or "[]"),
+                "competition": competition or "",
+                "source_url": source_url or "",
+                "scraped_at": scraped_at.isoformat() if scraped_at else None,
+            }
+        )
+    return players
+
 
 @app.get("/api/player-stats/squad")
 def player_stats_squad() -> Any:
-    """Proxy GET /squad from the proleague-scraper service.
+    """Return Club Brugge squad data from the Postgres ``player_stats`` table.
 
-    Accepts an optional ``url`` query parameter to override the default squad URL.
-    Avoids CORS issues in the browser by routing all scraper calls through Flask.
+    Data is populated asynchronously by the daily proleague-scheduler → Kafka →
+    proleague-ingest pipeline.  Returns an empty squad with a clear status message
+    until the first daily scrape cycle has completed.
     """
-    squad_url = request.args.get("url", "").strip()
-    params = {"url": squad_url} if squad_url else {}
-    try:
-        resp = requests.get(
-            f"{PROLEAGUE_SCRAPER_URL}/squad",
-            params=params,
-            timeout=120,  # squad scrape fetches 25+ pages sequentially
-        )
-        resp.raise_for_status()
-        return jsonify(resp.json())
-    except requests.exceptions.ConnectionError:
-        return (
-            jsonify(
-                {"error": "Player stats scraper is unavailable. Is proleague-scraper running?"}
-            ),
-            503,
-        )
-    except requests.exceptions.Timeout:
-        return jsonify({"error": "Player stats scraper timed out."}), 504
-    except requests.exceptions.RequestException as exc:
-        log.exception("Player stats squad proxy failed")
-        return jsonify({"error": f"Scraper request failed: {exc}"}), 502
+    players = _fetch_players_from_db()
+    latest = max(
+        (p["scraped_at"] for p in players if p.get("scraped_at")),
+        default=None,
+    )
+    return jsonify(
+        {
+            "source_url": DEFAULT_SQUAD_URL,
+            "fetched_at": latest or "",
+            "cached": True,
+            "players": players,
+        }
+    )
 
 
 @app.get("/api/player-stats/player")

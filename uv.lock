@@ -130,6 +130,7 @@ dbt = [
 ]
 dev = [
     { name = "beautifulsoup4" },
+    { name = "confluent-kafka" },
     { name = "lxml" },
     { name = "pytest" },
     { name = "ruff" },
@@ -155,6 +156,7 @@ dbt = [
 ]
 dev = [
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
+    { name = "confluent-kafka", specifier = ">=2.14.0" },
     { name = "lxml", specifier = ">=6.0.4" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "ruff", specifier = ">=0.8.0" },

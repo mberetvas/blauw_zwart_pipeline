@@ -27,4 +27,6 @@ COMMENT ON COLUMN player_stats.stats IS
     'JSON array of {key, label, value} dicts from the main competition (Jupiler Pro League).';
 
 -- Allow the read-only LLM API role to query this table.
+-- USAGE on public is explicit because llm_reader has search_path=dbt_dev (002_llm_reader.sql).
+GRANT USAGE ON SCHEMA public TO llm_reader;
 GRANT SELECT ON player_stats TO llm_reader;
