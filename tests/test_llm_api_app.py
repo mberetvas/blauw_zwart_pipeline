@@ -760,3 +760,68 @@ def test_squad_route_returns_500_on_db_query_error(
     body = response.get_json()
     assert "error" in body
     assert "Database query failed" in body["error"]
+
+
+# ---------------------------------------------------------------------------
+# /api/player-stats/image  — CDN allowlist + fetch
+# ---------------------------------------------------------------------------
+
+
+def test_player_stats_image_rejects_disallowed_host(llm_app_module) -> None:
+    client = llm_app_module.app.test_client()
+    url = "https://evil.example.com/steal.png"
+    response = client.get("/api/player-stats/image", query_string={"url": url})
+    assert response.status_code == 403
+
+
+def test_player_stats_image_accepts_proleague_be_host(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, str] = {}
+
+    class FakeResp:
+        content = b"\xff\xd8\xff"
+        headers = {"Content-Type": "image/jpeg"}
+
+        def raise_for_status(self) -> None:
+            return None
+
+    def fake_get(url: str, **_kwargs: object) -> FakeResp:
+        captured["url"] = url
+        return FakeResp()
+
+    monkeypatch.setattr(llm_app_module.requests, "get", fake_get)
+    client = llm_app_module.app.test_client()
+    image_url = "https://cdn.proleague.be/hans.jpg"
+    response = client.get("/api/player-stats/image", query_string={"url": image_url})
+    assert response.status_code == 200
+    assert response.data == b"\xff\xd8\xff"
+    assert captured["url"] == image_url
+
+
+def test_player_stats_image_accepts_llt_services_cdn(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, str] = {}
+
+    class FakeResp:
+        content = b"\x89PNG\r\n\x1a\n"
+        headers = {"Content-Type": "image/png"}
+
+        def raise_for_status(self) -> None:
+            return None
+
+    def fake_get(url: str, **_kwargs: object) -> FakeResp:
+        captured["url"] = url
+        return FakeResp()
+
+    monkeypatch.setattr(llm_app_module.requests, "get", fake_get)
+    client = llm_app_module.app.test_client()
+    image_url = (
+        "https://statics-maker.llt-services.com/prl/images/2025/07/25/xlarge/"
+        "2eb8b24b-a119-4031-9bf9-99a77f4e1c03-446.png"
+    )
+    response = client.get("/api/player-stats/image", query_string={"url": image_url})
+    assert response.status_code == 200
+    assert response.data.startswith(b"\x89PNG")
+    assert captured["url"] == image_url

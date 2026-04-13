@@ -477,7 +477,7 @@ uv run python -m llm_api.app
 | `POST` | `/api/ask` | Question to SQL to answer flow |
 | `GET` | `/api/player-stats/squad` | Club Brugge squad + stats from `public.player_stats` (DB read) |
 | `GET` | `/api/player-stats/player?url=<url>` | Live single-player fetch via `proleague-scraper` |
-| `GET` | `/api/player-stats/image?url=<url>` | Server-side image proxy for proleague.be CDN images |
+| `GET` | `/api/player-stats/image?url=<url>` | Server-side image proxy for approved league CDNs (`*.proleague.be`, `statics-maker.llt-services.com`) |
 
 The API executes read-only `SELECT` / `WITH ... SELECT` queries only, wraps results in an outer `LIMIT 50`, and sets `statement_timeout` to 10 seconds on each DB session.
 

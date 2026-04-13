@@ -1341,11 +1341,12 @@ def player_stats_player() -> Any:
 
 @app.get("/api/player-stats/image")
 def player_stats_image() -> Any:
-    """Proxy a player image from proleague.be to the browser.
+    """Proxy a player image from league CDNs to the browser.
 
     Fetches the image server-side and streams it back, bypassing browser-side
-    hotlink blocking and CORS restrictions from the proleague.be image CDN.
-    Only URLs whose hostname ends with ``proleague.be`` are accepted.
+    hotlink blocking and CORS restrictions. Only approved hostnames are accepted
+    (legacy ``*.proleague.be`` URLs and ``statics-maker.llt-services.com`` from
+    the current Pro League image pipeline).
     """
     from urllib.parse import urlparse as _urlparse
 
@@ -1354,8 +1355,13 @@ def player_stats_image() -> Any:
         return jsonify({"error": "url parameter is required"}), 400
 
     parsed = _urlparse(image_url)
-    if not parsed.netloc.lower().endswith("proleague.be"):
-        return jsonify({"error": "Only proleague.be image URLs are allowed"}), 403
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return jsonify({"error": "Invalid image URL"}), 400
+
+    host = parsed.hostname.lower()
+    allowed = host.endswith("proleague.be") or host == "statics-maker.llt-services.com"
+    if not allowed:
+        return jsonify({"error": "Only approved league image CDN URLs are allowed"}), 403
 
     try:
         img_resp = requests.get(
