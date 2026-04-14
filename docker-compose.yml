@@ -1,4 +1,5 @@
-# Local fan-event pipeline (Kafka KRaft + Postgres + pgAdmin + producer + ingest).
+# Full fan-sim pipeline: Kafka KRaft + Postgres + pgAdmin + fan-events producer + ingest +
+# Pro League scraper (scheduler → Kafka → proleague-ingest) + dbt-scheduler + LLM API.
 # Quickstart: specs/005-compose-kafka-pipeline/quickstart.md
 #
 # Kafka listeners:

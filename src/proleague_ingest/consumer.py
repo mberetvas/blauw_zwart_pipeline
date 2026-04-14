@@ -139,7 +139,7 @@ def run_consumer(
 
             # Lazy DB connect / reconnect.
             if conn is None or conn.closed:
-                conn = get_connection() if not database_url else _connect(database_url)
+                conn = _connect(database_url)
 
             try:
                 upsert_players(conn, [player], source_url, scraped_at)

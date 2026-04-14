@@ -167,7 +167,15 @@ def main() -> None:
     squad_url = os.environ.get("PROLEAGUE_SQUAD_URL", DEFAULT_SQUAD_URL).strip()
     bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "broker:29092").strip()
     topic = os.environ.get("SCRAPER_KAFKA_TOPIC", "player_stats").strip()
-    interval_h = float(os.environ.get("SCRAPER_INTERVAL_HOURS", "24"))
+    _raw_interval = os.environ.get("SCRAPER_INTERVAL_HOURS", "24").strip()
+    try:
+        interval_h = float(_raw_interval)
+        if interval_h <= 0:
+            raise ValueError("must be positive")
+    except ValueError as exc:
+        raise SystemExit(
+            f"Invalid SCRAPER_INTERVAL_HOURS={_raw_interval!r}: {exc}"
+        ) from exc
     run_on_startup = os.environ.get("SCRAPER_RUN_ON_STARTUP", "1").strip() == "1"
     interval_s = interval_h * 3600
 

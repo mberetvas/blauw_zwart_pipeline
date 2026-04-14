@@ -89,9 +89,9 @@ def player():
         return jsonify({"error": "url query parameter is required"}), 400
     try:
         data = scrape_player(url)
-    except Exception as exc:
-        log.exception("Player scrape failed")
-        return jsonify({"error": str(exc)}), 502
+    except Exception:
+        log.exception("Player scrape failed url=%s", url)
+        return jsonify({"error": "Failed to fetch player data"}), 502
     return jsonify(data)
 
 
