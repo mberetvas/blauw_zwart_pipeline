@@ -72,12 +72,20 @@ tailwind.config = {
   .form-L { background: #7f1d1d; color: #fca5a5; }
   @media (prefers-reduced-motion: reduce) { .stat-bar-fill { transition: none; } }
 </style>
+<link rel="stylesheet" href="/static/sidebar-layout.css"/>
 </head>
 <body class="bg-surface text-on-surface font-body overflow-x-hidden min-h-screen">
 
 <!-- ── Top Navigation ─────────────────────────────────────────── -->
 <header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 bg-surface-container-low">
-  <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
+  <div class="flex items-center gap-2 min-w-0">
+    <button type="button" id="sidebar-toggle"
+      class="hidden md:inline-flex shrink-0 items-center justify-center w-10 h-10 rounded-xl text-primary hover:bg-surface-container-highest transition-colors"
+      aria-controls="app-sidebar" aria-expanded="true" aria-label="Collapse navigation sidebar">
+      <span class="material-symbols-outlined text-2xl" id="sidebar-toggle-icon" aria-hidden="true">chevron_left</span>
+    </button>
+    <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline truncate">CLUB BRUGGE AI</div>
+  </div>
   <nav class="hidden md:flex gap-8">
     <a href="/" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Data Q&amp;A</a>
     <a href="/player-stats" class="font-headline tracking-wide uppercase font-bold text-primary border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors" aria-current="page">Player Stats</a>
@@ -86,8 +94,23 @@ tailwind.config = {
   <button class="material-symbols-outlined text-[#0572FF]" aria-label="Account">account_circle</button>
 </header>
 
+<div id="shell" data-sidebar="expanded">
+<script>
+(function () {
+  var sh = document.getElementById("shell");
+  if (!sh) return;
+  try {
+    if (localStorage.getItem("cb_chat_sidebar_collapsed") === "1") {
+      sh.setAttribute("data-sidebar", "collapsed");
+    }
+  } catch (_) {}
+})();
+</script>
+
 <!-- ── Sidebar (desktop) ──────────────────────────────────────── -->
-<aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-low hidden md:flex flex-col py-8 px-4 gap-6 z-40">
+<aside id="app-sidebar"
+  class="fixed left-0 top-0 h-full w-64 bg-surface-container-low hidden md:flex flex-col py-8 px-4 gap-6 z-40 md:translate-x-0"
+  aria-label="Primary navigation">
   <div class="mt-16 flex items-center gap-4 px-2">
     <div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-primary">
       <span class="material-symbols-outlined text-2xl" style="font-variation-settings:'FILL' 1">stadium</span>
@@ -119,7 +142,7 @@ tailwind.config = {
 </aside>
 
 <!-- ── Main Content ───────────────────────────────────────────── -->
-<div class="ml-0 md:ml-64 pt-[72px] min-h-screen pb-20 md:pb-8">
+<div class="shell-main ml-0 md:ml-64 pt-[72px] min-h-screen pb-20 md:pb-8 transition-[margin-left] duration-200 ease-out">
   <main class="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-14">
 
     <!-- ── Page header ─────────────────────────────────────────── -->
@@ -242,7 +265,9 @@ tailwind.config = {
 
   </main>
 </div>
+</div>
 
+<script src="/static/sidebar-layout.js" defer></script>
 <script>
 // ── Player Stats — DB-backed daily snapshot from /api/player-stats/squad ────
 // Data is ingested once per day via proleague-scheduler → Kafka → proleague-ingest.

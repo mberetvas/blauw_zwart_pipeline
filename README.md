@@ -4,9 +4,24 @@
 
 Synthetic fan-event pipeline for Club Brugge KV simulations. The package name in `pyproject.toml` is **`blauw-zwart-fan-sim-pipeline`** and the repository ships five Python packages under `src\`: **`fan_events`** (event generation CLI), **`fan_ingest`** (Kafka to Postgres ingest for fan events), **`proleague_scraper`** (Pro League squad scraper + HTTP server + daily scheduler), **`proleague_ingest`** (Kafka to Postgres ingest for player stats), and **`llm_api`** (Flask Text-to-SQL API and browser UI used by Docker Compose).
 
+## LLM front end screenshots
+
+### Chat UI
+
+![LLM front end - Chat UI](assets/chat-ai.jpg)
+
+### Fan leaderboard
+
+![LLM front end - Fan leaderboard](assets/fan%20leaderboard.jpg)
+
+### Player stats
+
+![LLM front end - Player stats](assets/player-stats.jpg)
+
 ## Table of contents
 
 - [Overview](#overview)
+- [LLM front end screenshots](#llm-front-end-screenshots)
 - [Prerequisites](#prerequisites)
 - [Install](#install)
 - [Quick start](#quick-start)

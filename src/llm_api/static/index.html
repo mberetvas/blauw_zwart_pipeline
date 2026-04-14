@@ -158,13 +158,8 @@ tailwind.config = {
   .msg.assistant .markdown-body a{color:#548dff;text-decoration:underline;word-break:break-word}
   .msg.assistant .markdown-body blockquote{margin:.75rem 0;padding:.75rem 1rem;border-radius:.35rem;background:rgba(23,31,51,.95);color:#c2c6d8;outline:1px solid rgba(255,255,255,.06);outline-offset:-1px}
   .msg.assistant .markdown-body strong{color:#dae2fd;font-weight:700}
-  /* ── Collapsible sidebar (md+) ───────────────────────── */
-  #app-sidebar{transition:transform .2s ease,opacity .2s ease}
-  @media (min-width:768px){
-    #shell[data-sidebar="collapsed"] #app-sidebar{transform:translateX(-100%);opacity:0;pointer-events:none}
-    #shell[data-sidebar="collapsed"] #main-chat{margin-left:0!important}
-  }
 </style>
+<link rel="stylesheet" href="/static/sidebar-layout.css"/>
 <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 </head>
@@ -348,6 +343,7 @@ tailwind.config = {
 <!-- ── Screen-reader live region ──────────────────────────────── -->
 <div id="status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
+<script src="/static/sidebar-layout.js" defer></script>
 <script>
 (function () {
   "use strict";
@@ -362,47 +358,6 @@ tailwind.config = {
   const statusEl   = document.getElementById("status");
   const form       = document.getElementById("composer");
   const bottomChips = document.getElementById("bottom-chips");
-  const shellEl = document.getElementById("shell");
-  const sidebarEl = document.getElementById("app-sidebar");
-  const sidebarToggle = document.getElementById("sidebar-toggle");
-  const sidebarToggleIcon = document.getElementById("sidebar-toggle-icon");
-  const LS_SIDEBAR = "cb_chat_sidebar_collapsed";
-
-  function updateSidebarToggleUi() {
-    const collapsed = shellEl && shellEl.getAttribute("data-sidebar") === "collapsed";
-    if (sidebarToggle) {
-      sidebarToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-      sidebarToggle.setAttribute(
-        "aria-label",
-        collapsed ? "Expand navigation sidebar" : "Collapse navigation sidebar"
-      );
-    }
-    if (sidebarToggleIcon) {
-      sidebarToggleIcon.textContent = collapsed ? "chevron_right" : "chevron_left";
-    }
-    if (sidebarEl) {
-      const desktop = window.matchMedia("(min-width:768px)").matches;
-      if (!desktop) {
-        sidebarEl.setAttribute("aria-hidden", "true");
-      } else {
-        sidebarEl.setAttribute("aria-hidden", collapsed ? "true" : "false");
-      }
-    }
-  }
-
-  updateSidebarToggleUi();
-  if (sidebarToggle && shellEl) {
-    sidebarToggle.addEventListener("click", function () {
-      const collapsed = shellEl.getAttribute("data-sidebar") === "collapsed";
-      const next = !collapsed;
-      shellEl.setAttribute("data-sidebar", next ? "collapsed" : "expanded");
-      try {
-        localStorage.setItem(LS_SIDEBAR, next ? "1" : "0");
-      } catch (_) {}
-      updateSidebarToggleUi();
-    });
-  }
-  window.matchMedia("(min-width:768px)").addEventListener("change", updateSidebarToggleUi);
 
   let busy = false;
   let abortCtrl = null;

@@ -83,11 +83,17 @@
         .no-line-rule { border: none !important; }
         .tonal-shift-only { border: none !important; }
     </style>
+<link rel="stylesheet" href="../../static/sidebar-layout.css"/>
 </head>
 <body class="bg-surface text-on-surface font-body overflow-hidden">
 <!-- TopNavBar -->
 <header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 w-full bg-[#0b1326] no-line-rule tonal-shift-only bg-[#131b2e] flat no shadows tonal depth">
-<div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
+<div class="flex items-center gap-2 min-w-0">
+<button type="button" id="sidebar-toggle" class="hidden md:inline-flex shrink-0 items-center justify-center w-10 h-10 rounded-xl text-primary hover:bg-surface-container-highest transition-colors" aria-controls="app-sidebar" aria-expanded="true" aria-label="Collapse navigation sidebar">
+<span class="material-symbols-outlined text-2xl" id="sidebar-toggle-icon" aria-hidden="true">chevron_left</span>
+</button>
+<div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline truncate">CLUB BRUGGE AI</div>
+</div>
 <nav class="hidden md:flex gap-8">
 <a class="font-headline tracking-wide uppercase font-bold text-[#b0c6ff] border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors duration-300" href="#">Data Q&amp;A</a>
 <a class="font-headline tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">SHOP</a>
@@ -97,9 +103,20 @@
 <button class="material-symbols-outlined scale-95 duration-200" data-icon="account_circle">account_circle</button>
 </div>
 </header>
-<div class="flex h-screen pt-[72px]">
+<div id="shell" class="flex h-screen pt-[72px]" data-sidebar="expanded">
+<script>
+(function () {
+  var sh = document.getElementById("shell");
+  if (!sh) return;
+  try {
+    if (localStorage.getItem("cb_chat_sidebar_collapsed") === "1") {
+      sh.setAttribute("data-sidebar", "collapsed");
+    }
+  } catch (_) {}
+})();
+</script>
 <!-- SideNavBar -->
-<aside class="fixed left-0 top-0 h-full w-64 bg-[#131b2e] against-surface flat no-line-rule flex flex-col h-full py-8 px-4 gap-6 z-40 hidden md:flex">
+<aside id="app-sidebar" class="fixed left-0 top-0 h-full w-64 bg-[#131b2e] against-surface flat no-line-rule flex flex-col h-full py-8 px-4 gap-6 z-40 hidden md:flex md:translate-x-0" aria-label="Primary navigation">
 <div class="mt-16 flex items-center gap-4 px-2">
 <div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center overflow-hidden border-2 border-primary-container">
 <img alt="Official Club Brugge crest logo with blue and black stripes in a high-gloss metallic finish" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBJaoOG5GE2SV_ChOvLNpXt9Ue3vxjVWbX_ACG8TBkrTyNwvDRXaJ4WvdzVxfD4z0yTje2P5guwLkyV7aZaulyKfTal3xwK6CWSzrOcia8FJfGwsXrSW1qb3vQ2v1wFQQQdskxjVP1DM7J3lIIXObFGYJJMydpHnMvDipSzMGyyf8LN-XoDKegEDFGih7dYnmjUVKSbMk3fPiNVoNsYs9rbtnvOw8izmFO3oajKySNUh03aXHjXe4o137zeNLNQN0kYmkh54ZikBXrw"/>
@@ -139,7 +156,7 @@
 </div>
 </aside>
 <!-- Main Content Area (Canvas) -->
-<main class="flex-1 ml-0 md:ml-64 flex flex-col bg-surface relative overflow-hidden">
+<main id="main-chat" class="flex-1 ml-0 md:ml-64 flex flex-col bg-surface relative overflow-hidden transition-[margin-left] duration-200 ease-out">
 <!-- Chat Thread -->
 <div class="flex-1 overflow-y-auto px-6 py-8 flex flex-col gap-10 max-w-4xl mx-auto w-full pb-32">
 <!-- Date Header -->
@@ -235,6 +252,7 @@
 </div>
 </main>
 </div>
+<script src="../../static/sidebar-layout.js" defer></script>
 <!-- BottomNavBar (Mobile) -->
 <nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-[#0b1326]/80 backdrop-blur-xl no-line-rule bg-[#131b2e] shadow-2xl shadow-black z-50 md:hidden">
 <div class="flex flex-col items-center justify-center bg-[#0572FF] text-white rounded-xl p-2 scale-110 duration-300">

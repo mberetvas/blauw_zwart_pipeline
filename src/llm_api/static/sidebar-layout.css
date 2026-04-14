@@ -1,0 +1,15 @@
+/* Collapsible app sidebar (md+). Expects #shell, #app-sidebar, .shell-main and/or #main-chat */
+#app-sidebar {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+@media (min-width: 768px) {
+  #shell[data-sidebar="collapsed"] #app-sidebar {
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
+  }
+  #shell[data-sidebar="collapsed"] #main-chat,
+  #shell[data-sidebar="collapsed"] .shell-main {
+    margin-left: 0 !important;
+  }
+}

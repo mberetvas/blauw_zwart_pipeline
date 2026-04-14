@@ -84,11 +84,17 @@
         ::-webkit-scrollbar-track { background: #0b1326; }
         ::-webkit-scrollbar-thumb { background: #2d3449; border-radius: 10px; }
     </style>
+<link rel="stylesheet" href="../../static/sidebar-layout.css"/>
 </head>
 <body class="bg-background text-on-surface font-body overflow-x-hidden">
 <!-- TopNavBar -->
 <header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 w-full bg-[#0b1326] no-line-rule tonal-shift-only bg-[#131b2e]">
-<div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
+<div class="flex items-center gap-2 min-w-0">
+<button type="button" id="sidebar-toggle" class="hidden md:inline-flex shrink-0 items-center justify-center w-10 h-10 rounded-xl text-primary hover:bg-surface-container-highest transition-colors" aria-controls="app-sidebar" aria-expanded="true" aria-label="Collapse navigation sidebar">
+<span class="material-symbols-outlined text-2xl" id="sidebar-toggle-icon" aria-hidden="true">chevron_left</span>
+</button>
+<div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline truncate">CLUB BRUGGE AI</div>
+</div>
 <nav class="hidden md:flex gap-8 items-center">
 <a class="font-headline tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">Data Q&amp;A</a>
 <a class="font-headline tracking-wide uppercase font-bold text-[#dae2fd] opacity-70 hover:text-[#0572FF] transition-colors duration-300" href="#">SHOP</a>
@@ -98,8 +104,20 @@
 <button class="material-symbols-outlined text-[#0572FF] text-2xl">account_circle</button>
 </div>
 </header>
+<div id="shell" data-sidebar="expanded">
+<script>
+(function () {
+  var sh = document.getElementById("shell");
+  if (!sh) return;
+  try {
+    if (localStorage.getItem("cb_chat_sidebar_collapsed") === "1") {
+      sh.setAttribute("data-sidebar", "collapsed");
+    }
+  } catch (_) {}
+})();
+</script>
 <!-- SideNavBar -->
-<aside class="fixed left-0 top-0 h-full w-64 bg-[#131b2e] hidden md:flex flex-col py-8 px-4 gap-6 pt-24">
+<aside id="app-sidebar" class="fixed left-0 top-0 h-full w-64 bg-[#131b2e] hidden md:flex flex-col py-8 px-4 gap-6 pt-24 z-40 md:translate-x-0" aria-label="Primary navigation">
 <div class="flex flex-col items-center mb-4">
 <div class="w-16 h-16 rounded-full overflow-hidden bg-surface-container-highest mb-2">
 <img alt="Club Brugge Crest" data-alt="Official Club Brugge crest emblem with blue and black stripes in a premium metallic finish" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC73RekaqkAOhAIcfRYRPLiAH4fa0ohVPWxRb4ioAhsFpZ45tiGsNxrB2e81N_rNdHi-uUfzYOAMLT1B-ZaW7XfbUSULuRP69Auqcn4RcXHzLCnTK4DnRO6ncUjQWepmIbWrw7AJfeHx-fG5IhYV_qwaB8qosCA0FZfsGzY2AofJmKiLUd-Bnh-g3PtZI5tQAM7mnGL_XEojbVSgfySmzA50rSamzbqFUX1w_No9BKqy-49XzGBnkwRCO1GZW6AN426cHmWmm2kg8wZ"/>
@@ -136,7 +154,7 @@
 </div>
 </aside>
 <!-- Main Content Area -->
-<main class="md:ml-64 pt-24 pb-20 px-6 min-h-screen">
+<main id="main-chat" class="shell-main ml-0 md:ml-64 pt-24 pb-20 px-6 min-h-screen transition-[margin-left] duration-200 ease-out">
 <header class="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
 <div>
 <span class="text-primary font-bold tracking-[0.2em] text-xs uppercase mb-2 block">Performance Center</span>
@@ -313,6 +331,8 @@
 </div>
 </section>
 </main>
+</div>
+<script src="../../static/sidebar-layout.js" defer></script>
 <!-- BottomNavBar (Mobile Only) -->
 <nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-[#0b1326]/80 backdrop-blur-xl z-50 md:hidden no-line-rule">
 <a class="flex flex-col items-center justify-center text-[#dae2fd] opacity-50 p-2" href="#">
