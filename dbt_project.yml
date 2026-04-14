@@ -28,3 +28,6 @@ models:
         +materialized: view
       match_events:
         +materialized: view
+      player_stats:
+        +materialized: view
+    # Marts live under dbt/models/marts/; each model sets materialization in its own config().

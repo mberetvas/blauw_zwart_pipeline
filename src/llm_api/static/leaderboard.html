@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Fan Leaderboard — Club Brugge AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,400;0,500;0,600;0,700;0,900;1,400&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "surface-container-low":     "#131b2e",
+        "surface-container":         "#171f33",
+        "surface-container-high":    "#222a3d",
+        "surface-container-highest": "#2d3449",
+        "surface-container-lowest":  "#060e20",
+        "surface-bright":            "#31394d",
+        "surface":                   "#0b1326",
+        "background":                "#0b1326",
+        "primary":                   "#b0c6ff",
+        "primary-container":         "#548dff",
+        "on-primary":                "#002d6e",
+        "on-primary-container":      "#002761",
+        "secondary-container":       "#3f465c",
+        "on-secondary-container":    "#adb4ce",
+        "on-surface":                "#dae2fd",
+        "on-surface-variant":        "#c2c6d8",
+        "outline":                   "#8c90a1",
+        "outline-variant":           "#414655",
+        "error":                     "#ffb4ab",
+        "surface-variant":           "#2d3449",
+        "secondary":                 "#bec6e0"
+      },
+      borderRadius: {
+        "DEFAULT": "0.125rem",
+        "lg": "0.25rem",
+        "xl": "0.5rem",
+        "2xl": "0.75rem",
+        "full": "9999px"
+      },
+      fontFamily: {
+        "headline": ["Chivo", "system-ui", "sans-serif"],
+        "body":     ["Source Sans 3", "system-ui", "sans-serif"],
+        "label":    ["Source Sans 3", "system-ui", "sans-serif"]
+      }
+    }
+  }
+}
+</script>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #2d3449; border-radius: 10px; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  /* Glass card — only for floating elements per design rules */
+  .glass-card {
+    background: rgba(45, 52, 73, 0.6);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+  /* Podium platform visual */
+  .podium-1 { height: 100px; }
+  .podium-2 { height: 72px; }
+  .podium-3 { height: 56px; }
+  /* Avatar ring for 1st place */
+  .ring-gold { box-shadow: 0 0 0 3px #fbbf24, 0 0 24px rgba(251,191,36,.35); }
+  .ring-silver { box-shadow: 0 0 0 2px #94a3b8; }
+  .ring-bronze { box-shadow: 0 0 0 2px #b45309; }
+  @media (max-width: 767px) {
+    .podium-grid { display: flex; flex-direction: column; gap: 1rem; }
+  }
+</style>
+</head>
+<body class="bg-surface text-on-surface font-body overflow-x-hidden min-h-screen">
+
+<!-- ── Top Navigation ─────────────────────────────────────────── -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 bg-surface-container-low">
+  <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
+  <nav class="hidden md:flex gap-8">
+    <a href="/" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Data Q&amp;A</a>
+    <a href="/player-stats" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Player Stats</a>
+    <a href="/leaderboard" class="font-headline tracking-wide uppercase font-bold text-primary border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors">Fan Leaderboard</a>
+  </nav>
+  <button class="material-symbols-outlined text-[#0572FF]" aria-label="Account">account_circle</button>
+</header>
+
+<!-- ── Sidebar (desktop) ──────────────────────────────────────── -->
+<aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-low hidden md:flex flex-col py-8 px-4 gap-6 z-40">
+  <div class="mt-16 flex items-center gap-4 px-2">
+    <div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-primary">
+      <span class="material-symbols-outlined text-2xl" style="font-variation-settings:'FILL' 1">stadium</span>
+    </div>
+    <div>
+      <div class="font-headline font-bold text-on-surface text-base leading-tight">Jan Breydel AI</div>
+      <div class="text-xs text-primary opacity-80 uppercase tracking-widest">Fan Analytics</div>
+    </div>
+  </div>
+  <nav class="flex flex-col gap-1 flex-1">
+    <a href="/" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+      <span class="material-symbols-outlined">chat</span>Current Match
+    </a>
+    <a href="#" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+      <span class="material-symbols-outlined">history</span>History
+    </a>
+    <a href="/player-stats" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+      <span class="material-symbols-outlined">compare_arrows</span>Player Stats
+    </a>
+  </nav>
+  <div class="flex flex-col gap-1 mt-6 pt-1">
+    <a href="/settings" class="flex items-center gap-3 text-on-surface opacity-40 px-4 py-2 hover:opacity-80 transition-opacity text-xs font-medium">
+      <span class="material-symbols-outlined text-sm">settings</span>Club Settings
+    </a>
+    <a href="#" class="flex items-center gap-3 text-on-surface opacity-40 px-4 py-2 hover:opacity-80 transition-opacity text-xs font-medium">
+      <span class="material-symbols-outlined text-sm">help</span>Help
+    </a>
+  </div>
+</aside>
+
+<!-- ── Main Content ───────────────────────────────────────────── -->
+<div class="ml-0 md:ml-64 pt-[72px] min-h-screen pb-16 md:pb-0">
+  <main class="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-14">
+
+    <!-- ── Header ──────────────────────────────────────────────── -->
+    <div class="mb-12 md:mb-14">
+      <p class="text-xs font-bold tracking-[0.25em] text-primary uppercase mb-2 font-headline">Live all-time snapshot</p>
+      <h1 class="font-headline text-5xl md:text-7xl font-black italic tracking-tighter uppercase text-on-surface leading-none">
+        Fan<br>Leaderboard
+      </h1>
+      <p class="text-sm text-on-surface-variant mt-3 max-w-[60ch]">Rankings reward match attendance first, then spend and purchases from the live loyalty mart. Community engagement and referrals are not tracked yet.</p>
+      <p id="leaderboard-as-of" class="text-xs text-outline uppercase tracking-[0.2em] mt-4 font-headline">Loading latest leaderboard snapshot...</p>
+    </div>
+
+    <div id="leaderboard-loading" class="rounded-3xl border border-white/5 bg-surface-container px-5 py-4 mb-4 text-sm text-on-surface-variant" aria-live="polite">
+      Loading live leaderboard data...
+    </div>
+    <div id="leaderboard-error" class="hidden rounded-3xl border border-error/20 bg-red-500/10 px-5 py-4 mb-4 text-sm text-error" role="alert" hidden></div>
+
+    <!-- ── Achievement callout — hidden until the API returns a real achievement ── -->
+    <div id="achievement-card" class="glass-card rounded-3xl p-6 mb-10 hidden" hidden>
+      <div class="flex items-center gap-6">
+      <div class="w-14 h-14 rounded-2xl bg-primary-container flex items-center justify-center flex-shrink-0">
+        <span class="material-symbols-outlined text-on-primary" style="font-size:28px;font-variation-settings:'FILL' 1">emoji_events</span>
+      </div>
+      <div>
+        <p id="achievement-kicker" class="text-xs font-bold tracking-widest text-primary uppercase font-headline mb-1">Achievement</p>
+        <p id="achievement-title" class="font-headline font-bold text-on-surface text-lg leading-tight">Achievement unlocked</p>
+        <p id="achievement-copy" class="text-sm text-on-surface-variant mt-0.5"></p>
+      </div>
+      <div id="achievement-points" class="ml-auto flex-shrink-0 px-4 py-2 rounded-full bg-primary-container text-on-primary text-xs font-bold uppercase tracking-widest whitespace-nowrap"></div>
+      </div>
+    </div>
+
+    <!-- ── 12-col grid: podium + rankings ───────────────────────── -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+      <!-- ── Podium ───────────────────────────────────────────── -->
+      <section class="lg:col-span-5" aria-labelledby="podium-heading">
+        <h2 id="podium-heading" class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary mb-6">Top 3 Fans</h2>
+
+        <!-- 2nd / 1st / 3rd layout -->
+        <div id="podium-grid" class="flex items-end justify-center gap-4 mb-8 podium-grid" aria-live="polite">
+          <div class="flex flex-col items-center gap-2 flex-1 animate-pulse">
+            <div class="w-16 h-16 rounded-full bg-surface-container-high"></div>
+            <div class="h-4 w-24 rounded bg-surface-container-high"></div>
+            <div class="h-3 w-16 rounded bg-surface-container-high"></div>
+            <div class="w-full podium-2 bg-surface-container-high rounded-t-xl"></div>
+          </div>
+          <div class="flex flex-col items-center gap-2 flex-1 animate-pulse">
+            <div class="w-20 h-20 rounded-full bg-surface-container-high"></div>
+            <div class="h-4 w-28 rounded bg-surface-container-high"></div>
+            <div class="h-3 w-20 rounded bg-surface-container-high"></div>
+            <div class="w-full podium-1 bg-surface-container-high rounded-t-xl"></div>
+          </div>
+          <div class="flex flex-col items-center gap-2 flex-1 animate-pulse">
+            <div class="w-14 h-14 rounded-full bg-surface-container-high"></div>
+            <div class="h-4 w-24 rounded bg-surface-container-high"></div>
+            <div class="h-3 w-16 rounded bg-surface-container-high"></div>
+            <div class="w-full podium-3 bg-surface-container-high rounded-t-xl"></div>
+          </div>
+        </div>
+
+        <!-- Fan of the Month -->
+        <div class="bg-surface-container-highest rounded-3xl p-6">
+          <p class="text-xs font-bold tracking-widest text-primary uppercase font-headline mb-4">Fan of the Month</p>
+          <div class="flex items-center gap-4">
+            <div id="fan-of-month-avatar" class="w-14 h-14 rounded-full bg-surface-container flex items-center justify-center font-headline font-black text-primary text-lg">--</div>
+            <div>
+              <p id="fan-of-month-name" class="font-headline font-bold text-on-surface">Loading...</p>
+              <p id="fan-of-month-summary" class="text-xs text-on-surface-variant mt-0.5">Waiting for the latest monthly scan data...</p>
+            </div>
+            <div class="ml-auto text-2xl" aria-hidden="true">🏆</div>
+          </div>
+          <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+            <div class="bg-surface-container rounded-xl py-3">
+              <p id="fan-of-month-matches" class="font-headline font-black text-primary text-xl">--</p>
+              <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Matches</p>
+            </div>
+            <div class="bg-surface-container rounded-xl py-3 px-1.5 min-h-[5.5rem] flex flex-col justify-center">
+              <p id="fan-of-month-items" class="font-headline font-black text-primary text-xl leading-none">--</p>
+              <p class="text-xs text-outline uppercase tracking-wider mt-1">Items bought</p>
+              <p id="fan-of-month-last-item" class="text-[11px] text-on-surface-variant mt-1.5 leading-snug line-clamp-2" title="">Last purchase: —</p>
+            </div>
+            <div class="bg-surface-container rounded-xl py-3">
+              <p id="fan-of-month-referrals" class="font-headline font-black text-primary text-xl">--</p>
+              <p class="text-xs text-outline uppercase tracking-wider mt-0.5">Referrals</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Rankings List ────────────────────────────────────── -->
+      <section class="lg:col-span-7" aria-labelledby="rankings-heading">
+        <div class="flex items-center justify-between mb-6">
+          <h2 id="rankings-heading" class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary">Top 25 Fans</h2>
+          <div class="flex flex-wrap gap-2 justify-end" role="group" aria-label="Leaderboard time range">
+            <button type="button" id="lb-filter-all" class="lb-window-btn px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-opacity hover:opacity-100 bg-primary-container text-on-primary" aria-pressed="true" data-window="all">All Time</button>
+            <button type="button" id="lb-filter-season" class="lb-window-btn px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-opacity hover:opacity-100 bg-secondary-container text-on-secondary-container opacity-80" aria-pressed="false" data-window="season">This Season</button>
+            <button type="button" id="lb-filter-month" class="lb-window-btn px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-opacity hover:opacity-100 bg-secondary-container text-on-secondary-container opacity-80" aria-pressed="false" data-window="month">This Month</button>
+          </div>
+        </div>
+        <p id="lb-window-hint" class="text-xs text-outline uppercase tracking-[0.18em] mb-4 font-headline">All-time uses mart_fan_loyalty; season (1 Aug–31 Jul UTC) and this calendar month use live ticket and purchase events.</p>
+
+        <div class="bg-surface-container-low rounded-3xl overflow-hidden">
+          <!-- Column headers -->
+          <div class="grid grid-cols-12 px-6 py-3 bg-surface-container">
+            <span class="col-span-1 text-xs font-bold uppercase tracking-widest text-outline">#</span>
+            <span class="col-span-5 text-xs font-bold uppercase tracking-widest text-outline">Fan</span>
+            <span class="col-span-3 text-xs font-bold uppercase tracking-widest text-outline text-right">Points</span>
+            <span class="col-span-3 text-xs font-bold uppercase tracking-widest text-outline text-right">Matches</span>
+          </div>
+
+          <!-- Rows -->
+          <ul id="rankings-list" class="divide-y divide-white/[0.04] tabular-nums" aria-live="polite">
+            <li class="px-6 py-5 text-sm text-on-surface-variant">Loading live leaderboard...</li>
+          </ul>
+
+          <div class="px-6 py-4 bg-surface-container">
+            <p id="lb-footer-caption" class="w-full text-center text-xs font-bold uppercase tracking-widest text-outline">Top 25 fans from the current all-time mart snapshot</p>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /12-col grid -->
+
+    <!-- ── Ask AI about this data ──────────────────────────────── -->
+    <div class="mt-10 bg-surface-container-high rounded-3xl p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+      <div class="w-12 h-12 rounded-xl bg-[#0572FF] flex items-center justify-center flex-shrink-0">
+        <span class="material-symbols-outlined text-white" style="font-variation-settings:'FILL' 1">psychology</span>
+      </div>
+      <div>
+        <p class="font-headline font-bold text-on-surface">Want deeper insights?</p>
+        <p class="text-sm text-on-surface-variant mt-0.5">Ask the AI assistant about fan spending patterns, segment analysis, or attendance trends.</p>
+      </div>
+      <a href="/" class="sm:ml-auto flex-shrink-0 px-5 py-2.5 rounded-2xl bg-primary-container text-on-primary font-headline font-bold text-sm uppercase tracking-wider hover:opacity-90 active:scale-[0.98] transition-all">Ask AI</a>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── Floating scoring card (bottom-right) ───────────────────── -->
+<div class="glass-card fixed bottom-20 md:bottom-6 right-6 rounded-2xl px-5 py-4 z-40 hidden md:flex items-center gap-4" aria-label="Leaderboard scoring">
+  <div class="flex flex-col">
+    <span class="text-xs font-bold uppercase tracking-[0.2em] text-primary font-headline">Points Formula</span>
+    <span class="font-headline font-black text-2xl text-on-surface leading-none">Attendance-first</span>
+    <span class="text-xs text-outline mt-0.5" id="floating-points-formula">1,000 attendance bonus + 150 x matches + spend + 5 x merch + 5 x retail</span>
+  </div>
+  <div class="flex flex-col items-end gap-1">
+    <span id="floating-window-badge" class="px-2 py-1 rounded-full bg-primary-container text-on-primary text-xs font-bold tracking-wider">ALL TIME</span>
+    <span class="text-xs text-on-surface-variant" id="floating-as-of">Awaiting refresh...</span>
+  </div>
+</div>
+
+<!-- ── Mobile Bottom Navigation ───────────────────────────────── -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-surface/80 backdrop-blur-xl z-50 md:hidden" aria-label="Mobile navigation">
+  <a href="/" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+    <span class="material-symbols-outlined">forum</span>
+    <span class="text-xs uppercase font-bold tracking-widest">Chat</span>
+  </a>
+  <a href="/leaderboard" class="flex flex-col items-center gap-1 bg-[#0572FF] text-white rounded-xl p-2 scale-110">
+    <span class="material-symbols-outlined">leaderboard</span>
+    <span class="text-xs uppercase font-bold tracking-widest">Data</span>
+  </a>
+  <a href="/settings" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+    <span class="material-symbols-outlined">settings</span>
+    <span class="text-xs uppercase font-bold tracking-widest">Settings</span>
+  </a>
+</nav>
+
+<script>
+  document.addEventListener("DOMContentLoaded", async () => {
+    const asOfEl = document.getElementById("leaderboard-as-of");
+    const loadingEl = document.getElementById("leaderboard-loading");
+    const errorEl = document.getElementById("leaderboard-error");
+    const podiumEl = document.getElementById("podium-grid");
+    const rankingsEl = document.getElementById("rankings-list");
+    const fanOfMonthAvatarEl = document.getElementById("fan-of-month-avatar");
+    const fanOfMonthNameEl = document.getElementById("fan-of-month-name");
+    const fanOfMonthSummaryEl = document.getElementById("fan-of-month-summary");
+    const fanOfMonthMatchesEl = document.getElementById("fan-of-month-matches");
+    const fanOfMonthItemsEl = document.getElementById("fan-of-month-items");
+    const fanOfMonthLastItemEl = document.getElementById("fan-of-month-last-item");
+    const fanOfMonthReferralsEl = document.getElementById("fan-of-month-referrals");
+    const floatingAsOfEl = document.getElementById("floating-as-of");
+    const floatingFormulaEl = document.getElementById("floating-points-formula");
+    const floatingWindowBadgeEl = document.getElementById("floating-window-badge");
+    const footerCaptionEl = document.getElementById("lb-footer-caption");
+    const filterButtons = Array.from(document.querySelectorAll(".lb-window-btn"));
+    const achievementCardEl = document.getElementById("achievement-card");
+    const achievementKickerEl = document.getElementById("achievement-kicker");
+    const achievementTitleEl = document.getElementById("achievement-title");
+    const achievementCopyEl = document.getElementById("achievement-copy");
+    const achievementPointsEl = document.getElementById("achievement-points");
+
+    const numberFormatter = new Intl.NumberFormat("en-US");
+    const asOfFormatter = new Intl.DateTimeFormat("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    });
+
+    const podiumSlots = [
+      { rank: 2, ringClass: "ring-silver", avatarClass: "w-16 h-16", platformClass: "podium-2 bg-surface-container-high", numberClass: "text-4xl text-on-surface-variant opacity-40", nameClass: "text-on-surface", pointsClass: "text-outline font-medium" },
+      { rank: 1, ringClass: "ring-gold", avatarClass: "w-20 h-20", platformClass: "podium-1 bg-primary-container", numberClass: "text-5xl text-on-primary-container opacity-60", nameClass: "text-primary", pointsClass: "text-primary font-bold", crown: true },
+      { rank: 3, ringClass: "ring-bronze", avatarClass: "w-14 h-14", platformClass: "podium-3 bg-surface-container-highest", numberClass: "text-3xl text-on-surface-variant opacity-40", nameClass: "text-on-surface", pointsClass: "text-outline font-medium" },
+    ];
+
+    const escapeHtml = (value) =>
+      String(value ?? "").replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;",
+      })[char]);
+
+    const initialsFor = (name) => {
+      const parts = String(name ?? "").trim().split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+      }
+      const compact = String(name ?? "").replace(/[^a-z0-9]/gi, "").toUpperCase();
+      return compact.slice(0, 2) || "F";
+    };
+
+    const formatPoints = (value) => `${numberFormatter.format(Number(value ?? 0))} pts`;
+    const WINDOW_LABELS = { all: "ALL TIME", season: "THIS SEASON", month: "THIS MONTH" };
+    const FOOTER_BY_WINDOW = {
+      all: "Top 25 fans from the current all-time mart snapshot",
+      season: "Top 25 fans by the same points formula, limited to the current season window (UTC)",
+      month: "Top 25 fans by the same points formula, limited to the current calendar month (UTC)",
+    };
+
+    let activeWindow = "all";
+
+    const setFilterUi = (windowKey) => {
+      activeWindow = windowKey;
+      filterButtons.forEach((btn) => {
+        const w = btn.getAttribute("data-window");
+        const on = w === windowKey;
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+        btn.classList.toggle("bg-primary-container", on);
+        btn.classList.toggle("text-on-primary", on);
+        btn.classList.toggle("bg-secondary-container", !on);
+        btn.classList.toggle("text-on-secondary-container", !on);
+        btn.classList.toggle("opacity-80", !on);
+      });
+      if (floatingWindowBadgeEl) {
+        floatingWindowBadgeEl.textContent = WINDOW_LABELS[windowKey] || windowKey.toUpperCase();
+      }
+      if (footerCaptionEl) {
+        footerCaptionEl.textContent = FOOTER_BY_WINDOW[windowKey] || FOOTER_BY_WINDOW.all;
+      }
+    };
+
+    const formatAsOf = (isoString) => {
+      const value = new Date(isoString);
+      if (Number.isNaN(value.getTime())) {
+        return "Latest snapshot unavailable";
+      }
+      return `Updated ${asOfFormatter.format(value)} UTC`;
+    };
+
+    const setError = (message) => {
+      errorEl.textContent = message;
+      errorEl.hidden = false;
+      errorEl.classList.remove("hidden");
+    };
+
+    const renderAchievement = (achievement) => {
+      if (!achievement) {
+        achievementCardEl.hidden = true;
+        achievementCardEl.classList.add("hidden");
+        return;
+      }
+      achievementKickerEl.textContent = achievement.kicker || "Achievement";
+      achievementTitleEl.textContent = achievement.title || "Achievement unlocked";
+      achievementCopyEl.textContent = achievement.copy || "";
+      achievementPointsEl.textContent = achievement.points ? `+${achievement.points} pts` : "";
+      achievementCardEl.hidden = false;
+      achievementCardEl.classList.remove("hidden");
+    };
+
+    const renderPodium = (entries) => {
+      const byRank = new Map(entries.map((entry) => [entry.rank, entry]));
+      podiumEl.innerHTML = podiumSlots.map((slot) => {
+        const entry = byRank.get(slot.rank);
+        if (!entry) {
+          return `
+            <div class="flex flex-col items-center gap-2 flex-1">
+              <div class="${slot.avatarClass} rounded-full bg-surface-container-high flex items-center justify-center text-outline font-headline font-black">--</div>
+              <p class="font-headline font-bold ${slot.nameClass} text-sm">No data yet</p>
+              <p class="text-xs ${slot.pointsClass}">Awaiting mart refresh</p>
+              <div class="w-full ${slot.platformClass} rounded-t-xl flex items-center justify-center">
+                <span class="font-headline font-black ${slot.numberClass}">${slot.rank}</span>
+              </div>
+            </div>
+          `;
+        }
+        return `
+          <div class="flex flex-col items-center gap-2 flex-1">
+            <div class="relative">
+              <div class="${slot.avatarClass} rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface font-headline font-black ${slot.ringClass}">
+                ${escapeHtml(initialsFor(entry.display_name))}
+              </div>
+              ${slot.crown ? '<span class="absolute -top-2 -right-2 text-lg" aria-label="Crown">👑</span>' : ""}
+            </div>
+            <p class="font-headline font-bold ${slot.nameClass} text-sm">${escapeHtml(entry.display_name)}</p>
+            <p class="text-xs ${slot.pointsClass}">${escapeHtml(formatPoints(entry.points))}</p>
+            <div class="w-full ${slot.platformClass} rounded-t-xl flex items-center justify-center">
+              <span class="font-headline font-black ${slot.numberClass}">${slot.rank}</span>
+            </div>
+          </div>
+        `;
+      }).join("");
+    };
+
+    const renderRankings = (entries) => {
+      if (!entries.length) {
+        rankingsEl.innerHTML = '<li class="px-6 py-5 text-sm text-on-surface-variant">No leaderboard rows are available yet. Run dbt to materialize <code>mart_fan_loyalty</code>.</li>';
+        return;
+      }
+      rankingsEl.innerHTML = entries.map((entry) => `
+        <li class="grid grid-cols-12 items-center px-6 py-3.5 hover:bg-surface-container-high transition-colors">
+          <span class="col-span-1 font-headline font-bold ${entry.rank <= 3 ? "text-primary" : "text-on-surface-variant"}">${entry.rank}</span>
+          <div class="col-span-5 flex items-center gap-3">
+            <div class="w-9 h-9 rounded-full ${entry.rank <= 3 ? "bg-primary-container text-on-primary" : "bg-surface-container-highest text-on-surface-variant"} flex items-center justify-center font-bold text-sm flex-shrink-0">
+              ${escapeHtml(initialsFor(entry.display_name))}
+            </div>
+            <div>
+              <p class="font-medium ${entry.rank <= 3 ? "text-primary" : "text-on-surface"} text-sm">${escapeHtml(entry.display_name)}</p>
+              <p class="text-xs text-outline">${escapeHtml(entry.fan_id)}</p>
+            </div>
+          </div>
+          <span class="col-span-3 font-headline font-bold text-on-surface text-right">${escapeHtml(numberFormatter.format(entry.points))}</span>
+          <span class="col-span-3 font-medium text-on-surface-variant text-right text-sm">${escapeHtml(numberFormatter.format(entry.matches_attended))}</span>
+        </li>
+      `).join("");
+    };
+
+    const renderFanOfMonth = (fan) => {
+      if (!fan) {
+        fanOfMonthAvatarEl.textContent = "--";
+        fanOfMonthNameEl.textContent = "No monthly winner yet";
+        fanOfMonthSummaryEl.textContent = "Waiting for attendance data.";
+        fanOfMonthMatchesEl.textContent = "--";
+        fanOfMonthItemsEl.textContent = "--";
+        fanOfMonthLastItemEl.textContent = "Last purchase: —";
+        fanOfMonthLastItemEl.removeAttribute("title");
+        fanOfMonthReferralsEl.textContent = "--";
+        return;
+      }
+      const metrics = fan.subtitle_metrics || {};
+      const matchesValue = metrics.matches;
+      const referralsValue = metrics.referrals;
+      const merchCount = Number(fan.merch_purchase_count ?? 0);
+      const retailCount = Number(fan.retail_purchase_count ?? 0);
+      const itemsFromFan = merchCount + retailCount;
+      const itemsTotal =
+        metrics.items_purchased != null ? Number(metrics.items_purchased) : itemsFromFan;
+      const lastRaw =
+        metrics.last_purchased_item != null && String(metrics.last_purchased_item).trim() !== ""
+          ? String(metrics.last_purchased_item).trim()
+          : null;
+      fanOfMonthAvatarEl.textContent = initialsFor(fan.display_name);
+      fanOfMonthNameEl.textContent = fan.display_name;
+      fanOfMonthSummaryEl.textContent = fan.summary || "Live leaderboard highlight";
+      fanOfMonthMatchesEl.textContent = matchesValue == null ? "—" : numberFormatter.format(matchesValue);
+      fanOfMonthItemsEl.textContent = numberFormatter.format(itemsTotal);
+      if (lastRaw) {
+        fanOfMonthLastItemEl.textContent = `Last: ${lastRaw}`;
+        fanOfMonthLastItemEl.setAttribute("title", lastRaw);
+      } else {
+        fanOfMonthLastItemEl.textContent = "Last purchase: —";
+        fanOfMonthLastItemEl.removeAttribute("title");
+      }
+      fanOfMonthReferralsEl.textContent = referralsValue == null ? "—" : numberFormatter.format(referralsValue);
+    };
+
+    const loadLeaderboard = async (windowKey) => {
+      errorEl.textContent = "";
+      errorEl.hidden = true;
+      errorEl.classList.add("hidden");
+      setFilterUi(windowKey);
+      loadingEl.hidden = false;
+      loadingEl.classList.remove("hidden");
+
+      try {
+        const response = await fetch(
+          `/api/leaderboard?window=${encodeURIComponent(windowKey)}`,
+          { headers: { "Accept": "application/json" } },
+        );
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error || "Leaderboard request failed.");
+        }
+
+        asOfEl.textContent = formatAsOf(payload.as_of);
+        floatingAsOfEl.textContent = formatAsOf(payload.as_of).replace("Updated ", "");
+        if (payload.points_formula) {
+          floatingFormulaEl.textContent = payload.points_formula;
+        }
+
+        renderPodium(payload.podium || []);
+        renderRankings(payload.rankings || []);
+        renderFanOfMonth(payload.fan_of_the_month);
+        renderAchievement(payload.achievement);
+      } catch (error) {
+        renderPodium([]);
+        renderRankings([]);
+        renderFanOfMonth(null);
+        setError(error instanceof Error ? error.message : "Unable to load the leaderboard.");
+        asOfEl.textContent = "Live leaderboard unavailable";
+        floatingAsOfEl.textContent = "Unavailable";
+      } finally {
+        loadingEl.hidden = true;
+        loadingEl.classList.add("hidden");
+      }
+    };
+
+    filterButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const w = btn.getAttribute("data-window");
+        if (!w || w === activeWindow) return;
+        loadLeaderboard(w);
+      });
+    });
+
+    await loadLeaderboard("all");
+  });
+</script>
+
+</body>
+</html>

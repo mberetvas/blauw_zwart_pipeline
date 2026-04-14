@@ -1,5 +1,6 @@
-# Raw warehouse sources for the fan-event pipeline. Staging reads from here; intermediate
-# models merch_purchase, retail_purchase, and match_events consume staging (ref) but depend on this table upstream.
+# Raw warehouse sources. Staging reads from here. Fan-event intermediate models (merch_purchase,
+# retail_purchase, match_events) depend on fan_pipeline upstream; Pro League player stats come from
+# proleague_scraper.
 version: 2
 
 sources:
@@ -7,25 +8,16 @@ sources:
     description: >
       Raw relational data produced by the fan-event ingest service (Kafka → Postgres).
       Schema matches docker/postgres/init and ingestion-persistence-v1.
+      Owner: pipeline; layer: raw.
     schema: public
-    meta:
-      owner: pipeline
-      layer: raw
     tables:
       - name: fan_events_ingested
         description: >
           One row per Kafka message: NDJSON payload stored as JSONB plus Kafka coordinates
           and ingest metadata. Unique on (kafka_topic, kafka_partition, kafka_offset).
           Feeds stg_fan_events_ingested, then intermediate models merch_purchase, retail_purchase,
-          and match_events.
+          and match_events. Contract: ingestion-persistence-v1.
         identifier: fan_events_ingested
-        meta:
-          ingestion_contract: ingestion-persistence-v1
-          staging_model: stg_fan_events_ingested
-          intermediate_models:
-            - merch_purchase
-            - retail_purchase
-            - match_events
         columns:
           - name: id
             description: Surrogate primary key (BIGSERIAL).
@@ -50,7 +42,57 @@ sources:
             description: Business event timestamp from the payload when available.
             data_type: timestamp with time zone
           - name: payload_json
-            description: Full parsed event body as JSONB (v2/v3 fan event objects).
+            description: Full parsed event body as JSONB (v2/v3 fan event objects). No PII in synthetic payloads.
             data_type: jsonb
-            meta:
-              contains_pii: false
+
+  - name: proleague_scraper
+    description: >
+      Raw relational data produced by the proleague-scraper service (proleague.be → Postgres).
+      Schema matches docker/postgres/init/003_player_stats.sql.
+      Owner: proleague_scraper; layer: raw.
+    schema: public
+    tables:
+      - name: player_stats
+        description: >
+          One row per player: profile and competition stats JSON plus metadata from the scraper.
+          Primary key player_id. Feeds stg_player_stats.
+        identifier: player_stats
+        columns:
+          - name: player_id
+            description: Stable player identifier from proleague.be (primary key).
+            data_type: text
+          - name: slug
+            description: URL slug for the player profile.
+            data_type: text
+          - name: name
+            description: Display name.
+            data_type: text
+          - name: position
+            description: Position label from the site when present.
+            data_type: text
+          - name: field_position
+            description: Field position detail when present.
+            data_type: text
+          - name: shirt_number
+            description: Squad number when present.
+            data_type: integer
+          - name: image_url
+            description: Profile image URL when present.
+            data_type: text
+          - name: profile
+            description: >
+              JSON map — birth_date, birth_place, height_cm, weight_kg, preferred_foot,
+              nationality, nationality_code.
+            data_type: jsonb
+          - name: stats
+            description: JSON array of {key, label, value} for Jupiler Pro League stats.
+            data_type: jsonb
+          - name: competition
+            description: Competition label when scoped.
+            data_type: text
+          - name: source_url
+            description: Page URL scraped for this row.
+            data_type: text
+          - name: scraped_at
+            description: Wall-clock time when the scraper upserted the row.
+            data_type: timestamp with time zone

@@ -131,6 +131,14 @@ stream-kafka-live topic="fan_events":
 kafka-consume topic="fan_events":
     uv run python scripts/kafka_consume_fan_events.py --topic {{ topic }}
 
+# ── Postgres helpers ───────────────────────────────────────────────
+# Grant llm_reader SELECT on public.player_stats.
+# Run once after `docker compose up -d` when the postgres-data volume pre-dates
+# 003_player_stats.sql (init scripts only execute on a fresh/empty volume).
+# Safe to re-run — GRANT is idempotent.
+db-grant-player-stats:
+    docker compose exec postgres psql -U postgres -d fan_pipeline -c "GRANT USAGE ON SCHEMA public TO llm_reader; GRANT SELECT ON player_stats TO llm_reader;"
+
 # ── Batch generators ───────────────────────────────────────────────
 # Generate v1 rolling-window batch
 generate-events:

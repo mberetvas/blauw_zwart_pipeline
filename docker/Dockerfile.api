@@ -1,0 +1,25 @@
+# UV-based image for the Ollama Q&A Flask API (llm_api).
+FROM python:3.12-slim-bookworm
+
+# Pin uv to the same version used by Dockerfile.ingest for consistency.
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
+
+WORKDIR /app
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+
+# Install Python dependencies first (layer-cached until pyproject/lock change).
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+RUN uv sync --frozen --no-dev --extra api
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Bake all dbt layer schema YAMLs for Text-to-SQL (staging → intermediate → marts).
+# Rebuild the image when any of these change.
+COPY dbt/models/staging /app/dbt_schema/staging
+COPY dbt/models/intermediate /app/dbt_schema/intermediate
+COPY dbt/models/marts /app/dbt_schema/marts
+ENV DBT_MODELS_DIR=/app/dbt_schema
+
+EXPOSE 8080
+CMD ["python", "-m", "llm_api.app"]

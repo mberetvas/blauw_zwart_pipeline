@@ -2,471 +2,575 @@
 
 # Blauw zwart - Mock-up data creator
 
-Synthetic fan events generator for Club Brugge KV simulations. PyPI / `pyproject.toml` name: **`blauw-zwart-fan-sim-pipeline`**. The `fan_events` package (`src/fan_events/`) exposes a CLI with three subcommands: **`generate_events`** (match-related **v1** rolling window or **v2** calendar), **`generate_retail`** (**v3** match-independent retail purchases), and **`stream`** (one time-ordered NDJSON stream mixing **v2** and **v3**, with optional native Kafka output). A separate entry point, **`fan_ingest`**, consumes that NDJSON from Kafka into Postgres (used by Docker Compose; optional on the host).
+Synthetic fan-event pipeline for Club Brugge KV simulations. The package name in `pyproject.toml` is **`blauw-zwart-fan-sim-pipeline`** and the repository ships five Python packages under `src\`: **`fan_events`** (event generation CLI), **`fan_ingest`** (Kafka to Postgres ingest for fan events), **`proleague_scraper`** (Pro League squad scraper + HTTP server + daily scheduler), **`proleague_ingest`** (Kafka to Postgres ingest for player stats), and **`llm_api`** (Flask Text-to-SQL API and browser UI used by Docker Compose).
+
+## Table of contents
+
+- [Overview](#overview)
+- [Prerequisites](#prerequisites)
+- [Install](#install)
+- [Quick start](#quick-start)
+- [CLIs](#clis)
+- [Compose pipeline](#compose-pipeline)
+- [Player stats pipeline](#player-stats-pipeline)
+- [API](#api)
+- [dbt and analytics](#dbt-and-analytics)
+- [Development and test](#development-and-test)
+- [Troubleshooting](#troubleshooting)
+- [Specs and links](#specs-and-links)
+
+## Overview
+
+| Surface | What it does | How you run it |
+|---------|---------------|----------------|
+| `fan_events` | Generates synthetic NDJSON fan events | `uv run fan_events ...` |
+| `fan_ingest` | Consumes `fan_events` Kafka topic → writes to Postgres | `uv run fan_ingest ...` or the Compose `ingest` service |
+| `proleague_scraper` | Scrapes Club Brugge squad from proleague.be; HTTP read layer | Compose `proleague-scraper` service or `python -m proleague_scraper.app` |
+| `proleague_ingest` | Consumes `player_stats` Kafka topic → upserts `player_stats` table | Compose `proleague-ingest` service |
+| `llm_api` | Serves the browser UI and Text-to-SQL API over Flask | Compose `llm-api` service or `uv run python -m llm_api.app` |
+| `dbt\` | Builds analytics models such as `mart_fan_loyalty` | `uv run dbt ...` or the Compose `dbt-scheduler` service |
+| `docker-compose.yml` | Starts the local operator stack | `docker compose up -d` |
+| `justfile` | Convenience wrappers for common local tasks | `just <recipe>` |
+
+For how those services connect and how events move through Kafka and Postgres into dbt and **`llm-api`**, see the diagrams under [Compose pipeline](#compose-pipeline) and [Player stats pipeline](#player-stats-pipeline).
+
+`fan_events` exposes three subcommands:
+
+| Subcommand | Purpose | Primary deeper doc |
+|------------|---------|--------------------|
+| `generate_events` | v1 rolling-window events, or v2 calendar-driven match events | [`specs/002-match-calendar-events/quickstart.md`](specs/002-match-calendar-events/quickstart.md) |
+| `generate_retail` | v3 retail-only NDJSON | [`specs/003-ndjson-v3-retail-sim/quickstart.md`](specs/003-ndjson-v3-retail-sim/quickstart.md) |
+| `stream` | Unified v2/v3 stream to stdout, file, or Kafka | [`specs/004-unified-synthetic-stream/quickstart.md`](specs/004-unified-synthetic-stream/quickstart.md) |
 
 ## Prerequisites
 
-| Requirement | Version | Notes |
-|-------------|---------|-------|
-| Python | ≥ 3.12 | Required by `pyproject.toml` |
-| [uv](https://docs.astral.sh/uv/) | any recent | Package manager; used for all dev commands |
-| Docker | any | Kafka + Postgres + ingest via `docker-compose.yml` (see **Full local pipeline** below) |
-| [just](https://just.systems/) | any | Optional task runner; see [`justfile`](justfile) (e.g. `just kafka-up`, `just stream`, `just stream-kafka`) |
+| Requirement | Notes |
+|-------------|-------|
+| Python 3.12+ | Required by `pyproject.toml` (`requires-python = ">=3.12"`) |
+| [uv](https://docs.astral.sh/uv/) | Recommended for installs, running CLIs, dbt, tests, and lint |
+| Docker + Docker Compose | Required for the local stack in `docker-compose.yml` |
+| [just](https://just.systems/) | Optional convenience task runner |
+| [Ollama](https://ollama.com/) | Required only when you want the default local LLM provider for `llm-api` |
 
-## Installation
+## Install
 
-**Option A — local development (recommended):**
+From a clean clone, work from the repository root (the directory containing `pyproject.toml`).
 
 ```bash
-git clone https://github.com/mberetvas/blauw_zwart_pipeline.git
-cd blauw_zwart_pipeline
 uv sync
-uv sync --extra kafka
 uv run fan_events --help
 ```
 
-`uv sync` installs the project plus the default **dev** dependency group (pytest, ruff). Add **`--extra ingest`** if you will run **`fan_ingest`** on the host, or use **`uv sync --all-extras`** for both **`kafka`** and **`ingest`**.
+The project metadata currently defines these install knobs:
 
-**Option B — install globally via uv:**
+| Need | Command | Why |
+|------|---------|-----|
+| Base project | `uv sync` | Installs the package and the default repo development environment |
+| Kafka output from `fan_events stream` | `uv sync --extra kafka` | Adds `confluent-kafka` |
+| Host-side `fan_ingest` | `uv sync --extra ingest` | Adds `asyncpg` and `confluent-kafka` |
+| Host-side `llm_api` work | `uv sync --extra api` | Adds `flask`, `psycopg2-binary`, `requests`, `pyyaml` |
+| dbt tooling | `uv sync --group dbt` | Adds `dbt-core` and `dbt-postgres` |
+| Everything for local host development | `uv sync --all-extras --group dbt` | Pulls all extras plus dbt |
+
+Named dependency groups in `pyproject.toml` are **`dev`** and **`dbt`**. Optional extras are **`kafka`**, **`ingest`**, and **`api`**. Console scripts are **`fan_events`** and **`fan_ingest`**.
+
+The `proleague_scraper` and `proleague_ingest` packages are built as standalone pip-based Docker images (`docker/Dockerfile.scraper` and `docker/Dockerfile.scraper-ingest`) and are not part of the uv extras; they run exclusively inside Docker Compose.
+
+## Quick start
+
+### 1. Sanity-check the main CLI
 
 ```bash
-uv tool install 'blauw-zwart-fan-sim-pipeline[kafka,ingest]' --from git+https://github.com/mberetvas/blauw_zwart_pipeline
-fan_events --help
+uv sync
+uv run fan_events --help
+uv run fan_events stream --calendar match_day.example.json -s 42 --retail-max-events 50 --max-events 20
 ```
 
-Omit the bracket suffix for a minimal install, or use **`[kafka]`**, **`[ingest]`**, or **`[kafka,ingest]`** as needed (Kafka streaming and `fan_ingest` require their respective extras).
+That last command emits a small merged stream to stdout and does **not** need the Kafka extra.
 
-After a global install, use `fan_events` / `fan_ingest` directly (drop the `uv run` prefix from command examples). `fan_ingest` needs the **`ingest`** extra.
+### 2. Bring up the local stack
 
-> **Kafka extra**: `confluent-kafka` (a C extension wrapping `librdkafka`) is an **optional** dependency. The base install works without it; only `fan_events stream --kafka-topic` (or `FAN_EVENTS_KAFKA_TOPIC` env var) requires it. Without the extra installed, that path exits with a clear error message.
-
-> **Ingest extra**: The **`fan_ingest`** CLI (Kafka → Postgres) needs the **`ingest`** optional dependency group (`asyncpg` + `confluent-kafka`). For the normal Compose workflow you do **not** need it on the host—the **`ingest`** service runs in Docker. Install **`ingest`** only if you run `uv run fan_ingest` locally.
-
-### Full local pipeline (Kafka → Postgres)
-
-End-to-end demo: Docker Compose now starts Kafka KRaft, Postgres, pgAdmin, the Kafka ingest worker, and a long-running `fan_events stream` producer. Step-by-step guide, ports, and acceptance checks: [`specs/005-compose-kafka-pipeline/quickstart.md`](specs/005-compose-kafka-pipeline/quickstart.md).
-
-| Port (defaults) | Service |
-|-----------------|---------|
-| **9092** | Kafka (host clients: `localhost:9092`; Compose services use `broker:29092`) |
-| **5432** | Postgres (override with `POSTGRES_PORT` if in use) |
-| **5050** | pgAdmin |
+**Unix-like shells**
 
 ```bash
-cp .env.example .env && docker compose up -d
+cp .env.example .env
+docker compose up -d
+docker compose ps
 ```
 
-**Ingest on the host (optional):** With the stack up and **`uv sync --extra ingest`**, you can run a second consumer or debug without rebuilding the image. Point **`DATABASE_URL`** at the **host-published** Postgres port from `.env` (`POSTGRES_PORT`, default **5432**), and **`KAFKA_BOOTSTRAP_SERVERS=localhost:9092`** (host listener; not `broker:29092`).
+**Windows PowerShell**
+
+```powershell
+Copy-Item .env.example .env
+docker compose up -d
+docker compose ps
+```
+
+The default `.env.example` values expose:
+
+| Host port | Service | Compose-side address |
+|-----------|---------|----------------------|
+| `9092` | Kafka broker | `broker:29092` |
+| `5432` | Postgres | `postgres:5432` |
+| `5050` | pgAdmin | `pgadmin:80` |
+| `8080` | Flask LLM API | `llm-api:8080` |
+
+For the full Compose walkthrough, use [`specs/005-compose-kafka-pipeline/quickstart.md`](specs/005-compose-kafka-pipeline/quickstart.md).
+
+## CLIs
+
+### `fan_events`
+
+Run subcommand help directly:
 
 ```bash
-export DATABASE_URL="postgresql://postgres:changeme@localhost:5432/fan_pipeline"
-export KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+uv run fan_events generate_events --help
+uv run fan_events generate_retail --help
+uv run fan_events stream --help
+```
+
+Use cases and copy-pasteable examples:
+
+| Goal | Command | Notes |
+|------|---------|-------|
+| v1 rolling-window file | `uv run fan_events generate_events -s 1 -n 200 -d 90 -o out/fan_events.ndjson` | No calendar, no `match_id` |
+| v2 calendar file | `uv run fan_events generate_events --calendar match_day.example.json -s 42 -o out/v2.ndjson` | Every line includes `match_id` |
+| v3 retail batch | `uv run fan_events generate_retail -s 42 -o out/retail.ndjson` | Retail-only NDJSON |
+| v3 retail stream to stdout | `uv run fan_events generate_retail --stream -s 42 --max-events 100` | Immediate stdout stream |
+| Unified stream to a file | `uv run fan_events stream --calendar match_day.example.json -s 42 -o out/mixed.ndjson --retail-max-events 500 --max-events 200` | Appends to the output file |
+| Unified stream to Kafka | `uv run fan_events stream --calendar match_day.example.json -s 42 --kafka-topic fan_events --kafka-bootstrap-servers localhost:9092 --max-events 200` | Requires `uv sync --extra kafka` |
+
+Important behavior to remember:
+
+| Topic | Current behavior |
+|-------|------------------|
+| `stream` default loop | With `--calendar`, the season loops by default; use `--no-calendar-loop` for a single pass |
+| Output targets | `stream` writes to stdout when `-o/--output` is omitted; `--kafka-topic` is mutually exclusive with `-o/--output` |
+| Host vs Compose Kafka | Host commands use `localhost:9092`; Compose services use `broker:29092` |
+| Match-day retail tuning | The `stream` subcommand supports home/away match-day retail modifiers; see the 006 contracts linked below |
+
+### `fan_ingest`
+
+`fan_ingest` is the Kafka consumer used by the Compose `ingest` service and is also available on the host when the **`ingest`** extra is installed.
+
+```bash
+uv sync --extra ingest
 uv run fan_ingest --help
 ```
 
-Adjust credentials and port to match your `.env`. Topic and consumer group default to the same values as `.env.example` when unset.
-
-## CLI overview
-
-| Mode | When | Output contract |
-| ---- | ---- | --------------- |
-| **v1** (default) | `generate_events` without `-c` / `--calendar` | Rolling UTC window — no `match_id` on lines |
-| **v2** | `generate_events -c` / `--calendar …` | Match calendar — every line has `match_id` |
-| **v3 retail** | `generate_retail` | `retail_purchase` only — [`fan-events-ndjson-v3.md`](specs/003-ndjson-v3-retail-sim/contracts/fan-events-ndjson-v3.md) |
-| **Unified stream** | `stream` | **v2** and/or **v3** lines merged by synthetic time — [`cli-stream.md`](specs/004-unified-synthetic-stream/contracts/cli-stream.md) |
+Host-side example against the Compose stack:
 
 ```bash
-# After `uv sync` at the repo root
-uv run fan_events generate_events [options]
-uv run fan_events generate_retail [options]
-uv run fan_events stream [options]
+uv run fan_ingest --kafka-bootstrap-servers localhost:9092 --kafka-topic fan_events --database-url postgresql://postgres:changeme@localhost:5432/fan_pipeline
 ```
 
-## Parameters and defaults
+Defaults are Compose-oriented: `broker:29092`, topic `fan_events`, consumer group `fan-ingest-local`, and `DATABASE_URL` from the environment.
 
-Flags are **subcommand-specific**: use a **separate** invocation per subcommand. Options that belong to `generate_events` only (for example `--calendar`, `--count`, `--days`, `--events`) are **not** valid on `generate_retail`. The **`stream`** subcommand has its own contract ([`cli-stream.md`](specs/004-unified-synthetic-stream/contracts/cli-stream.md)): it rejects v1 rolling-style flags, and merged-output limits use **`--max-events` / `--max-duration`** only—not **`generate_retail`'s `-n` / `-d`**.
+## Compose pipeline
 
-### Same letter, different meaning (`-n` and `-d`)
+The Compose file runs Kafka (KRaft), Postgres, synthetic **`fan_events stream`** publishing, **`fan_ingest`**, periodic dbt, pgAdmin, the Flask **`llm-api`**, and the [player stats pipeline](#player-stats-pipeline). The diagrams below show topology and data flow; the tables that follow list each service, defaults, and operator commands.
 
-| Short | `generate_events` | `generate_retail` |
-| ----- | ----------------- | ----------------- |
-| **`-n`** | `--count` (total events, v1) | `--max-events` (cap; implied default **200** when unset—see v3 table) |
-| **`-d`** | `--days` (rolling window length, v1) | `--max-duration` (simulated seconds from epoch for record timestamps) |
+**Diagram A — Compose service map:** services, persisted volumes, startup dependencies, and the two Kafka topics.
 
-**`stream`**: this subcommand does **not** define **`-n` / `-d`**. Use **`--max-events` / `--max-duration`** for the **merged** line stream (after interleaving v2 and v3), and **`--retail-max-events` / `--retail-max-duration`** to cap the **retail** generator **before** merge.
+```mermaid
+flowchart TB
+  subgraph vols["Named volumes"]
+    V_KAFKA["kafka-data"]
+    V_PG["postgres-data"]
+    V_LLM["llm-api-config"]
+  end
 
-Always check which subcommand you are using. **`fan_events generate_events --help`**, **`fan_events generate_retail --help`**, and **`fan_events stream --help`** list the authoritative short/long pairs.
+  broker["broker — Kafka 4.x KRaft<br/>Compose clients: broker:29092<br/>Host clients: localhost:9092"]
+  kafka_init["kafka-init — one-shot<br/>creates KAFKA_TOPIC default fan_events"]
+  kafka_init_s["kafka-init-scraper — one-shot<br/>creates SCRAPER_KAFKA_TOPIC default player_stats"]
+  producer["producer — fan_events stream"]
+  ingest["ingest — fan_ingest"]
+  sched["proleague-scheduler — daily scrape"]
+  pl_ingest["proleague-ingest — player_stats consumer"]
+  pl_scraper["proleague-scraper — HTTP read layer"]
+  postgres["postgres — Postgres 18<br/>init: docker/postgres/init/"]
+  dbt_sched["dbt-scheduler"]
+  pgadmin["pgadmin"]
+  llm_api["llm-api — Flask UI + API"]
 
-### `generate_events` (v1 / v2)
+  broker --- V_KAFKA
+  postgres --- V_PG
+  llm_api --- V_LLM
 
-| Argument | Default | Description |
-| -------- | ------- | ----------- |
-| `-o`, `--output` | `out/fan_events.ndjson` | Output NDJSON path |
-| `-s`, `--seed` | *(none)* | RNG seed; **v1** also fixes "now" for repeatable output when set. Omit for non-deterministic v1/v2 |
-| `-e`, `--events` | `both` | `both`, `ticket_scan`, or `merch_purchase` |
-| `-F`, `--fans-out` | *(none)* | Optional **companion JSON** path: synthetic fan master (`schema_version`, `rng_seed`, `fans` map). **Not** part of the NDJSON contracts — join on `fan_id` (`events.fan_id` → `fans[fan_id]`). Same `--seed` and same `fan_id` → same profile; profile RNG is separate from event RNG (v3 retail draw order unchanged). Only includes `fan_id`s that **appear in emitted events** |
+  kafka_init -->|depends_on: broker healthy| broker
+  kafka_init_s -->|depends_on: broker healthy| broker
 
-**v1 only** (do not combine with `-c` / `--calendar`):
+  producer -->|depends_on: broker healthy| broker
+  producer -->|depends_on: kafka-init done| kafka_init
+  producer -->|depends_on: postgres healthy| postgres
 
-| Argument | Default | Description |
-| -------- | ------- | ----------- |
-| `-n`, `--count` | `200` | Total events to emit |
-| `-d`, `--days` | `90` | UTC rolling window length ending at generation time |
+  ingest -->|depends_on: broker healthy| broker
+  ingest -->|depends_on: kafka-init done| kafka_init
+  ingest -->|depends_on: postgres healthy| postgres
 
-**v2 only** (`-c` / `--calendar` required for calendar mode):
+  sched -->|depends_on: broker healthy| broker
+  sched -->|depends_on: kafka-init-scraper done| kafka_init_s
 
-| Argument | Default | Description |
-| -------- | ------- | ----------- |
-| `-c`, `--calendar` | *(none)* | Path to calendar JSON (see below); omit for v1 rolling |
-| `--from-date` / `--to-date` | *(none)* | Inclusive kickoff UTC date filter (`YYYY-MM-DD`). **Omit both** to include every match; if you set one, set both |
-| `--scan-fraction` | `0.85` when omitted | With calendar: scales `ticket_scan` volume vs capacity (`fan_events.domain`) |
-| `--merch-factor` | `0.25` when omitted | With calendar: scales `merch_purchase` volume vs capacity (`fan_events.domain`) |
+  pl_ingest -->|depends_on: broker healthy| broker
+  pl_ingest -->|depends_on: kafka-init-scraper done| kafka_init_s
+  pl_ingest -->|depends_on: postgres healthy| postgres
 
-**`generate_events` validation (argparse)**
+  pl_scraper -->|depends_on: postgres healthy| postgres
 
-- **`--from-date` and `--to-date`**: must both be set or both omitted.
-- **`--scan-fraction` / `--merch-factor`**: require `-c` / `--calendar`.
-- **Rolling vs calendar**: you cannot combine `-c` / `--calendar` with rolling window flags (`-n` / `--count`, `-d` / `--days`, etc.); the CLI errors with a message equivalent to *`-n` / `--count` / `-d` / `--days` cannot be used with `--calendar`*.
+  dbt_sched -->|depends_on: postgres healthy| postgres
+  pgadmin -->|depends_on: postgres healthy| postgres
+  llm_api -->|depends_on: postgres healthy| postgres
+```
 
-### `generate_retail` (v3)
+**Diagram B — End-to-end data flow:** two Kafka topics feeding two separate ingest paths into Postgres, dbt marts, and the Flask API.
 
-Match-independent `retail_purchase` lines (three shop channels). **Batch** (default) writes a **globally sorted** file to `-o` / `--output`. **`-t` / `--stream`** writes **stdout** in generation order (no global sort). Without wall-clock flags, stream output is written **as fast as the CPU allows** (same seed → byte-identical stream output across repeated runs for equivalent limits, but batch vs stream ordering/bytes may differ because batch applies a global sort and stream does not). With **`--emit-wall-clock-min`** and **`--emit-wall-clock-max`**, the process **sleeps** a random number of seconds in `[min, max]` before each line **after the first** (draw uses the same RNG as `-s` / `--seed`). Default synthetic timeline start when **`-E` / `--epoch`** is omitted is **`2026-01-01T00:00:00Z`** (same as the v3 generator).
+```mermaid
+flowchart LR
+  subgraph host_ext["Host (outside Compose)"]
+    host_producer["Optional: fan_events stream<br/>localhost:9092"]
+    ollama["Ollama<br/>host.docker.internal"]
+  end
 
-| Argument | Default | Description |
-| -------- | ------- | ----------- |
-| `-o`, `--output` | `out/retail.ndjson` | Output path; ignored when **`-t` / `--stream`** |
-| `-s`, `--seed` | *(none)* | RNG seed for batch, stream, and wall-clock sleep intervals; omit for non-deterministic output |
-| `-t`, `--stream` | off | Write NDJSON to stdout in generation order (no global sort); ignores `-o`/`--output` |
-| `-n`, `--max-events` | *(none)* | Stop after N events (`0` → empty). **Not** compatible with **`-u` / `--unlimited`**. If **omitted** with no **`-d`** and no **`-u`**, the generator applies implied **200**; if **`-d`** is set without `-n`, only the simulated duration limits events |
-| `-d`, `--max-duration` | *(none)* | Max **simulated** seconds from epoch for timestamps (`SECONDS`). With `-n`, stop when **either** limit hits first |
-| `-E`, `--epoch` | `2026-01-01T00:00:00Z` when omitted | UTC start instant for the synthetic timeline (ISO-8601) |
-| `--shop-weights` `W1` `W2` `W3` | equal **1/3** per shop when omitted | Non-negative weights (order: jan_breydel_fan_shop, webshop, bruges_city_shop) |
-| `--arrival-mode` | `poisson` | Synthetic inter-arrival model: `poisson`, `fixed`, or `weighted_gap` |
-| `--poisson-rate` | `0.1` | Events per second for Poisson gaps when mode is `poisson` |
-| `--fixed-gap-seconds` | `60` | Seconds between synthetic events when mode is `fixed` |
-| `--weighted-gaps` / `--weighted-gap-weights` | *(none)* | Candidate gaps and weights for `weighted_gap`; **both** required when using that mode |
-| `-p`, `--fan-pool` | *(none)* | Upper bound for `fan_id` suffix pool; when omitted, heuristic from implied cap (typically up to **500**) |
-| `--emit-wall-clock-min` / `--emit-wall-clock-max` | *(none)* | **Require `-t` / `--stream`**, **both** together; wall-clock seconds between lines after the first |
-| `-u`, `--unlimited` | off | Skip the implied **200** event cap when `-n` and `-d` are both omitted; **incompatible with `-n`**. With **`-t`**, requires wall-clock emit bounds and/or **`-d`**; without **`-t`**, requires **`-d`** |
-| `-F`, `--fans-out` | *(none)* | Same companion **fan master JSON** as `generate_events` (join on `fan_id`; not normative NDJSON). See **`generate_events`** table |
+  subgraph stack["Docker Compose"]
+    producer["producer<br/>fan_events stream"]
+    sched["proleague-scheduler<br/>daily scrape_squad"]
+    broker["broker<br/>topic fan_events<br/>topic player_stats"]
+    ingest["fan_ingest"]
+    pl_ingest["proleague-ingest"]
+    pg[("Postgres 18<br/>fan_events_ingested<br/>player_stats")]
+    dbt["dbt-scheduler<br/>+mart_fan_loyalty"]
+    llm["llm-api<br/>reads fan + player data"]
+  end
 
-**Stopping rules (v3 generator)**
+  producer -->|"produce fan_events"| broker
+  host_producer -.->|"optional produce"| broker
+  sched -->|"produce player_stats (daily)"| broker
+  broker -->|"consume fan_events"| ingest
+  broker -->|"consume player_stats"| pl_ingest
+  ingest -->|"INSERT fan_events_ingested"| pg
+  pl_ingest -->|"UPSERT player_stats"| pg
+  dbt -->|"build/refresh marts"| pg
+  llm -->|"SELECT (read-only)"| pg
+  ollama -.->|"LLM HTTP (Ollama provider)"| llm
+```
 
-If **`-n` / `--max-events`** and **`-d` / `--max-duration`** are both set, generation stops when **either** binds first. If **both** are omitted and **`-u` / `--unlimited`** is **not** set, the implied cap is **200** events. If only **`-d`** is set, event count is unconstrained until the simulated duration window is exceeded. With **`-u`** and **`-t`**, you can run until Ctrl+C using only wall-clock emit bounds, or cap the simulated timeline with **`-d`**, or both.
+| Service name | Purpose |
+|--------------|---------|
+| `broker` | Apache Kafka 4.2.0 in KRaft mode |
+| `kafka-init` | Creates `fan_events` topic before fan-event consumers subscribe |
+| `kafka-init-scraper` | Creates `player_stats` topic before scraper and ingest start |
+| `postgres` | PostgreSQL 18 |
+| `dbt-scheduler` | Periodic dbt runner for analytics marts |
+| `pgadmin` | Browser UI for Postgres |
+| `ingest` | Runs `fan_ingest` — `fan_events` topic → `fan_events_ingested` table |
+| `producer` | Runs `fan_events stream` — synthetic fan events |
+| `proleague-scraper` | HTTP read layer; serves `/squad` and `/player` from DB |
+| `proleague-scheduler` | Daily scrape loop — publishes player stats to `player_stats` Kafka topic |
+| `proleague-ingest` | Kafka consumer — `player_stats` topic → `public.player_stats` Postgres table |
+| `llm-api` | Flask API and browser UI; reads both fan and player data from Postgres |
 
-**`generate_retail` validation (argparse)**
+The Compose defaults in `.env.example` line up like this:
 
-- **`--emit-wall-clock-min` / `--emit-wall-clock-max`**: must appear together; require **`-t` / `--stream`**; `min ≤ max`, both `≥ 0`.
-- **`-u` / `--unlimited`**: cannot be combined with **`-n` / `--max-events`**. With **`-t`**, you must also pass wall-clock emit bounds **or** **`-d` / `--max-duration`**. Without **`-t`**, **`-d`** is required.
-- **V1/v2-only long flags** (for example `--calendar`, `--count`, `--days`, `--events`) are not valid on `generate_retail`; the CLI reports that they belong under `generate_events`.
+| Setting | Default |
+|---------|---------|
+| `KAFKA_BOOTSTRAP_SERVERS` | `broker:29092` |
+| `KAFKA_TOPIC` | `fan_events` |
+| `KAFKA_CONSUMER_GROUP` | `fan-ingest-local` |
+| `SCRAPER_KAFKA_TOPIC` | `player_stats` |
+| `SCRAPER_KAFKA_CONSUMER_GROUP` | `scraper-ingest-local` |
+| `SCRAPER_INTERVAL_HOURS` | `24` |
+| `SCRAPER_RUN_ON_STARTUP` | `1` |
+| `DATABASE_URL` | `postgresql://postgres:changeme@postgres:5432/fan_pipeline` |
+| `LLM_READER_PASSWORD` | `change-this-dev-password` |
+| `LLM_READER_DATABASE_URL` | `postgresql://llm_reader:change-this-dev-password@postgres:5432/fan_pipeline` |
+| `DBT_RUN_SELECTOR` | `+mart_fan_loyalty` |
 
-Normative detail and extra examples: [`specs/003-ndjson-v3-retail-sim/quickstart.md`](specs/003-ndjson-v3-retail-sim/quickstart.md).
-
-### `stream` (unified NDJSON — v2 and/or v3)
-
-One UTF-8 **NDJSON line stream** in **non-decreasing synthetic time**: v2 match events (`ticket_scan` / `merch_purchase` with `match_id`) interleaved with v3 `retail_purchase` using `heapq.merge` (see [`orchestrated-stream.md`](specs/004-unified-synthetic-stream/contracts/orchestrated-stream.md)). With **`--calendar`**, the template season **recycles +1 calendar year** per pass by default; **`--max-duration`** uses a fixed **`t0`** anchor (`min` of configured retail epoch and earliest v2 window in pass 0 — see [006 supplement](specs/006-stream-three-event-kinds/contracts/cli-stream-006-supplement.md)); **match-day retail** Poisson scaling uses defaults grounded in Jan Breydel match-day lead times ([006 research §6](specs/006-stream-three-event-kinds/research.md)). Operator recipes: [006 quickstart](specs/006-stream-three-event-kinds/quickstart.md). Output is **stdout** when **`-o` / `--output` is omitted**; otherwise the path is opened in **append** mode (creates parent dirs; each line is a complete JSON object + LF). Use **`--kafka-topic`** to publish to a Kafka topic instead (mutually exclusive with `-o`).
-
-**Which sources run**
-
-| Mode | `--calendar` | `--no-retail` | v2 match lines | v3 retail lines |
-| ---- | -------------- | --------------- | -------------- | ---------------- |
-| **Merged** | set | omit | yes | yes |
-| **Calendar-only** | set | set | yes | no |
-| **Retail-only** | omit | omit | no | yes |
-
-**`--no-retail` without `--calendar` is an error** (nothing would be generated).
-
-| Argument | Default | Description |
-| -------- | ------- | ----------- |
-| `-o`, `--output` | *(none)* | Append NDJSON to this path (UTF-8). Omit → **stdout**. Mutually exclusive with `--kafka-topic` |
-| `-s`, `--seed` | *(none)* | RNG seed for v2, retail, and wall-clock pacing draws |
-| `--no-retail` | off | With `--calendar`: v2 only (exclude v3 from the merge) |
-| `-c`, `--calendar` | *(none)* | Calendar JSON path; omit for retail-only stream |
-| `--from-date` / `--to-date` | *(none)* | Same semantics as `generate_events` v2 (both or neither) |
-| `--scan-fraction` | `0.85` when omitted | Same as `generate_events` v2 |
-| `--merch-factor` | `0.25` when omitted | Same as `generate_events` v2 |
-| `-e`, `--events` | `both` | v2 event filter: `both`, `ticket_scan`, or `merch_purchase` |
-| `--no-calendar-loop` | off | With `--calendar`: emit **one** template pass (no +1-year recycling) |
-| `--calendar-loop` | off | Explicit season loop (default is already **on** with `--calendar`; shift is **+1 calendar year**) |
-| `--calendar-loop-shift` | *(ignored)* | Deprecated on `stream`; validation only — use calendar-year recycling |
-| `--retail-home-match-day-multiplier` | `2.0` | Merged mode: Poisson intensity on home match days (see [FR-006](specs/006-stream-three-event-kinds/contracts/cli-match-day-flags-006.md)) |
-| `--retail-home-kickoff-pre-minutes` | `90` | Home kickoff **pre** window for extra retail boost |
-| `--retail-home-kickoff-post-minutes` | `120` | Home kickoff **post** window |
-| `--retail-home-kickoff-extra-multiplier` | `1.5` | Extra factor **inside** the kickoff window |
-| `--retail-away-match-day-enable` | off | If set, scale retail on **away-only** fixture days |
-| `--retail-away-match-day-multiplier` | `1.75` | Used only when away boost is enabled |
-| `--max-events` | *(none)* | **Post-merge**: stop after N complete lines |
-| `--max-duration` | *(none)* | **Post-merge**: max simulated **seconds** from stream **`t0`** (see [006 supplement](specs/006-stream-three-event-kinds/contracts/cli-stream-006-supplement.md)) |
-| `--retail-max-events` | *(none)* | **Retail iterator**: event count cap before merge (no implied **200** when both retail limits omitted—unbounded retail until merge caps or Ctrl+C) |
-| `--retail-max-duration` | *(none)* | **Retail iterator**: max simulated seconds from retail epoch |
-| `-E`, `--epoch` | `2026-01-01T00:00:00Z` when omitted | Retail timeline start (ISO-8601 UTC). **Merged + `--calendar`**: if omitted, emission aligns to the **earliest v2 window** so retail does not precede the calendar on the master clock |
-| `--shop-weights` `W1` `W2` `W3` | equal **1/3** per shop when omitted | Same order as `generate_retail` |
-| `--arrival-mode` | `poisson` | `poisson`, `fixed`, or `weighted_gap` |
-| `--poisson-rate` | `0.1` | Used when `poisson` |
-| `--fixed-gap-seconds` | `60` | Used when `fixed` |
-| `--weighted-gaps` / `--weighted-gap-weights` | *(none)* | Required together for `weighted_gap` |
-| `-p`, `--fan-pool` | *(none)* | **Merged** mode: shared upper bound for `fan_…` numeric pool on **both** v2 and v3 (default: heuristic from calendar capacity). **Retail-only**: same idea as `generate_retail` |
-| `--emit-wall-clock-min` / `--emit-wall-clock-max` | *(none)* | **Both** required if either set; random sleep in `[min, max]` before each line **after the first** (applies to **merged** output; separate pacing RNG from `--seed`) |
-
-**Kafka output flags** (require `--kafka-topic`; mutually exclusive with `-o` / `--output`):
-
-| Argument | Default | Env var override | Description |
-| -------- | ------- | ---------------- | ----------- |
-| `--kafka-topic` | *(none)* | `FAN_EVENTS_KAFKA_TOPIC` | **Enables Kafka mode.** Target topic name |
-| `--kafka-bootstrap-servers` | `localhost:9092` | `FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS` | Comma-separated broker list |
-| `--kafka-client-id` | `fan-events-producer` | `FAN_EVENTS_KAFKA_CLIENT_ID` | Producer `client.id` |
-| `--kafka-compression` | `none` | `FAN_EVENTS_KAFKA_COMPRESSION` | Codec: `none`, `gzip`, `snappy`, `lz4`, `zstd` |
-| `--kafka-acks` | `1` | `FAN_EVENTS_KAFKA_ACKS` | Required broker acks: `0`, `1`, `all` / `-1` |
-
-**TLS / SASL** (environment variables only — never pass secrets as CLI flags):
-
-| Env var | Example value | Description |
-| ------- | ------------- | ----------- |
-| `FAN_EVENTS_KAFKA_SECURITY_PROTOCOL` | `SASL_SSL` | Security protocol |
-| `FAN_EVENTS_KAFKA_SASL_MECHANISM` | `PLAIN` | SASL mechanism |
-| `FAN_EVENTS_KAFKA_SASL_USERNAME` | `myuser` | SASL username |
-| `FAN_EVENTS_KAFKA_SASL_PASSWORD` | `s3cret` | SASL password |
-
-CLI flags override the matching env var when both are set. Message key is always **null** (round-robin partitioning). Each message value is the raw UTF-8 NDJSON line (including the trailing `\n`).
-
-**Stopping / unbounded runs**
-
-- If **both** `--max-events` and `--max-duration` are **omitted**, the merged stream can run until **Ctrl+C**, generator exhaustion, or **retail** limits (`--retail-max-*`). Prefer explicit caps for demos and pipelines.
-- **Ctrl+C** exits with code **130**; each line is a **full** LF-terminated record before flush (no torn UTF-8 mid-line).
-- **Kafka shutdown**: on normal completion *and* on Ctrl+C, the producer flushes all in-flight messages before exit (30 s timeout). A warning is printed to stderr if messages remain unconfirmed after the timeout. Broker unreachable, auth failure, or delivery errors surface as a non-zero exit.
-
-**`stream` validation (argparse)**
-
-- **`--from-date` / `--to-date`**, **`--scan-fraction` / `--merch-factor`**: same pairing rules as v2 when `--calendar` is used.
-- **v1 rolling flags** (`-n` / `--count` / `-d` / `--days` as rolling options) are **rejected** on `stream`.
-- **`--emit-wall-clock-min` / `--emit-wall-clock-max`**: must appear together; `0 ≤ min ≤ max`.
-- **`--no-retail`**: requires `--calendar`.
-- **`--kafka-topic` and `-o` / `--output`**: mutually exclusive.
-- **`--kafka-bootstrap-servers`, `--kafka-client-id`, `--kafka-compression`, `--kafka-acks`**: require `--kafka-topic`.
-
-More copy-paste commands: [`specs/004-unified-synthetic-stream/quickstart.md`](specs/004-unified-synthetic-stream/quickstart.md).
-
-## Examples
-
-Use `uv run fan_events` from the repo root after `uv sync`. If you installed the package, run **`fan_events`** with the same arguments (omit `uv run`).
-
-**v1** (rolling window)
+Useful operator commands:
 
 ```bash
-uv run fan_events generate_events -s 1 -n 200 -d 90 -o out/v1.ndjson
+docker compose up -d
+docker compose logs -f producer
+docker compose logs -f ingest
+docker compose exec postgres sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) FROM fan_events_ingested;"'
 ```
 
-**v2** (all matches in the calendar file)
+If you use `just`, these recipes are already wired:
 
-```bash
-uv run fan_events generate_events -c my_calendar.json -s 42 -o out/v2.ndjson
+| Recipe | What it runs |
+|--------|---------------|
+| `just help` | `uv run fan_events --help` |
+| `just stream` | Unified stdout stream with the repo calendar |
+| `just stream-calendar` | Calendar-only stdout stream |
+| `just stream-loop` | Continuous calendar loop to stdout |
+| `just stream-loop-merged` | Continuous merged loop to stdout |
+| `just stream-retail` | Retail-only stdout stream |
+| `just kafka-up` | `docker compose up -d` for the full stack |
+| `just kafka-down` | `docker compose down` |
+| `just kafka-create-topic` | Creates the Kafka topic inside the broker container |
+| `just stream-kafka` | Host-side Kafka publishing via `fan_events stream` |
+| `just kafka-consume` | Runs `scripts\kafka_consume_fan_events.py` |
+| `just generate-events` | v1 rolling batch |
+| `just generate-calendar` | v2 calendar batch |
+| `just generate-retail` | v3 retail batch |
+
+## Player stats pipeline
+
+The player stats pipeline scrapes Club Brugge squad data from [proleague.be](https://www.proleague.be), publishes it to a dedicated Kafka topic, and persists it to Postgres. The browser player-stats page reads from the database so normal page loads never trigger a live HTTP scrape.
+
+> **Compliance notice:** Operators are responsible for verifying [proleague.be/robots.txt](https://www.proleague.be/robots.txt) and the site's Terms of Use before running the scraper against the live site in any environment.
+
+### Data flow
+
+```
+proleague-scheduler ──(scrape_squad, once per SCRAPER_INTERVAL_HOURS)──► Kafka: player_stats
+                                                                                  │
+proleague-ingest ◄──(consume, group scraper-ingest-local)─────────────────────────┘
+        │
+        └──(UPSERT ON CONFLICT player_id)──► Postgres: public.player_stats
+                                                        │
+llm-api /api/player-stats/squad ◄──(SELECT, read-only)──┘  (instant, no scraping)
+        │
+player-stats.html ◄──────────────────────────────────────(fetch)
 ```
 
-**v2** (date range on kickoff UTC)
+### New Compose services
 
-```bash
-uv run fan_events generate_events -c my_calendar.json \
-  --from-date 2026-09-01 --to-date 2026-12-31 -s 42 -o out/v2.ndjson
-```
+| Service | Docker image | Purpose |
+|---------|-------------|---------|
+| `proleague-scheduler` | `Dockerfile.scraper` + `command: python -m proleague_scraper.scheduler` | Daily `scrape_squad` → produce one Kafka message per player |
+| `proleague-ingest` | `Dockerfile.scraper-ingest` (`confluent-kafka` + `psycopg2-binary`) | `player_stats` Kafka consumer → `UPSERT` into `public.player_stats` |
+| `proleague-scraper` | `Dockerfile.scraper` | Read-only HTTP server: `/health`, `/squad` (DB), `/player` (live fetch) |
+| `kafka-init-scraper` | `apache/kafka:4.2.0` | One-shot: creates `player_stats` topic before dependent services start |
 
-**v3** (batch to file)
+### Kafka message schema (v1)
 
-```bash
-uv run fan_events generate_retail -o out/retail.ndjson -s 42
-```
-
-**v3** (stream to stdout, immediate)
-
-```bash
-uv run fan_events generate_retail -t -s 42 -n 100
-```
-
-**v3** (stream to stdout with random wall-clock delay between lines)
-
-```bash
-uv run fan_events generate_retail -t -s 42 -n 50 \
-  --emit-wall-clock-min 0.5 --emit-wall-clock-max 2.0
-```
-
-**v3** (stream indefinitely with real-time pacing until Ctrl+C)
-
-```bash
-uv run fan_events generate_retail -t -u -s 42 \
-  --emit-wall-clock-min 1 --emit-wall-clock-max 5
-```
-
-**Unified `stream`** (merged v2 + v3 to a file; post-merge cap 1000 lines)
-
-```bash
-uv run fan_events stream --calendar my_calendar.json -s 42 -o out/mixed.ndjson \
-  --retail-max-events 5000 --max-events 1000
-```
-
-**Unified `stream`** (merged to stdout)
-
-```bash
-uv run fan_events stream --calendar my_calendar.json -s 42 \
-  --retail-max-events 2000 --max-events 500
-```
-
-**Unified `stream`** (calendar-only: v2 lines only)
-
-```bash
-uv run fan_events stream --calendar my_calendar.json --no-retail -s 42 --max-events 200
-```
-
-**Unified `stream`** (retail-only; post-merge cap)
-
-```bash
-uv run fan_events stream -s 1 --retail-max-events 100 --max-events 50
-```
-
-## Kafka output
-
-The `stream` subcommand can publish events directly to a Kafka topic using the native `confluent-kafka` producer (no external piping needed). Each NDJSON line becomes one Kafka message; the message key is null (round-robin partitioning). On exit (including Ctrl+C), the producer follows the same flush behavior described under **`stream`** → **Stopping / unbounded runs**.
-
-### Start a local broker
-
-First, make sure the `kafka` extra is installed:
-
-```bash
-uv sync --extra kafka
-```
-
-Then start Kafka. The repo pins **`apache/kafka:4.2.0`** in [`docker-compose.yml`](docker-compose.yml) (KRaft, port **9092** on the host).
-
-**Broker only** (enough for a host producer hitting `localhost:9092`):
-
-```bash
-docker compose up -d broker
-```
-
-**Full pipeline** (Postgres, pgAdmin, producer, ingest): copy [`.env.example`](.env.example) to `.env`, then `docker compose up -d` — see [`specs/005-compose-kafka-pipeline/quickstart.md`](specs/005-compose-kafka-pipeline/quickstart.md).
-
-Optional: **`just kafka-up`** runs `docker compose up -d` (entire stack). Other recipes: **`just stream-kafka`**, **`just kafka-consume`**, etc. — see [`justfile`](justfile).
-
-### Publish via environment variables
-
-Setting `FAN_EVENTS_KAFKA_TOPIC` in the environment is enough to activate Kafka mode — no `--kafka-topic` flag needed. This is the recommended approach for CI pipelines and `.env`-based workflows:
-
-```bash
-# Export variables (or load from .env: export $(cat .env | xargs))
-export FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-export FAN_EVENTS_KAFKA_TOPIC=fan_events
-
-uv run fan_events stream -s 42 --retail-max-events 100 --max-events 50
-```
-
-With `uv`, you can pass an env file directly:
-
-```bash
-uv run --env-file .env fan_events stream -s 42 --retail-max-events 100 --max-events 50
-```
-
-### Publish via CLI flags
-
-```bash
-uv run fan_events stream \
-  --kafka-topic fan_events \
-  --kafka-bootstrap-servers localhost:9092 \
-  --max-events 50 -s 42
-```
-
-### With a calendar (v2 + v3 merged to Kafka)
-
-```bash
-uv run fan_events stream \
-  --calendar my_calendar.json \
-  --kafka-topic fan_events \
-  --kafka-bootstrap-servers localhost:9092 \
-  --retail-max-events 500 --max-events 1000 -s 42
-```
-
-### Connecting to a secured broker (SASL_SSL)
-
-Pass secrets via environment only — never on the command line:
-
-```bash
-export FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS=my-broker:9092
-export FAN_EVENTS_KAFKA_TOPIC=fan_events
-export FAN_EVENTS_KAFKA_SECURITY_PROTOCOL=SASL_SSL
-export FAN_EVENTS_KAFKA_SASL_MECHANISM=PLAIN
-export FAN_EVENTS_KAFKA_SASL_USERNAME=myuser
-export FAN_EVENTS_KAFKA_SASL_PASSWORD=s3cret
-
-uv run fan_events stream --max-events 100
-```
-
-## Match calendar JSON (v2 input)
-
-The repository ships **[`match_day.example.json`](match_day.example.json)** at the root for quick tries (the Compose producer mounts this file).
-
-UTF-8 JSON with a top-level `matches` array. Each object **must** include:
-
-| Field | Type | Notes |
-| ----- | ---- | ----- |
-| `match_id` | string | Unique in the file |
-| `kickoff_local` | string | Naive local datetime, e.g. `2026-08-15T18:30:00` (no `Z`) |
-| `timezone` | string | IANA zone, e.g. `Europe/Brussels` |
-| `attendance` | integer | `> 0`; for `home` at Jan Breydel, ≤ **29,062** |
-| `home_away` | string | `home` or `away` |
-| `venue_label` | string | Used in output locations |
-
-**Optional** per match: `window_start_offset_minutes` (default **120**), `window_end_offset_minutes` (default **90**), `competition`, `opponent`.
-
-Template (required fields only):
+Each message on the `player_stats` topic carries one player:
 
 ```json
 {
-  "matches": [
-    {
-      "match_id": "m-001",
-      "kickoff_local": "2026-08-15T18:30:00",
-      "timezone": "Europe/Brussels",
-      "attendance": 500,
-      "home_away": "home",
-      "venue_label": "Jan Breydel Stadium"
-    }
-  ]
+  "_schema_version": 1,
+  "event_type":  "player_stats_scraped",
+  "source_url":  "https://www.proleague.be/teams/club-brugge-kv-182/squad",
+  "scraped_at":  "2026-04-13T21:00:00Z",
+  "player": {
+    "player_id": "3219",
+    "slug":      "simon-mignolet-3219",
+    "name":      "Simon Mignolet",
+    "position":  "Goalkeeper",
+    "shirt_number": 1,
+    "image_url": "https://imagecache.proleague.be/...",
+    "profile":   { "height_cm": 193, "preferred_foot": "Right", ... },
+    "stats":     [{ "key": "savesMade", "label": "Saves", "value": 72 }, ...]
+  }
 }
 ```
 
-## v2: UTC timestamps and the match window
+**Key** is `player_id` bytes for deterministic partition routing. Messages are idempotent: `UPSERT ON CONFLICT (player_id) DO UPDATE` ensures re-runs and duplicate messages are safe.
 
-Read this before comparing **output** times to `kickoff_local` in the calendar.
+### Postgres table
 
-1. **Every `timestamp` in the NDJSON is UTC** (ISO-8601 with a `Z` suffix). It is **not** local stadium time. To reason in local time, convert `Z` times to `timezone` (or convert kickoff to UTC and compare in UTC only).
-2. **Kickoff** is the instant `kickoff_local` interpreted in `timezone`, then converted to UTC. All window math uses that **kickoff UTC** instant.
-3. **Default event window** (unless you set `window_start_offset_minutes` / `window_end_offset_minutes` on the match): from **120 minutes before** kickoff UTC to **90 minutes after** kickoff UTC. Synthetic event times are picked uniformly at random inside that closed interval.
-4. **Example:** `kickoff_local` `2026-08-15T18:30:00` with `Europe/Brussels` in summer (CEST, UTC+2) → kickoff **16:30 UTC**. Window → **14:30Z** … **18:00Z**. In Brussels wall-clock time that is about **16:30–20:00**, not the same numbers as the `Z` strings read naively as local time.
+`public.player_stats` — created by `docker/postgres/init/003_player_stats.sql`:
 
-## Fan master sidecar (`-F` / `--fans-out`)
+| Column | Type | Notes |
+|--------|------|-------|
+| `player_id` | TEXT PK | Pro League numeric ID |
+| `slug` | TEXT | URL slug, e.g. `simon-mignolet-3219` |
+| `name` | TEXT | Display name |
+| `position` / `field_position` | TEXT | Position labels |
+| `shirt_number` | INTEGER | |
+| `image_url` | TEXT | CDN URL from `__NEXT_DATA__` |
+| `profile` | JSONB | `birth_date`, `height_cm`, `weight_kg`, `preferred_foot`, `nationality`, … |
+| `stats` | JSONB | Array of `{key, label, value}` for main competition (Jupiler Pro League) |
+| `competition` | TEXT | Competition name |
+| `source_url` | TEXT | Squad page URL used for this scrape |
+| `scraped_at` | TIMESTAMPTZ | UTC timestamp of last successful scrape |
 
-Optional **single JSON document** (canonical serialization, UTF-8, trailing newline). Use it when consumers need stable synthetic attributes per `fan_id` without changing event lines.
+`llm_reader` role has `SELECT` on this table, so the LLM Text-to-SQL API can query it.
 
-- **Join**: each NDJSON event line has `fan_id`; look up **`fans["fan_00042"]`** (or equivalent) in the sidecar's `fans` object.
-- **Determinism**: with the same CLI **`--seed`**, the same `fan_id` always gets the same profile fields. Without `--seed`, profiles are still stable per `fan_id` (derived without the process `hash()`). Event bytes are unchanged whether or not you pass `-F`.
-- **Scope**: only fans that appear in **that run's** output (empty `fans` if there are zero events).
+### Scheduler configuration
 
-## Expected output
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `SCRAPER_KAFKA_TOPIC` | `player_stats` | Kafka topic name |
+| `SCRAPER_KAFKA_CONSUMER_GROUP` | `scraper-ingest-local` | Consumer group (distinct from `fan-ingest-local`) |
+| `SCRAPER_INTERVAL_HOURS` | `24` | Hours between scrape runs |
+| `SCRAPER_RUN_ON_STARTUP` | `1` | `1` = run immediately on container start; `0` = wait first interval |
+| `PROLEAGUE_SQUAD_URL` | Club Brugge squad URL | Override target squad page |
+| `KAFKA_BOOTSTRAP_SERVERS` | `broker:29092` | Kafka bootstrap (shared with fan events) |
 
-- **File**: UTF-8, Unix line endings, **one JSON object per line**, newline after the last line.
-- **Serialization**: Canonical JSON (`sort_keys`, compact separators, non-ASCII preserved).
-- **v1 lines**: `ticket_scan` and/or `merch_purchase` records **without** `match_id` (see `specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md`).
-- **v2 lines**: Same event types; **every** record includes `match_id`; timestamps are UTC with a `Z` suffix (**see [v2: UTC timestamps and the match window](#v2-utc-timestamps-and-the-match-window)**); global line order follows the v2 contract (see `specs/002-match-calendar-events/contracts/fan-events-ndjson-v2.md`).
-- **v3 lines**: `retail_purchase` only, closed six-field schema; batch output is globally sorted (see `specs/003-ndjson-v3-retail-sim/contracts/fan-events-ndjson-v3.md`). Stream mode (`-t` / `--stream`) can emit lines immediately or with wall-clock delays (`--emit-wall-clock-min` / `--emit-wall-clock-max`).
-- **Unified `stream`**: Lines are a **mix** of v2 and v3 schemas as selected by source mode; **global order** is non-decreasing by synthetic timestamp (and merge-key tie-breaks per [`orchestrated-stream.md`](specs/004-unified-synthetic-stream/contracts/orchestrated-stream.md)). Serialization is still canonical JSON, one object per line. **Append** mode does not truncate existing files.
-- **Kafka messages**: value = raw UTF-8 NDJSON line (LF-terminated). Key = null. One message per event.
-- **Empty output**: If v2 date filtering removes all matches, the file is **empty** (zero bytes). Retail with `-n 0` / `--max-events 0` yields an **empty** file or no stdout bytes in stream mode. With **`-F` / `--fans-out`**, the sidecar is still written: `fans` is `{}`, with `rng_seed` and `schema_version` set.
-
-## Development
-
-From the **repository root** (where `pyproject.toml` and `tests/` live):
+### Smoke test
 
 ```bash
-uv run pytest                 # run all tests (pythonpath includes src/)
-uv run ruff check .           # lint (respects pyproject excludes)
+docker compose up -d
+
+# Watch the scheduler run (~60 s for a full squad scrape):
+docker compose logs -f proleague-scheduler
+
+# Watch the ingest consumer persist rows:
+docker compose logs -f proleague-ingest
+
+# Verify rows in Postgres:
+docker compose exec postgres sh -lc \
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT player_id, name, scraped_at FROM player_stats ORDER BY name LIMIT 5;"'
+
+# Verify the API endpoint (instant — reads from DB):
+curl -s http://localhost:8080/api/player-stats/squad | python -m json.tool
+
+# Browser:
+open http://localhost:8080/player-stats
 ```
 
-Normative details: `specs/001-synthetic-fan-events/` (v1), `specs/002-match-calendar-events/` (v2), `specs/003-ndjson-v3-retail-sim/` (v3), `specs/004-unified-synthetic-stream/` (unified stream), `specs/005-compose-kafka-pipeline/` (Compose / ingest). Governance: [.specify/memory/constitution.md](.specify/memory/constitution.md).
+To force an immediate re-scrape outside the 24-hour window:
 
+```bash
+docker compose restart proleague-scheduler
+```
+
+## API
+
+The Compose **`llm-api`** service runs `python -m llm_api.app` from `src\llm_api\`. It serves both the browser UI and the JSON API.
+
+Current provider support:
+
+| Provider | How it is configured |
+|----------|----------------------|
+| Ollama | Default provider via `OLLAMA_URL`, `OLLAMA_MODEL`, and `OLLAMA_TIMEOUT` |
+| OpenRouter | Optional provider via `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, `OPENROUTER_MODEL`, and `OPENROUTER_TIMEOUT` |
+
+Runtime config is persisted through `LLM_CONFIG_PATH` in Compose (`/data/llm_config.json` on the named volume).
+
+**Schema context for Text-to-SQL.** The API merges dbt YAML column documentation (staging, intermediate, marts) into the SQL-generation prompt. The Docker image sets `DBT_MODELS_DIR` to a baked copy of `dbt\models\staging`, `intermediate`, and `marts`. On the host, set `DBT_MODELS_DIR` to `.\dbt\models` (or use comma-separated `SCHEMA_FILES`, or a single `SCHEMA_FILE`). Optional: `DBT_RELATION_SCHEMA` (default `dbt_dev`, matching `llm_reader` search_path), `SCHEMA_CONTEXT_MAX_CHARS`, and `SCHEMA_CONTEXT_OVERFLOW` (`error` or `truncate`). See `.env.example`.
+
+### Run it in Compose
+
+1. Copy `.env.example` to `.env`.
+2. Change `LLM_READER_PASSWORD` in `.env` if you do not want the documented dev-only default.
+3. Start the stack with `docker compose up -d`.
+4. If you use Ollama, pull the default model on the host: `ollama pull gemma4:e2b`.
+5. Wait for `dbt-scheduler` to materialize the marts: `docker compose logs -f dbt-scheduler`.
+
+Then open the UI at <http://localhost:8080> or call the API directly:
+
+```bash
+curl -s -X POST http://localhost:8080/api/ask -H "Content-Type: application/json" -d "{\"question\":\"Who are the top 5 fans by total spend?\"}"
+```
+
+### Run it on the host
+
+```bash
+uv sync --extra api
+uv run python -m llm_api.app
+```
+
+### Routes
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/` | Main chat UI |
+| `GET` | `/leaderboard` | Leaderboard page |
+| `GET` | `/player-stats` | Player stats comparison page |
+| `GET` | `/settings` | Settings page |
+| `GET` | `/health` | Health check |
+| `GET` | `/api/leaderboard?window=all` | Live all-time fan leaderboard from `mart_fan_loyalty` |
+| `GET` | `/api/llm-config` | Read public runtime config |
+| `PUT` | `/api/llm-config` | Persist runtime config changes |
+| `POST` | `/api/ask` | Question to SQL to answer flow |
+| `GET` | `/api/player-stats/squad` | Club Brugge squad + stats from `public.player_stats` (DB read) |
+| `GET` | `/api/player-stats/player?url=<url>` | Live single-player fetch via `proleague-scraper` |
+| `GET` | `/api/player-stats/image?url=<url>` | Server-side image proxy for approved league CDNs (`*.proleague.be`, `statics-maker.llt-services.com`) |
+
+The API executes read-only `SELECT` / `WITH ... SELECT` queries only, wraps results in an outer `LIMIT 50`, and sets `statement_timeout` to 10 seconds on each DB session.
+
+The chat UI also sends a small slice of recent successful turns with each new `/api/ask` request so follow-up questions like "these fans", "them", or "that match" stay scoped to the previous result set instead of silently broadening back to the full table.
+
+`GET /api/leaderboard` uses the same read-only Postgres DSN (`LLM_READER_DATABASE_URL`, falling back to `DATABASE_URL`) as the Text-to-SQL API. In v1 it supports `window=all` only and ranks fans from `dbt_dev.mart_fan_loyalty` with:
+
+```text
+points = ROUND(
+    CASE WHEN matches_attended > 0 THEN 1000 ELSE 0 END
+    + 150 * matches_attended
+    + total_spend
+    + 5 * merch_purchase_count
+    + 5 * retail_purchase_count
+)::bigint
+```
+
+Tie-breakers are `points DESC`, `matches_attended DESC`, `total_spend DESC`, and `fan_id ASC`. Referral/community-engagement metrics are not tracked yet, so the leaderboard returns `null` for those values instead of inventing them.
+
+`GET /api/player-stats/squad` reads directly from `public.player_stats` via psycopg2 (no synchronous scrape on page load). Returns `{"players": [], "fetched_at": ""}` until the first daily scrape cycle completes.
+
+## dbt and analytics
+
+The repository includes a dbt project in `dbt\` and a scheduled Compose runner in the `dbt-scheduler` service.
+
+Host-side setup:
+
+```bash
+uv sync --group dbt
+uv run --env-file .env dbt debug --project-dir . --profiles-dir dbt
+uv run --env-file .env dbt run --project-dir . --profiles-dir dbt --select +mart_fan_loyalty
+```
+
+Windows note: follow the guidance in `.env.example` and prefer **`uv run dbt ...`** over a bare `dbt ...` command if your global `dbt` points at dbt Fusion.
+
+Relevant analytics assets:
+
+| Asset | Path |
+|-------|------|
+| dbt project config | `dbt_project.yml` |
+| Host profiles | `dbt\profiles.yml` and `dbt\profiles.yml.example` |
+| Loyalty mart SQL | `dbt\models\marts\mart_fan_loyalty.sql` |
+| dbt schema docs (marts + upstream YAML) | `dbt\models\marts\schema.yml` and `dbt\models\**\*_schema.yaml` (used by `llm_api` / `DBT_MODELS_DIR`) |
+
+## Development and test
+
+From the repository root:
+
+```bash
+uv run pytest
+uv run ruff check .
+```
+
+Helpful smoke checks while editing docs or workflows:
+
+```bash
+uv run fan_events --help
+uv run fan_ingest --help
+```
+
+The test suite (311 tests) covers `fan_events`, `fan_ingest`, `proleague_scraper`, `proleague_ingest.consumer`, `llm_api`, and dbt-adjacent contracts. All tests run without network access or a live Kafka/Postgres instance; scraper and Kafka tests use local HTML/JSON fixtures and mocked producers.
+
+## Troubleshooting
+
+| Problem | What to check |
+|---------|---------------|
+| `fan_events stream --kafka-topic ...` fails immediately | Install the Kafka extra first: `uv sync --extra kafka` |
+| Host `fan_ingest` cannot connect to Kafka | Use `localhost:9092`, not `broker:29092` |
+| Compose services cannot connect to Kafka | Inside Compose, use `broker:29092`, not `localhost:9092` |
+| Host Postgres client cannot connect | Use `localhost:<POSTGRES_PORT>` from `.env`, not `postgres:5432` |
+| `llm-api` returns provider errors | Verify Ollama is running on the host or that OpenRouter keys/model access are configured |
+| dbt on Windows fails with Postgres DLL issues | Use `uv sync --group dbt` and `uv run dbt ...` rather than a global `dbt` binary |
+| You want only one calendar pass from `stream` | Add `--no-calendar-loop` |
+| `/player-stats` page shows no players | The first scrape hasn't completed yet; check `docker compose logs proleague-scheduler` and wait |
+| Player images do not load | Images are proxied through `/api/player-stats/image`; check `docker compose logs llm-api` for proxy errors |
+| `proleague-scheduler` fails with HTTP errors | proleague.be may be temporarily unreachable; the scheduler logs the error and retries at the next interval |
+| Player data is stale | Restart `proleague-scheduler` to trigger an immediate re-scrape: `docker compose restart proleague-scheduler` |
+
+## Specs and links
+
+Use these documents when you need deeper detail than the README:
+
+| Topic | Path | Notes |
+|-------|------|-------|
+| v1 rolling NDJSON contract | [`specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md`](specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md) | Normative v1 schema and ordering rules |
+| v2 calendar quick start | [`specs/002-match-calendar-events/quickstart.md`](specs/002-match-calendar-events/quickstart.md) | Current calendar-driven generator walkthrough |
+| v3 retail quick start | [`specs/003-ndjson-v3-retail-sim/quickstart.md`](specs/003-ndjson-v3-retail-sim/quickstart.md) | Current retail generator walkthrough |
+| Unified stream quick start | [`specs/004-unified-synthetic-stream/quickstart.md`](specs/004-unified-synthetic-stream/quickstart.md) | Current `stream` examples |
+| Compose pipeline quick start | [`specs/005-compose-kafka-pipeline/quickstart.md`](specs/005-compose-kafka-pipeline/quickstart.md) | Full Docker operator flow |
+| Match-day retail stream details | [`specs/006-stream-three-event-kinds/contracts/cli-match-day-flags-006.md`](specs/006-stream-three-event-kinds/contracts/cli-match-day-flags-006.md) | Extra `stream` retail-tuning flags |
+| Stream duration and `t0` details | [`specs/006-stream-three-event-kinds/contracts/cli-stream-006-supplement.md`](specs/006-stream-three-event-kinds/contracts/cli-stream-006-supplement.md) | Post-merge duration semantics |
+| Governance | [`.specify/memory/constitution.md`](.specify/memory/constitution.md) | Repo process and conventions |
+
+The historical quickstart under `specs/001-synthetic-fan-events/quickstart.md` predates the consolidated `fan_events` CLI; use the commands in this README for current v1 invocation.
+
+No license file is currently present in the repository root.

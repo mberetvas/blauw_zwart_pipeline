@@ -4,6 +4,9 @@
 #   uv run dbt debug
 # If your cwd is dbt/, use: uv run dbt debug --project-dir ..
 #
+# Windows: avoid bare `dbt` when it resolves to dbt-fusion (Rust); use `uv run dbt` so dbt-core +
+# dbt-postgres (psycopg2) runs — Fusion often hits "LoadLibraryExW failed" on Postgres.
+#
 # Point dbt at this directory (no inline # comments on the same line as the path in .env):
 #   PowerShell:  $env:DBT_PROFILES_DIR = "$PWD\dbt"
 #   bash:        export DBT_PROFILES_DIR="$(pwd)/dbt"

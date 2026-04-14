@@ -1,0 +1,157 @@
+version: 2
+
+models:
+  - name: mart_fan_loyalty
+    description: >
+      Fan loyalty mart: one row per fan with lifetime spend and match-attendance
+      metrics aggregated from all three event streams (merch_purchase,
+      retail_purchase, ticket_scan). Materialised as an incremental table:
+      on each dbt run only fans with new source events (ingested after
+      last_updated_at) are reprocessed; use `dbt run --full-refresh` to
+      rebuild from scratch. Use this table to answer questions such as
+      "Who are the top spenders?", "Which fans attend the most matches?",
+      "What is the most popular merchandise item?", or
+      "Which retail shop generates the most revenue?".
+      All monetary amounts are in euros (EUR).
+    config:
+      materialized: table
+      tags: [mart, fan_loyalty]
+    columns:
+      - name: fan_id
+        description: >
+          Unique synthetic fan identifier (e.g. "fan_00042"). Primary key of this
+          mart. Use this to count fans, rank them, or filter to a specific fan.
+        data_type: text
+        tests:
+          - not_null
+          - unique
+
+      - name: merch_purchase_count
+        description: >
+          Number of merchandise purchase transactions made at the stadium
+          (event_type = merch_purchase). A fan with 0 has never bought merch.
+        data_type: bigint
+        tests:
+          - not_null
+
+      - name: merch_total_spend
+        description: >
+          Total euros spent on stadium merchandise across all matches.
+          Includes all items: scarves, shirts, posters, etc.
+        data_type: numeric
+        tests:
+          - not_null
+
+      - name: favourite_merch_item
+        description: >
+          The most frequently purchased merchandise item (e.g. "scarf", "shirt",
+          "poster"). NULL when the fan has no merch purchases.
+        data_type: text
+
+      - name: retail_purchase_count
+        description: >
+          Number of retail purchase transactions via non-match channels
+          (event_type = retail_purchase). Includes online and physical shops.
+        data_type: bigint
+        tests:
+          - not_null
+
+      - name: retail_total_spend
+        description: >
+          Total euros spent through retail channels (jan_breydel_fan_shop,
+          webshop, bruges_city_shop). Does not include stadium merch.
+        data_type: numeric
+        tests:
+          - not_null
+
+      - name: favourite_retail_item
+        description: >
+          Most frequently purchased retail item across all non-match channels.
+          NULL when the fan has no retail purchases.
+        data_type: text
+
+      - name: favourite_shop
+        description: >
+          The retail shop where the fan shops most often: "jan_breydel_fan_shop",
+          "webshop", or "bruges_city_shop". NULL if no retail purchases.
+        data_type: text
+
+      - name: total_spend
+        description: >
+          Combined lifetime spend in euros: merch_total_spend + retail_total_spend.
+          This is the best column for ranking fans by overall value or identifying
+          the biggest spenders. A higher value means a more engaged, high-value fan.
+        data_type: numeric
+        tests:
+          - not_null
+
+      - name: matches_attended
+        description: >
+          Number of distinct matches the fan physically attended, measured by
+          ticket_scan events. A value of 0 means the fan has never scanned a
+          ticket (may still have made online purchases).
+        data_type: bigint
+        tests:
+          - not_null
+
+      - name: first_match_attended
+        description: >
+          UTC timestamp of the fan's very first ticket scan (earliest match they
+          ever attended). NULL if matches_attended = 0.
+        data_type: timestamp with time zone
+
+      - name: last_match_attended
+        description: >
+          UTC timestamp of the fan's most recent ticket scan (latest match they
+          attended). NULL if matches_attended = 0. Useful for identifying fans
+          who haven't visited recently (churned) vs. frequent recent attendees.
+        data_type: timestamp with time zone
+
+      - name: last_updated_at
+        description: >
+          Watermark: the maximum ingested_at timestamp across all source records
+          (merch_purchase, retail_purchase, match_events) for this fan.
+          Used internally by dbt to identify which fans need reprocessing on the
+          next incremental run. Not directly useful for end-user Q&A.
+        data_type: timestamp with time zone
+
+  - name: mart_player_season_summary
+    description: >
+      Pro League player season summary mart: one row per player with flattened profile fields,
+      pivoted competition statistics (goals, assists, minutes, passing, duels, defensive and
+      goalkeeper metrics where present), and derived rates (per 90, pass accuracy, duel win %).
+      Built from int_player_profile and int_player_stat_lines. Prefer this table over raw JSON
+      staging for rankings, filters, and aggregates. Refreshed as a table on each dbt run.
+    config:
+      tags: [mart, player_stats, proleague]
+    columns:
+      - name: player_id
+        description: Pro League site player identifier (primary key of this mart).
+        data_type: text
+        tests:
+          - not_null
+          - unique
+      - name: slug
+        data_type: text
+        tests:
+          - not_null
+      - name: name
+        data_type: text
+        tests:
+          - not_null
+      - name: competition
+        data_type: text
+      - name: goals
+        data_type: numeric
+      - name: assists
+        data_type: numeric
+      - name: minutes_played
+        data_type: numeric
+      - name: pass_accuracy_pct
+        data_type: numeric
+      - name: goals_per_90
+        data_type: numeric
+      - name: scraped_at
+        data_type: timestamp with time zone
+        tests:
+          - not_null

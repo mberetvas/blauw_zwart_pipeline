@@ -74,6 +74,9 @@ db.sqlite3-journal
 instance/
 .webassets-cache
 
+# LLM API persisted settings (may contain API keys; optional local path)
+src/llm_api/llm_config.json
+
 # Scrapy stuff:
 .scrapy
 

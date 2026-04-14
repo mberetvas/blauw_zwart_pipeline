@@ -21,7 +21,8 @@ Progress logging (optional)
 ---------------------------
 Set ``FAN_EVENTS_KAFKA_PROGRESS_INTERVAL`` to a positive integer to log a summary every *N*
 successful deliveries (default **256** when unset). Use ``0`` to disable progress INFO lines.
-CLI/tests may pass ``progress_interval=…`` to :class:`KafkaSink` explicitly; that overrides the env var.
+CLI/tests may pass ``progress_interval=…`` to :class:`KafkaSink` explicitly; that overrides
+the env var.
 
 Message key
 -----------
