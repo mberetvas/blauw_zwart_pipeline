@@ -421,7 +421,7 @@ def _sample_leaderboard_rows() -> list[dict[str, object]]:
         {
             "rank": 1,
             "fan_id": "fan_00002",
-            "points": 1550,
+            "points": 10560,
             "matches_attended": 10,
             "total_spend": Decimal("520.25"),
             "merch_purchase_count": 3,
@@ -430,7 +430,7 @@ def _sample_leaderboard_rows() -> list[dict[str, object]]:
         {
             "rank": 2,
             "fan_id": "fan_00003",
-            "points": 1490,
+            "points": 9605,
             "matches_attended": 9,
             "total_spend": Decimal("575.10"),
             "merch_purchase_count": 4,
@@ -439,7 +439,7 @@ def _sample_leaderboard_rows() -> list[dict[str, object]]:
         {
             "rank": 3,
             "fan_id": "fan_00001",
-            "points": 1310,
+            "points": 8490,
             "matches_attended": 8,
             "total_spend": Decimal("470.00"),
             "merch_purchase_count": 2,
@@ -450,8 +450,7 @@ def _sample_leaderboard_rows() -> list[dict[str, object]]:
 
 def test_leaderboard_points_sql_is_attendance_first(llm_app_module) -> None:
     assert llm_app_module._leaderboard_points_sql("loyalty") == (
-        "ROUND(CASE WHEN loyalty.matches_attended > 0 THEN 1000 ELSE 0 END + "
-        "150 * loyalty.matches_attended + loyalty.total_spend + "
+        "ROUND(1000 * loyalty.matches_attended + loyalty.total_spend + "
         "5 * loyalty.merch_purchase_count + 5 * loyalty.retail_purchase_count)::bigint"
     )
 
@@ -484,7 +483,7 @@ def test_build_leaderboard_payload_shapes_rankings(
             "merch_purchase_count": 4,
             "retail_purchase_count": 2,
             "last_purchased_item": "Home shirt",
-            "points": 1490,
+            "points": 9605,
         },
     )
     monkeypatch.setattr(
@@ -530,7 +529,7 @@ def test_leaderboard_route_returns_json_payload(
                     "rank": 1,
                     "fan_id": "fan_00002",
                     "display_name": "Fan 00002",
-                    "points": 1550,
+                    "points": 10560,
                     "matches_attended": 10,
                     "total_spend": Decimal("520.25"),
                     "merch_purchase_count": 3,
@@ -542,7 +541,7 @@ def test_leaderboard_route_returns_json_payload(
                     "rank": 1,
                     "fan_id": "fan_00002",
                     "display_name": "Fan 00002",
-                    "points": 1550,
+                    "points": 10560,
                     "matches_attended": 10,
                     "total_spend": Decimal("520.25"),
                     "merch_purchase_count": 3,
@@ -552,7 +551,7 @@ def test_leaderboard_route_returns_json_payload(
             "fan_of_the_month": {
                 "fan_id": "fan_00002",
                 "display_name": "Fan 00002",
-                "points": 1550,
+                "points": 10560,
                 "matches_attended": 10,
                 "total_spend": Decimal("520.25"),
                 "merch_purchase_count": 3,

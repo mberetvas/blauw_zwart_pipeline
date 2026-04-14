@@ -59,19 +59,15 @@ KNOWN_PROVIDERS: frozenset[str] = frozenset({"ollama", "openrouter"})
 _PROVIDER_DISPLAY = {"ollama": "Ollama", "openrouter": "OpenRouter"}
 LEADERBOARD_SUPPORTED_WINDOWS: frozenset[str] = frozenset({"all", "month", "season"})
 LEADERBOARD_LIMIT = 25
-LEADERBOARD_ATTENDANCE_BONUS = 1000
-LEADERBOARD_MATCH_POINTS = 150
+LEADERBOARD_MATCH_POINTS = 1000
 LEADERBOARD_PURCHASE_POINTS = 5
 LEADERBOARD_POINTS_FORMULA_TEMPLATE = (
-    "ROUND(CASE WHEN {matches_attended} > 0 THEN "
-    f"{LEADERBOARD_ATTENDANCE_BONUS} ELSE 0 END + "
-    f"{LEADERBOARD_MATCH_POINTS} * {{matches_attended}} + {{total_spend}} "
+    f"ROUND({LEADERBOARD_MATCH_POINTS} * {{matches_attended}} + {{total_spend}} "
     f"+ {LEADERBOARD_PURCHASE_POINTS} * {{merch_purchase_count}} "
     f"+ {LEADERBOARD_PURCHASE_POINTS} * {{retail_purchase_count}})::bigint"
 )
 LEADERBOARD_POINTS_FORMULA_TEXT = (
-    f"{LEADERBOARD_ATTENDANCE_BONUS:,} attendance bonus + "
-    f"{LEADERBOARD_MATCH_POINTS} x matches + spend + "
+    f"{LEADERBOARD_MATCH_POINTS:,} x matches + spend + "
     f"{LEADERBOARD_PURCHASE_POINTS} x merch + {LEADERBOARD_PURCHASE_POINTS} x retail"
 )
 LEADERBOARD_TIE_BREAKERS = [
