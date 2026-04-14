@@ -158,6 +158,12 @@ tailwind.config = {
   .msg.assistant .markdown-body a{color:#548dff;text-decoration:underline;word-break:break-word}
   .msg.assistant .markdown-body blockquote{margin:.75rem 0;padding:.75rem 1rem;border-radius:.35rem;background:rgba(23,31,51,.95);color:#c2c6d8;outline:1px solid rgba(255,255,255,.06);outline-offset:-1px}
   .msg.assistant .markdown-body strong{color:#dae2fd;font-weight:700}
+  /* ── Collapsible sidebar (md+) ───────────────────────── */
+  #app-sidebar{transition:transform .2s ease,opacity .2s ease}
+  @media (min-width:768px){
+    #shell[data-sidebar="collapsed"] #app-sidebar{transform:translateX(-100%);opacity:0;pointer-events:none}
+    #shell[data-sidebar="collapsed"] #main-chat{margin-left:0!important}
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
@@ -166,7 +172,14 @@ tailwind.config = {
 
 <!-- ── Top Navigation ─────────────────────────────────────────── -->
 <header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 bg-surface-container-low no-line-rule">
-  <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline">CLUB BRUGGE AI</div>
+  <div class="flex items-center gap-2 min-w-0">
+    <button type="button" id="sidebar-toggle"
+      class="hidden md:inline-flex shrink-0 items-center justify-center w-10 h-10 rounded-xl text-primary hover:bg-surface-container-highest transition-colors"
+      aria-controls="app-sidebar" aria-expanded="true" aria-label="Collapse navigation sidebar">
+      <span class="material-symbols-outlined text-2xl" id="sidebar-toggle-icon" aria-hidden="true">chevron_left</span>
+    </button>
+    <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline truncate">CLUB BRUGGE AI</div>
+  </div>
   <nav class="hidden md:flex gap-8">
     <a href="/" class="font-headline tracking-wide uppercase font-bold text-primary border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors">Data Q&amp;A</a>
     <a href="/player-stats" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Player Stats</a>
@@ -175,8 +188,24 @@ tailwind.config = {
   <button class="material-symbols-outlined text-[#0572FF]" aria-label="Account">account_circle</button>
 </header>
 
+<!-- ── Main Layout (sidebar + chat) ───────────────────────────── -->
+<div id="shell" class="flex h-screen pt-[72px]" data-sidebar="expanded">
+<script>
+(function () {
+  var sh = document.getElementById("shell");
+  if (!sh) return;
+  try {
+    if (localStorage.getItem("cb_chat_sidebar_collapsed") === "1") {
+      sh.setAttribute("data-sidebar", "collapsed");
+    }
+  } catch (_) {}
+})();
+</script>
+
 <!-- ── Sidebar (desktop) ──────────────────────────────────────── -->
-<aside class="fixed left-0 top-0 h-full w-64 bg-surface-container-low hidden md:flex flex-col py-8 px-4 gap-6 z-40 no-line-rule">
+<aside id="app-sidebar"
+  class="fixed left-0 top-0 h-full w-64 bg-surface-container-low hidden md:flex flex-col py-8 px-4 gap-6 z-40 no-line-rule md:translate-x-0"
+  aria-label="Primary navigation">
   <div class="mt-16 flex items-center gap-4 px-2">
     <div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-primary">
       <span class="material-symbols-outlined text-2xl" style="font-variation-settings:'FILL' 1">stadium</span>
@@ -215,13 +244,11 @@ tailwind.config = {
   </div>
 </aside>
 
-<!-- ── Main Layout ────────────────────────────────────────────── -->
-<div class="flex h-screen pt-[72px]">
-  <main class="flex-1 ml-0 md:ml-64 flex flex-col bg-surface relative overflow-hidden" aria-label="Chat interface">
+  <main id="main-chat" class="flex-1 ml-0 md:ml-64 flex flex-col bg-surface relative overflow-hidden transition-[margin-left] duration-200 ease-out" aria-label="Chat interface">
 
     <!-- ── Message thread ──────────────────────────────────────── -->
     <div id="messages"
-      class="flex-1 overflow-y-auto px-4 md:px-8 py-8 md:py-10 flex flex-col gap-8 md:gap-11 max-w-4xl w-full mx-auto md:mx-0 md:ml-6 lg:ml-10 md:mr-6 xl:mr-14 pb-56 md:pb-52"
+      class="flex-1 overflow-y-auto px-4 md:px-8 py-8 md:py-10 flex flex-col gap-8 md:gap-11 max-w-4xl w-full mx-auto pb-56 md:pb-52"
       role="main" aria-label="Conversation history">
 
       <!-- Static welcome (mirrored in WELCOME_HTML JS template) -->
@@ -243,7 +270,7 @@ tailwind.config = {
 
     <!-- ── Fixed input area ────────────────────────────────────── -->
     <div class="absolute bottom-0 left-0 w-full pb-16 md:pb-0 bg-gradient-to-t from-surface via-surface to-transparent">
-      <div class="max-w-4xl w-full mx-auto md:mx-0 md:ml-6 lg:ml-10 md:mr-6 xl:mr-14 px-4 md:px-8 pt-6 md:pt-10 pb-5">
+      <div class="max-w-4xl w-full mx-auto px-4 md:px-8 pt-6 md:pt-10 pb-5">
 
         <!-- LLM provider / model row -->
         <div id="llm-settings" class="flex items-center gap-3 flex-wrap mb-4">
@@ -335,6 +362,47 @@ tailwind.config = {
   const statusEl   = document.getElementById("status");
   const form       = document.getElementById("composer");
   const bottomChips = document.getElementById("bottom-chips");
+  const shellEl = document.getElementById("shell");
+  const sidebarEl = document.getElementById("app-sidebar");
+  const sidebarToggle = document.getElementById("sidebar-toggle");
+  const sidebarToggleIcon = document.getElementById("sidebar-toggle-icon");
+  const LS_SIDEBAR = "cb_chat_sidebar_collapsed";
+
+  function updateSidebarToggleUi() {
+    const collapsed = shellEl && shellEl.getAttribute("data-sidebar") === "collapsed";
+    if (sidebarToggle) {
+      sidebarToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      sidebarToggle.setAttribute(
+        "aria-label",
+        collapsed ? "Expand navigation sidebar" : "Collapse navigation sidebar"
+      );
+    }
+    if (sidebarToggleIcon) {
+      sidebarToggleIcon.textContent = collapsed ? "chevron_right" : "chevron_left";
+    }
+    if (sidebarEl) {
+      const desktop = window.matchMedia("(min-width:768px)").matches;
+      if (!desktop) {
+        sidebarEl.setAttribute("aria-hidden", "true");
+      } else {
+        sidebarEl.setAttribute("aria-hidden", collapsed ? "true" : "false");
+      }
+    }
+  }
+
+  updateSidebarToggleUi();
+  if (sidebarToggle && shellEl) {
+    sidebarToggle.addEventListener("click", function () {
+      const collapsed = shellEl.getAttribute("data-sidebar") === "collapsed";
+      const next = !collapsed;
+      shellEl.setAttribute("data-sidebar", next ? "collapsed" : "expanded");
+      try {
+        localStorage.setItem(LS_SIDEBAR, next ? "1" : "0");
+      } catch (_) {}
+      updateSidebarToggleUi();
+    });
+  }
+  window.matchMedia("(min-width:768px)").addEventListener("change", updateSidebarToggleUi);
 
   let busy = false;
   let abortCtrl = null;

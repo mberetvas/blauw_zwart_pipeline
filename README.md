@@ -1,4 +1,4 @@
-![Blauw zwart - Synthetic Fan Data Platform](banner_v2.jpg)
+![Blauw zwart - Synthetic Fan Data Platform](assets/banner_v2.jpg)
 
 # Blauw zwart - Mock-up data creator
 
