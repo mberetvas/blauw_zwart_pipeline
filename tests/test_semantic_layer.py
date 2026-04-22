@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -85,8 +84,9 @@ def clear_semantic_env(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_load_happy_path_returns_expected_keys(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from llm_api import semantic_layer  # noqa: PLC0415  (import inside test intentional)
     import importlib
+
+    from llm_api import semantic_layer  # noqa: PLC0415  (import inside test intentional)
     importlib.reload(semantic_layer)
 
     yaml_file = _write_valid_yaml(tmp_path / "semantic_layer.yml")
@@ -105,6 +105,7 @@ def test_load_missing_explicit_file_raises(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import importlib
+
     from llm_api import semantic_layer
     importlib.reload(semantic_layer)
 
@@ -121,6 +122,7 @@ def test_load_missing_default_file_returns_empty_gracefully(
 ) -> None:
     """When SEMANTIC_LAYER_FILE is not set and the default file is absent, return {}."""
     import importlib
+
     from llm_api import semantic_layer
     importlib.reload(semantic_layer)
 
@@ -141,6 +143,7 @@ def test_load_bad_yaml_raises(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import importlib
+
     from llm_api import semantic_layer
     importlib.reload(semantic_layer)
 
@@ -157,6 +160,7 @@ def test_load_wrong_version_raises(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import importlib
+
     from llm_api import semantic_layer
     importlib.reload(semantic_layer)
 
@@ -173,6 +177,7 @@ def test_load_non_mapping_top_level_raises(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import importlib
+
     from llm_api import semantic_layer
     importlib.reload(semantic_layer)
 
@@ -193,6 +198,7 @@ def test_build_sql_context_contains_mart_and_rules(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import importlib
+
     from llm_api import semantic_layer
     importlib.reload(semantic_layer)
 
@@ -213,6 +219,7 @@ def test_build_sql_context_contains_mart_and_rules(
 
 def test_build_sql_context_empty_layer_returns_empty() -> None:
     import importlib
+
     from llm_api import semantic_layer
     importlib.reload(semantic_layer)
 
@@ -227,6 +234,7 @@ def test_build_answer_context_contains_units_and_rules(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import importlib
+
     from llm_api import semantic_layer
     importlib.reload(semantic_layer)
 
@@ -244,6 +252,7 @@ def test_build_answer_context_contains_units_and_rules(
 
 def test_build_answer_context_empty_layer_returns_empty() -> None:
     import importlib
+
     from llm_api import semantic_layer
     importlib.reload(semantic_layer)
 
@@ -258,6 +267,7 @@ def test_semantic_context_max_chars_truncates(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import importlib
+
     from llm_api import semantic_layer
     importlib.reload(semantic_layer)
 

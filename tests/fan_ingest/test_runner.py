@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -126,7 +126,10 @@ def test_parse_skip_log_includes_error_detail(caplog: pytest.LogCaptureFixture) 
         with caplog.at_level(logging.WARNING, logger="fan_ingest.runner"):
             _run_until_idle(runtime)
 
-        assert any("ingest_parse_skip" in r.message and "error=" in r.message for r in caplog.records)
+        assert any(
+            "ingest_parse_skip" in r.message and "error=" in r.message
+            for r in caplog.records
+        )
     finally:
         loop.call_soon_threadsafe(loop.stop)
         loop_thread.join(timeout=3)
