@@ -21,6 +21,7 @@ Synthetic fan-event pipeline for Club Brugge KV simulations. The package name in
 ## Table of contents
 
 - [Overview](#overview)
+- [How the Data Q&A AI works](#how-the-data-qa-ai-works)
 - [LLM front end screenshots](#llm-front-end-screenshots)
 - [Prerequisites](#prerequisites)
 - [Install](#install)
@@ -57,6 +58,24 @@ For how those services connect and how events move through Kafka and Postgres in
 | `generate_events` | v1 rolling-window events, or v2 calendar-driven match events | [`specs/002-match-calendar-events/quickstart.md`](specs/002-match-calendar-events/quickstart.md) |
 | `generate_retail` | v3 retail-only NDJSON | [`specs/003-ndjson-v3-retail-sim/quickstart.md`](specs/003-ndjson-v3-retail-sim/quickstart.md) |
 | `stream` | Unified v2/v3 stream to stdout, file, or Kafka | [`specs/004-unified-synthetic-stream/quickstart.md`](specs/004-unified-synthetic-stream/quickstart.md) |
+
+## How the Data Q&A AI works
+
+The **Data Q&A** page (home **`/`** in the `llm-api` UI) answers questions in plain language about your fan and match analytics. You do not need to read the rest of this repository to understand the idea.
+
+**What you do:** type a question (for example about attendance, spend, or segments) and send it. The UI may show your message, a short “thinking” state, then a written answer. You can open sections to inspect the **SQL** and **data rows** used for that answer.
+
+**What happens behind the scenes:**
+
+1. **Your question reaches the app** — along with your chosen AI provider/model and a small slice of recent chat so follow-ups stay in context.
+2. **The app asks an AI to propose a database query** — it passes a description of your tables/columns and short business definitions (metrics like “attendance” or “season”) so the model outputs **one read-only lookup** (a `SELECT`-style query).
+3. **The app checks and runs that query safely** — only read-only SQL is allowed; it runs against Postgres with row and time limits so the database stays protected.
+4. **The app asks the AI again to explain the results** — your original question plus the **actual result rows** are sent to the model, which writes the **natural-language answer** (markdown, tables, lists).
+5. **The answer appears in the browser** — technical details (SQL and preview rows) can arrive first; the explanation may **stream** in as it is generated.
+
+**In one sentence:** *English question → AI suggests SQL → app runs it on your data → AI turns the rows into a readable answer*, with guardrails so data stays read-only and bounded.
+
+For endpoints, prompts, and streaming details, see [LLM chat architecture (developers)](#llm-chat-architecture-developers).
 
 ## Prerequisites
 
@@ -502,6 +521,8 @@ The API executes read-only `SELECT` / `WITH ... SELECT` queries only, wraps resu
 The chat UI also sends a small slice of recent successful turns with each new `/api/ask` request so follow-up questions like "these fans", "them", or "that match" stay scoped to the previous result set instead of silently broadening back to the full table.
 
 ### LLM chat architecture (developers)
+
+For a short, non-technical summary of the same flow, see [How the Data Q&A AI works](#how-the-data-qa-ai-works).
 
 The main chat page is **`GET /`**, served from `src/llm_api/static/index.html`. The browser uses **`POST /api/ask/stream`** with `Accept: text/event-stream` and parses Server-Sent Events (`meta`, `answer_delta`, `done`, or `error`). The non-streaming **`POST /api/ask`** endpoint runs the same server-side pipeline and returns one JSON payload (useful for scripts and `curl`).
 
