@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from proleague_scraper.scheduler import _SCHEMA_VERSION, _EVENT_TYPE, build_envelope, run_once
-
+from proleague_scraper.scheduler import _EVENT_TYPE, _SCHEMA_VERSION, build_envelope, run_once
 
 # ---------------------------------------------------------------------------
 # build_envelope
@@ -32,21 +31,37 @@ def _sample_player(player_id: str = "3219") -> dict:
 
 class TestBuildEnvelope:
     def test_returns_bytes(self):
-        raw = build_envelope(_sample_player(), source_url="https://example.com", scraped_at="2026-01-01T00:00:00Z")
+        raw = build_envelope(
+            _sample_player(),
+            source_url="https://example.com",
+            scraped_at="2026-01-01T00:00:00Z",
+        )
         assert isinstance(raw, bytes)
 
     def test_valid_json(self):
-        raw = build_envelope(_sample_player(), source_url="https://x.be", scraped_at="2026-01-01T00:00:00Z")
+        raw = build_envelope(
+            _sample_player(),
+            source_url="https://x.be",
+            scraped_at="2026-01-01T00:00:00Z",
+        )
         obj = json.loads(raw.decode())
         assert isinstance(obj, dict)
 
     def test_schema_version(self):
-        raw = build_envelope(_sample_player(), source_url="https://x.be", scraped_at="2026-01-01T00:00:00Z")
+        raw = build_envelope(
+            _sample_player(),
+            source_url="https://x.be",
+            scraped_at="2026-01-01T00:00:00Z",
+        )
         obj = json.loads(raw)
         assert obj["_schema_version"] == _SCHEMA_VERSION
 
     def test_event_type(self):
-        raw = build_envelope(_sample_player(), source_url="https://x.be", scraped_at="2026-01-01T00:00:00Z")
+        raw = build_envelope(
+            _sample_player(),
+            source_url="https://x.be",
+            scraped_at="2026-01-01T00:00:00Z",
+        )
         obj = json.loads(raw)
         assert obj["event_type"] == _EVENT_TYPE
 

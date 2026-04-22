@@ -30,7 +30,7 @@ from typing import Any
 
 from confluent_kafka import Consumer, KafkaError, KafkaException
 
-from proleague_scraper.db import get_connection, upsert_players
+from proleague_scraper.db import upsert_players
 
 log = logging.getLogger("proleague_ingest.consumer")
 

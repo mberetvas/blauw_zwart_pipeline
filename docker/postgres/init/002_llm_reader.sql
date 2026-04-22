@@ -9,22 +9,18 @@
 \set llm_reader_password 'llm_reader_pass'
 \endif
 
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'llm_reader') THEN
-        EXECUTE format('CREATE ROLE llm_reader LOGIN PASSWORD %L', :'llm_reader_password');
-    ELSE
-        EXECUTE format('ALTER ROLE llm_reader PASSWORD %L', :'llm_reader_password');
-    END IF;
-END
-$$;
+SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'llm_reader') AS llm_reader_exists
+\gset
+\if :llm_reader_exists
+ALTER ROLE llm_reader WITH LOGIN PASSWORD :'llm_reader_password';
+\else
+CREATE ROLE llm_reader LOGIN PASSWORD :'llm_reader_password';
+\endif
 
 -- Allow connection to the application database.
-DO $$
-BEGIN
-    EXECUTE format('GRANT CONNECT ON DATABASE %I TO llm_reader', current_database());
-END
-$$;
+SELECT current_database() AS current_db
+\gset
+GRANT CONNECT ON DATABASE :"current_db" TO llm_reader;
 
 -- Pre-create the dbt target schema so grants work before dbt runs for the first time.
 CREATE SCHEMA IF NOT EXISTS dbt_dev;

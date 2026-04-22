@@ -21,6 +21,7 @@ Synthetic fan-event pipeline for Club Brugge KV simulations. The package name in
 ## Table of contents
 
 - [Overview](#overview)
+- [How the Data Q&A AI works](#how-the-data-qa-ai-works)
 - [LLM front end screenshots](#llm-front-end-screenshots)
 - [Prerequisites](#prerequisites)
 - [Install](#install)
@@ -29,6 +30,7 @@ Synthetic fan-event pipeline for Club Brugge KV simulations. The package name in
 - [Compose pipeline](#compose-pipeline)
 - [Player stats pipeline](#player-stats-pipeline)
 - [API](#api)
+- [LLM chat architecture (developers)](#llm-chat-architecture-developers)
 - [dbt and analytics](#dbt-and-analytics)
 - [Development and test](#development-and-test)
 - [Troubleshooting](#troubleshooting)
@@ -56,6 +58,24 @@ For how those services connect and how events move through Kafka and Postgres in
 | `generate_events` | v1 rolling-window events, or v2 calendar-driven match events | [`specs/002-match-calendar-events/quickstart.md`](specs/002-match-calendar-events/quickstart.md) |
 | `generate_retail` | v3 retail-only NDJSON | [`specs/003-ndjson-v3-retail-sim/quickstart.md`](specs/003-ndjson-v3-retail-sim/quickstart.md) |
 | `stream` | Unified v2/v3 stream to stdout, file, or Kafka | [`specs/004-unified-synthetic-stream/quickstart.md`](specs/004-unified-synthetic-stream/quickstart.md) |
+
+## How the Data Q&A AI works
+
+The **Data Q&A** page (home **`/`** in the `llm-api` UI) answers questions in plain language about your fan and match analytics. You do not need to read the rest of this repository to understand the idea.
+
+**What you do:** type a question (for example about attendance, spend, or segments) and send it. The UI may show your message, a short “thinking” state, then a written answer. You can open sections to inspect the **SQL** and **data rows** used for that answer.
+
+**What happens behind the scenes:**
+
+1. **Your question reaches the app** — along with your chosen AI provider/model and a small slice of recent chat so follow-ups stay in context.
+2. **The app asks an AI to propose a database query** — it passes a description of your tables/columns and short business definitions (metrics like “attendance” or “season”) so the model outputs **one read-only lookup** (a `SELECT`-style query).
+3. **The app checks and runs that query safely** — only read-only SQL is allowed; it runs against Postgres with row and time limits so the database stays protected.
+4. **The app asks the AI again to explain the results** — your original question plus the **actual result rows** are sent to the model, which writes the **natural-language answer** (markdown, tables, lists).
+5. **The answer appears in the browser** — technical details (SQL and preview rows) can arrive first; the explanation may **stream** in as it is generated.
+
+**In one sentence:** *English question → AI suggests SQL → app runs it on your data → AI turns the rows into a readable answer*, with guardrails so data stays read-only and bounded.
+
+For endpoints, prompts, and streaming details, see [LLM chat architecture (developers)](#llm-chat-architecture-developers).
 
 ## Prerequisites
 
@@ -135,6 +155,8 @@ For the full Compose walkthrough, use [`specs/005-compose-kafka-pipeline/quickst
 ## CLIs
 
 ### `fan_events`
+
+![fan_events CLI — help and examples](assets/cli_fan_events.png)
 
 Run subcommand help directly:
 
@@ -498,6 +520,63 @@ The API executes read-only `SELECT` / `WITH ... SELECT` queries only, wraps resu
 
 The chat UI also sends a small slice of recent successful turns with each new `/api/ask` request so follow-up questions like "these fans", "them", or "that match" stay scoped to the previous result set instead of silently broadening back to the full table.
 
+### LLM chat architecture (developers)
+
+For a short, non-technical summary of the same flow, see [How the Data Q&A AI works](#how-the-data-qa-ai-works).
+
+The main chat page is **`GET /`**, served from `src/llm_api/static/index.html`. The browser uses **`POST /api/ask/stream`** with `Accept: text/event-stream` and parses Server-Sent Events (`meta`, `answer_delta`, `done`, or `error`). The non-streaming **`POST /api/ask`** endpoint runs the same server-side pipeline and returns one JSON payload (useful for scripts and `curl`).
+
+**Server pipeline** (`_ask_run_through_execution` in `src/llm_api/app.py`, shared by both routes):
+
+1. Load **dbt schema YAML** context (`schema_context`) and optional **semantic layer** text for SQL and answer prompts.
+2. Append **conversation history** from the request (at most the last **3** turns; each turn may include up to **5** `data_preview` rows) into a `RECENT CONVERSATION CONTEXT` block so follow-ups stay scoped.
+3. **First LLM call** — non-streaming `complete(...)`: model returns a single PostgreSQL `SELECT` (or `WITH ... SELECT`).
+4. **Validate** SQL (reject mutating keywords); **execute** as `llm_reader` with an outer `LIMIT 50` and `statement_timeout` 10s.
+5. Build the **answer prompt** from the question, semantic answer hints, conversation block, and up to **10** result rows as JSON.
+6. **Second LLM call** — `/api/ask` uses `complete(...)` again; `/api/ask/stream` streams tokens via `_iter_answer_stream` (Ollama `stream: true` or OpenRouter `stream: true`) after the HTTP response has already begun.
+
+**Diagram A — prompt context and data path:**
+
+```mermaid
+flowchart LR
+  subgraph ctx["Prompt inputs"]
+    SCH["dbt schema YAML"]
+    SEM["Semantic layer optional"]
+    HIST["history max 3 turns"]
+    Q["User question"]
+  end
+  ctx --> L1["LLM: generate SQL"]
+  L1 --> V["Validate read-only SQL"]
+  V --> PG[("Postgres llm_reader")]
+  PG --> L2["LLM: Markdown answer from rows"]
+```
+
+**Diagram B — browser streaming sequence (`/api/ask/stream`):**
+
+```mermaid
+sequenceDiagram
+  participant B as Browser index.html
+  participant F as Flask llm_api.app
+  participant L as Ollama or OpenRouter
+  participant P as Postgres
+
+  B->>F: POST JSON question provider model history
+  F->>L: complete sql_prompt
+  L-->>F: SQL text
+  F->>F: strip fences validate SQL
+  F->>P: SELECT wrapped LIMIT 50
+  P-->>F: rows
+  F-->>B: SSE event meta sql data_preview trace
+  F->>L: streaming answer_prompt
+  loop fragments
+    L-->>F: token chunk
+    F-->>B: SSE event answer_delta
+  end
+  F-->>B: SSE event done
+```
+
+On the client, successful turns are stored in memory (`conversationTurns`); `buildHistoryPayload()` sends the last three turns with trimmed `data_preview` so the server-side limits stay aligned with `_normalise_conversation_history`.
+
 `GET /api/leaderboard` uses the same read-only Postgres DSN (`LLM_READER_DATABASE_URL`, falling back to `DATABASE_URL`) as the Text-to-SQL API. In v1 it supports `window=all` only and ranks fans from `dbt_dev.mart_fan_loyalty` with:
 
 ```text
@@ -513,6 +592,61 @@ points = ROUND(
 Tie-breakers are `points DESC`, `matches_attended DESC`, `total_spend DESC`, and `fan_id ASC`. Referral/community-engagement metrics are not tracked yet, so the leaderboard returns `null` for those values instead of inventing them.
 
 `GET /api/player-stats/squad` reads directly from `public.player_stats` via psycopg2 (no synchronous scrape on page load). Returns `{"players": [], "fetched_at": ""}` until the first daily scrape cycle completes.
+
+#### DB access
+
+The model never opens a Postgres connection. After the first LLM call returns a SQL string, Flask calls `_execute_sql` (via psycopg2), which wraps the query in `SELECT * FROM (...) AS llm_query LIMIT 50` and connects using `LLM_READER_DATABASE_URL` (falling back to `DATABASE_URL`) as the `llm_reader` role. Four guardrails are enforced before execution:
+
+| Guardrail | Detail |
+|-----------|--------|
+| Keyword check | Query must begin with `SELECT` or `WITH`; any mutating keyword raises a 422 |
+| No semicolons | Multi-statement input is rejected immediately |
+| Outer `LIMIT 50` | `_execute_sql` wraps the model's SQL in a subquery capped at 50 rows |
+| `statement_timeout` 10s | Set on every connection before the query runs |
+
+Source of truth: `src/llm_api/app.py` — `_ask_run_through_execution`, `_validate_sql`, `_execute_sql`.
+
+#### Row split: what the model sees vs what the UI gets
+
+After execution, `_ask_run_through_execution` creates two distinct views of the executed row set:
+
+| Variable | Contents | Consumer |
+|----------|----------|----------|
+| `preview` | `rows[:10]` serialised to JSON | Second LLM call — embedded as `Data (JSON, up to 10 rows):` in `answer_prompt` |
+| `data_preview` | All executed rows (up to the `LIMIT 50` cap) | HTTP JSON response body and the SSE `meta` event — used by the browser UI |
+
+The second LLM call only sees `preview`, so the natural-language answer is grounded in actual query results rather than the model guessing from schema alone.
+
+#### Prompt contracts
+
+Two prompt strings are assembled inside `_ask_run_through_execution`:
+
+**`sql_prompt` — SQL generation (first LLM call)**
+
+> "You are a PostgreSQL expert. Given the schema below, write a single SELECT query that answers the question. Return ONLY the SQL — no explanation, no markdown, no code fences."
+
+Sections appended in order:
+
+1. `SEMANTIC LAYER:` block (optional) — SQL-oriented rules and column aliases from `build_sql_semantic_context`
+2. `RECENT CONVERSATION CONTEXT:` block (optional) — built by `_conversation_context_section` from the last ≤ 3 prior turns
+3. `Schema:` — merged dbt YAML context from `build_schema_context_text`
+4. `Question:` — the user's question
+5. `SQL:` suffix — nudges the model to begin its completion with SQL
+
+**`answer_prompt` — natural-language answer (second LLM call)**
+
+> "You are a helpful data analyst for a football club. Answer the question below using the data provided."
+
+Sections appended in order:
+
+1. Output-format block: respond only in GitHub-flavored Markdown; do not wrap the entire answer in one outer fenced code block; no raw HTML tags
+2. Semantic answer-guidelines block (optional) — answer-oriented hints from `build_answer_semantic_context`
+3. `RECENT CONVERSATION CONTEXT:` block (optional) — same `_conversation_context_section` output as above
+4. `Question:` — the user's question
+5. `Data (JSON, up to 10 rows):` — the `preview` JSON slice
+6. `Answer:` suffix
+
+Semantic layer text for both prompts is loaded from `src/llm_api/semantic_layer.py` reading `src/llm_api/semantic/semantic_layer.yml` when configured; if the file is absent or the sections are empty they are omitted silently from both prompts.
 
 ## dbt and analytics
 
@@ -563,6 +697,7 @@ The test suite (311 tests) covers `fan_events`, `fan_ingest`, `proleague_scraper
 | Host `fan_ingest` cannot connect to Kafka | Use `localhost:9092`, not `broker:29092` |
 | Compose services cannot connect to Kafka | Inside Compose, use `broker:29092`, not `localhost:9092` |
 | Host Postgres client cannot connect | Use `localhost:<POSTGRES_PORT>` from `.env`, not `postgres:5432` |
+| Postgres auth/init errors on first `docker compose up` | Init scripts in `docker/postgres/init/` run only when `postgres-data` is empty. Verify `.env` credentials/DSNs (`POSTGRES_*`, `DATABASE_URL`, `LLM_READER_DATABASE_URL`), check `docker compose logs postgres`, and if init SQL or credentials changed, recreate the Postgres volume and rerun `docker compose up -d`. |
 | `llm-api` returns provider errors | Verify Ollama is running on the host or that OpenRouter keys/model access are configured |
 | dbt on Windows fails with Postgres DLL issues | Use `uv sync --group dbt` and `uv run dbt ...` rather than a global `dbt` binary |
 | You want only one calendar pass from `stream` | Add `--no-calendar-loop` |
