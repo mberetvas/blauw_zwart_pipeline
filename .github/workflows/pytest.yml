@@ -9,6 +9,9 @@ on:
       - master
     paths:
       - "**/*.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
