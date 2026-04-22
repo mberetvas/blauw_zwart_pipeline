@@ -49,9 +49,23 @@ This is for people who want to run the local stack once, work on one package wit
 ## Run the full MVP stack (recommended)
 
 1. Copy `.env.example` to `.env` (`Copy-Item .env.example .env` in PowerShell).
-2. Start **everything** from the repo root with `docker compose up -d` (not `uv run` for services).
-3. If you want the default Data Q&A flow, make sure Ollama is running on the host and pull `gemma4:e2b`.
-4. Open <http://localhost:8080>.
+   - Set `POSTGRES_INIT_BIND_OPTS` for your OS:
+     - Linux with SELinux (Fedora/RHEL): `POSTGRES_INIT_BIND_OPTS=,Z`
+     - Windows/macOS Docker Desktop: `POSTGRES_INIT_BIND_OPTS=`
+2. Edit the required `.env` values before your first `docker compose up -d`:
+   - **Must set**
+     - `POSTGRES_INIT_BIND_OPTS` (OS-specific as above)
+   - **Should change for any real/shared setup**
+     - `POSTGRES_PASSWORD`
+     - `PGADMIN_DEFAULT_PASSWORD`
+     - `LLM_READER_PASSWORD` and matching password inside `LLM_READER_DATABASE_URL`
+   - **Change only if needed**
+     - `POSTGRES_PORT`, `PGADMIN_PORT`, `LLM_API_PORT` (if host ports are already in use)
+     - `OLLAMA_URL` (if Ollama is not running on the host default)
+     - `OPENROUTER_API_KEY` and `LLM_PROVIDER=openrouter` (only when using OpenRouter instead of Ollama)
+3. Start **everything** from the repo root with `docker compose up -d` (not `uv run` for services).
+4. If you want the default Data Q&A flow, make sure Ollama is running on the host and pull `gemma4:e2b`.
+5. Open <http://localhost:8080>.
 
 That path starts Kafka, Postgres, pgAdmin, the fan-event producer/consumer pair, the player-stats scraper/consumer pair, the dbt scheduler, and `llm-api`. For service-by-service notes, ports, env vars, and operator commands, use [`docker/README.md`](docker/README.md).
 
