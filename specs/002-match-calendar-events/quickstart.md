@@ -4,6 +4,8 @@
 **Contract**: [`contracts/fan-events-ndjson-v2.md`](contracts/fan-events-ndjson-v2.md)  
 **Data model**: [`data-model.md`](data-model.md)
 
+**How to run (at a glance):** **`docker compose up -d`** runs the full stack (including the Compose **`producer`**). The examples below use **`uv run fan_events …`** on the host for local NDJSON generation — the supported **application** CLI entrypoint outside Compose.
+
 ## Prerequisites
 
 - Python **3.12+** (see `pyproject.toml`)

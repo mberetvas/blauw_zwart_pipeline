@@ -1,7 +1,9 @@
 # Quickstart: Synthetic fan events
 
 **Feature**: `001-synthetic-fan-events`  
-**Script**: `scripts/generate_fan_events.py`
+**Script**: `scripts/generate_fan_events.py` (historical; current CLI is **`fan_events`** — see [`src/fan_events/README.md`](../../src/fan_events/README.md)).
+
+**How this repo runs today:** start the **full MVP** with **`docker compose up -d`** from the repo root ([`docker/README.md`](../../docker/README.md)). Use **`uv run fan_events …`** on the host for the synthetic-events CLI, not for long-running services.
 
 ## Prerequisites
 

@@ -4,6 +4,13 @@ Kafka consumer for the player-stats side of the MVP stack. It subscribes to the 
 
 This service is packaged by [`docker/Dockerfile.scraper-ingest`](../../docker/Dockerfile.scraper-ingest) with [`docker/requirements.scraper-ingest.txt`](../../docker/requirements.scraper-ingest.txt). Like `proleague_scraper`, it is Compose-first rather than part of the repo's `uv` extras.
 
+## How to run (at a glance)
+
+| | |
+| --- | --- |
+| **Recommended** | **`docker compose up -d`** from the repo root — the **`proleague-ingest`** service runs this consumer. See [`../../docker/README.md`](../../docker/README.md). |
+| **Host `uv`** | Not a supported operator path — use Compose. |
+
 ## How to run it
 
 ```bash

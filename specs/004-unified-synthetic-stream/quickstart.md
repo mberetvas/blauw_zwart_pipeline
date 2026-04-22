@@ -1,6 +1,8 @@
 # Quickstart: `fan_events stream`
 
-**Prerequisites**: Python **3.12+**, `uv` (see repository README). Run from repo root: `uv run fan_events …`.
+**How to run (at a glance):** **`docker compose up -d`** starts the stack, including a Compose **`producer`** that runs `fan_events stream`. For **host-side** generation or Kafka publishing, use **`uv run fan_events …`** from the repo root (supported **CLI** on the machine).
+
+**Prerequisites**: Python **3.12+**, **uv** (see repository [`README.md`](../../README.md)). **`uv run pytest`** / **`uv run ruff`** are development workflows, not substitutes for Compose.
 
 ## Stream to stdout (merged v2 + v3)
 
@@ -31,7 +33,7 @@ uv run fan_events stream -s 1 --retail-max-events 50 --max-events 50
 Install the optional extra and set the broker/topic via environment variables:
 
 ```bash
-pip install 'blauw-zwart-fan-sim-pipeline[kafka]'
+uv sync --extra kafka
 export FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 ```
 

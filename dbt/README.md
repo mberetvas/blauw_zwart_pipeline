@@ -1,6 +1,13 @@
 # dbt analytics
 
-The repo ships a dbt project under `dbt/` for analytics models such as `mart_fan_loyalty`. The same project is used in two ways: locally with `uv run dbt ...`, and in Compose via the `dbt-scheduler` service that refreshes the selected models on a loop.
+## How to run (at a glance)
+
+| | |
+| --- | --- |
+| **Demo stack / scheduled builds** | **`docker compose up -d`** from the repo root starts **`dbt-scheduler`** with the rest of the MVP (see [`../docker/README.md`](../docker/README.md)). This is the **recommended** path for keeping marts fresh while the stack runs. |
+| **Local `uv run dbt …`** | **Optional development** workflow when iterating on models against a running Postgres (from the host). It is **not** a substitute for Compose for “running the project”. |
+
+The repo ships a dbt project under `dbt/` for analytics models such as `mart_fan_loyalty`. The same project is used in **Compose** (primary for the demo) and optionally on the host with `uv run dbt …` for development.
 
 ## What matters here
 
@@ -11,7 +18,27 @@ The repo ships a dbt project under `dbt/` for analytics models such as `mart_fan
 | Loyalty mart | [`models/marts/mart_fan_loyalty.sql`](models/marts/mart_fan_loyalty.sql) |
 | Schema docs used by `llm_api` | `models/**/*_schema.yaml` and [`models/marts/schema.yml`](models/marts/schema.yml) |
 
-## Run dbt locally
+## Run dbt via Compose (recommended for the MVP)
+
+The `dbt-scheduler` service uses the same project but runs inside Docker (usually started with the full stack):
+
+```bash
+docker compose up -d
+docker compose logs -f dbt-scheduler
+```
+
+To run only the scheduler (if the rest of the stack is already up):
+
+```bash
+docker compose up -d dbt-scheduler
+docker compose logs -f dbt-scheduler
+```
+
+By default it refreshes `+mart_fan_loyalty` immediately on startup and then every `DBT_RUN_INTERVAL_MINUTES`.
+
+## Run dbt locally (development only)
+
+Use this when you are editing SQL/YAML and want faster iteration against Postgres on `localhost` — **not** as the primary way to run the demo stack.
 
 ```bash
 uv sync --group dbt
@@ -20,17 +47,6 @@ uv run --env-file .env dbt run --project-dir . --profiles-dir dbt --select +mart
 ```
 
 The project file lives at the repo root, so run dbt commands from the repo root even though the models live in `dbt/`.
-
-## Run dbt via Compose
-
-The `dbt-scheduler` service uses the same project but runs inside Docker:
-
-```bash
-docker compose up -d dbt-scheduler
-docker compose logs -f dbt-scheduler
-```
-
-By default it refreshes `+mart_fan_loyalty` immediately on startup and then every `DBT_RUN_INTERVAL_MINUTES`.
 
 ## Environment variables
 

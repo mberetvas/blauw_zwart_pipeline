@@ -2,6 +2,13 @@
 
 Pro League squad scraper package for the MVP player-stats pipeline. In the local stack it is used in two ways: as the `proleague-scheduler` service that scrapes Club Brugge player data and publishes Kafka messages, and as the `proleague-scraper` service that exposes a small internal HTTP read layer.
 
+## How to run (at a glance)
+
+| | |
+| --- | --- |
+| **Recommended** | **`docker compose up -d`** from the repo root (includes `proleague-scheduler` and `proleague-scraper`). See [`../../docker/README.md`](../../docker/README.md). |
+| **Host `uv`** | Not a supported operator path for this package — images and Compose are the supported runtime. |
+
 > Operators are responsible for checking <https://www.proleague.be/robots.txt> and the site's Terms of Use before running this against the live site anywhere outside a local MVP setup.
 
 ## Surfaces in this package

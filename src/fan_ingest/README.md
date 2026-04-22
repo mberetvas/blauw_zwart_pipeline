@@ -1,17 +1,24 @@
 # fan_ingest
 
-Kafka consumer that ingests synthetic fan events into Postgres. The Compose `ingest` service runs this package, and you can also run it directly on the host when you want to debug ingestion behavior against a local stack.
+Kafka consumer that ingests synthetic fan events into Postgres.
 
-## Install
+## How to run (at a glance)
+
+| | |
+| --- | --- |
+| **Recommended** | Start the stack from the repo root: **`docker compose up -d`** — the **`ingest`** service runs this package inside Compose. See [`../../docker/README.md`](../../docker/README.md). |
+| **Host `uv` (optional)** | **`uv run fan_ingest …`** only for **debugging** or advanced setups against a stack that is already up — not the primary way to run the MVP. |
+
+## Install (host debugging only)
 
 ```bash
 uv sync --extra ingest
 uv run fan_ingest --help
 ```
 
-## Common commands
+## Optional: run on the host against a local stack
 
-Run against a local Compose stack from the host:
+The Compose **`ingest`** service uses Compose-oriented defaults (`broker:29092`, topic `fan_events`, consumer group `fan-ingest-local`). From your machine, point at the **external** Kafka listener and published Postgres port:
 
 ```bash
 uv run fan_ingest \
@@ -19,8 +26,6 @@ uv run fan_ingest \
   --kafka-topic fan_events \
   --database-url postgresql://postgres:changeme@localhost:5432/fan_pipeline
 ```
-
-The Compose service uses the same entrypoint, but its defaults are Compose-oriented (`broker:29092`, topic `fan_events`, consumer group `fan-ingest-local`).
 
 ## Flags and environment variables
 

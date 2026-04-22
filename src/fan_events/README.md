@@ -2,6 +2,19 @@
 
 Synthetic fan-event generator CLI for the MVP demo stack. This package owns the current event-generation surface: rolling batches (v1), calendar-driven match events (v2), retail events (v3), and the merged `stream` command.
 
+## CLI help
+
+From the repo root after `uv sync`, run **`uv run fan_events --help`** (or `uv run python -m fan_events --help`) for usage, subcommands, and copy-paste examples:
+
+![Output of fan_events --help](../../assets/cli_fan_events.png)
+
+## How to run (at a glance)
+
+| | |
+| --- | --- |
+| **Full MVP** | From the repo root: **`docker compose up -d`** — the Compose **`producer`** service runs `fan_events stream` for you. See [`../../docker/README.md`](../../docker/README.md). |
+| **This CLI on your machine** | **`uv run fan_events …`** (or `uv run python -m fan_events …`) after `uv sync` at the repo root — the supported **host** entrypoint for generating streams or NDJSON outside Compose. |
+
 ## What lives here
 
 | Subcommand | What it does | Deep doc |

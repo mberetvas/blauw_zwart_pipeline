@@ -2,9 +2,11 @@
 
 **Contracts**: [contracts/](./contracts/) · **Spec**: [spec.md](./spec.md)
 
+**How to run (at a glance):** **`docker compose up -d`** runs the full MVP. The commands below use **`uv run python -m fan_events stream …`** for the **synthetic CLI** on the host. **`uv run pytest`** / **`uv run ruff`** at the end are **development / CI** only.
+
 ## Prerequisites
 
-- Python **3.12+**, **UV** (`uv run …` from repo root).
+- Python **3.12+**, **uv** (CLI examples: `uv run python -m fan_events …` from repo root).
 - Example calendar (e.g. `match_day.example.json` or repo calendars under `calendars/`).
 
 ## Merged stream (v2 + v3), continuous seasons (after 006 implementation)

@@ -2,6 +2,13 @@
 
 Flask UI + JSON API for the MVP demo. This package serves the Data Q&A chat, the fan leaderboard, the player-stats page, and the settings page that persists runtime LLM configuration.
 
+## How to run (at a glance)
+
+| | |
+| --- | --- |
+| **Recommended** | From the repo root: **`docker compose up -d`** — the **`llm-api`** service serves <http://localhost:8080> (see [`../../docker/README.md`](../../docker/README.md)). |
+| **Host `uv`** | Optional **developer-only** path for debugging the Flask app (`uv run python -m llm_api.app` after `uv sync --extra api`). **Not** the primary way to run the demo UI. |
+
 ## Screenshots
 
 ### Chat UI
@@ -25,10 +32,10 @@ Flask UI + JSON API for the MVP demo. This package serves the Data Q&A chat, the
 | Player stats (`/player-stats`) | Compares cached squad data and can fetch individual player details |
 | Settings (`/settings`) | Persists runtime Ollama / OpenRouter settings |
 
-## Run it in Compose
+## Run in Docker Compose (recommended)
 
 1. Copy `.env.example` to `.env`.
-2. Start the stack with `docker compose up -d`.
+2. Start the **full stack** with `docker compose up -d` from the repo root.
 3. If you use the default provider, run Ollama on the host and pull `gemma4:e2b`.
 4. Wait for dbt to materialize the marts (`docker compose logs -f dbt-scheduler`).
 5. Open <http://localhost:8080>.
@@ -41,7 +48,9 @@ curl -s -X POST http://localhost:8080/api/ask \
   -d "{\"question\":\"Who are the top 5 fans by total spend?\"}"
 ```
 
-## Run it on the host
+## Run on the host (optional / developer-only)
+
+For local debugging only — **not** the supported path for running the MVP demo.
 
 ```bash
 uv sync --extra api

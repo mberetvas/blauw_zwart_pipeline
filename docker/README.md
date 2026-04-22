@@ -1,5 +1,12 @@
 # Local operator stack
 
+## How to run (at a glance)
+
+| | |
+| --- | --- |
+| **Full stack** | From the **repo root**: `docker compose up -d` — **recommended** for all long-running services (Kafka, Postgres, producers, consumers, scrapers, dbt scheduler, `llm-api`, …). |
+| **Host `uv`** | Use **`uv run fan_events …`** for the **synthetic fan-events CLI** only (optional second producer, local files, tests). Do **not** use `uv run` as the primary way to start ingest, the Flask API, or other Compose services for normal demos. |
+
 `docker compose up -d` is the fastest way to run the whole MVP once. The stack is practical and local-first: Kafka, Postgres, pgAdmin, the fan-event producer/consumer pair, the player-stats scraper/consumer pair, dbt scheduling, and the Flask UI/API.
 
 The full acceptance-style walkthrough still lives in [`specs/005-compose-kafka-pipeline/quickstart.md`](../specs/005-compose-kafka-pipeline/quickstart.md). This README is the shorter operator runbook.

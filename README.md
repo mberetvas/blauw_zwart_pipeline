@@ -6,6 +6,14 @@ MVP / non-production sandbox for Club Brugge fan-data demos. The repo combines s
 
 This is for people who want to run the local stack once, work on one package without reverse-engineering the rest, or jump straight to the right quickstart/spec.
 
+## How to run (at a glance)
+
+| You want… | Use this |
+| --- | --- |
+| **The full MVP** (Kafka, Postgres, producers, consumers, scrapers, dbt scheduler, `llm-api`, …) | **Recommended:** from the repo root run `docker compose up -d`. Operator details: [`docker/README.md`](docker/README.md). |
+| **Synthetic fan events on your machine** | **`uv run fan_events …`** after `uv sync` at the repo root — the supported *application* CLI on the host. The Compose **`producer`** service already runs `fan_events stream` when the stack is up. |
+| **Tests, lint, or optional local dbt** | **`uv run pytest`**, **`uv run ruff …`**, optional **`uv run dbt …`** — development and CI workflows only; they are not how you start the demo stack (see [`dbt/README.md`](dbt/README.md)). |
+
 ## Repo layout at a glance
 
 | Path | What lives there |
@@ -32,22 +40,22 @@ This is for people who want to run the local stack once, work on one package wit
 
 | Requirement | Why it matters |
 | --- | --- |
-| Python 3.12+ | Needed for host-side package work, tests, and local CLIs |
-| [uv](https://docs.astral.sh/uv/) | Recommended way to install extras, run CLIs, run dbt, and run tests |
-| Docker + Docker Compose | Fastest way to run the full MVP stack |
+| Python 3.12+ | Needed for **`fan_events`** on the host, tests, and other **development** workflows |
+| [uv](https://docs.astral.sh/uv/) | Lockfile and toolchain for the **`fan_events`** CLI on the host, plus **development** commands (`uv run pytest`, `uv run dbt`, …) |
+| Docker + Docker Compose | **Recommended** way to run the **full MVP stack** (all long-running services) |
 | [Ollama](https://ollama.com/) | Needed only for the default local LLM provider used by `llm_api` |
 | [just](https://just.systems/) | Optional convenience wrapper around common stack and CLI commands |
 
-## Fastest path to run the stack once
+## Run the full MVP stack (recommended)
 
 1. Copy `.env.example` to `.env` (`Copy-Item .env.example .env` in PowerShell).
-2. Start the stack from the repo root with `docker compose up -d`.
+2. Start **everything** from the repo root with `docker compose up -d` (not `uv run` for services).
 3. If you want the default Data Q&A flow, make sure Ollama is running on the host and pull `gemma4:e2b`.
 4. Open <http://localhost:8080>.
 
 That path starts Kafka, Postgres, pgAdmin, the fan-event producer/consumer pair, the player-stats scraper/consumer pair, the dbt scheduler, and `llm-api`. For service-by-service notes, ports, env vars, and operator commands, use [`docker/README.md`](docker/README.md).
 
-If you are editing code rather than operating the stack, the repo-wide checks are `uv run pytest` and `uv run ruff check .`.
+**Development / CI on the host:** `uv run pytest` and `uv run ruff check .` from the repo root — these do not replace Docker Compose for running the stack.
 
 ## Documentation map
 

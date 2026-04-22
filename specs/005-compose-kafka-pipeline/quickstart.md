@@ -1,6 +1,8 @@
 # Quickstart: local Compose pipeline (005)
 
-Prerequisites: **Docker** + **Docker Compose** (full stack includes the **producer** service). **UV** is optional — only needed if you also run `fan_events stream` on the host (§3).
+**Canonical path:** **`docker compose up -d`** from the repo root starts **all** long-running services (Kafka, Postgres, **producer**, **ingest**, …). **uv** on the host is for the **`fan_events`** CLI (§3 optional second producer), **tests**, or **lint** — not the primary way to run ingest or the API.
+
+Prerequisites: **Docker** + **Docker Compose** (full stack includes the **producer** service). **uv** is optional — only needed if you also run `fan_events stream` on the host (§3) or for development commands.
 
 ## 1. Configure environment
 
@@ -47,7 +49,9 @@ You should see the ingest service consuming from the topic (`ingest_started …`
 
 ```bash
 docker compose logs -f producer
-``` To confirm the topic exists and has traffic, inspect it from the broker container (replace `fan_events` if you changed `KAFKA_TOPIC`):
+```
+
+To confirm the topic exists and has traffic, inspect it from the broker container (replace `fan_events` if you changed `KAFKA_TOPIC`):
 
 ```bash
 docker compose exec broker /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic fan_events --from-beginning --max-messages 3

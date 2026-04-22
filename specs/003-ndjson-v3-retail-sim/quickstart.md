@@ -3,10 +3,12 @@
 **Contract**: [`contracts/fan-events-ndjson-v3.md`](contracts/fan-events-ndjson-v3.md)  
 **Spec**: [`spec.md`](spec.md)
 
+**How to run (at a glance):** **`docker compose up -d`** runs the full MVP. This quickstart’s commands use **`uv run python -m fan_events …`** for the **synthetic CLI** on the host; **`uv run pytest`** is **development / CI** only.
+
 ## Prerequisites
 
 - Python **3.12+** (see `pyproject.toml`)
-- UV: `uv run pytest` / `uv run python -m fan_events …`
+- **uv** at the repo root: **`uv run python -m fan_events …`** for CLI examples; **`uv run pytest`** for tests
 
 ## Run
 
