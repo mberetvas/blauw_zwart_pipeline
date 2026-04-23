@@ -1,0 +1,10 @@
+# Default: normalize all text files to LF in the repo
+* text=auto eol=lf
+
+# Shell scripts must always be LF (CRLF breaks shebang on Linux/Alpine)
+*.sh text eol=lf
+
+# Windows-only files may keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
