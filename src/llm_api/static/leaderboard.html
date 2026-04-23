@@ -380,10 +380,30 @@ tailwind.config = {
       season: "Top 25 fans by the same points formula, limited to the current season window (UTC)",
       month: "Top 25 fans by the same points formula, limited to the current calendar month (UTC)",
     };
+    const EMPTY_STATE_BY_WINDOW = {
+      all: "Leaderboard is warming up. The first dbt refresh will populate mart_fan_loyalty, then rankings will appear automatically.",
+      season: "No fan activity is available yet for the current season window.",
+      month: "No fan activity is available yet for the current month window.",
+    };
+    const WARMUP_REFRESH_MS = 10000;
+    const WARMUP_MAX_REFRESH_ATTEMPTS = 18;
 
     let activeWindow = "all";
+    let warmupRetryTimer = null;
+    let warmupRetryAttempt = 0;
+
+    const clearWarmupRetry = () => {
+      if (warmupRetryTimer) {
+        clearTimeout(warmupRetryTimer);
+        warmupRetryTimer = null;
+      }
+    };
 
     const setFilterUi = (windowKey) => {
+      if (windowKey !== activeWindow) {
+        clearWarmupRetry();
+        warmupRetryAttempt = 0;
+      }
       activeWindow = windowKey;
       filterButtons.forEach((btn) => {
         const w = btn.getAttribute("data-window");
@@ -415,6 +435,19 @@ tailwind.config = {
       errorEl.textContent = message;
       errorEl.hidden = false;
       errorEl.classList.remove("hidden");
+    };
+
+    const setLoadingState = (message) => {
+      if (message) {
+        loadingEl.textContent = message;
+      }
+      loadingEl.hidden = false;
+      loadingEl.classList.remove("hidden");
+    };
+
+    const hideLoadingState = () => {
+      loadingEl.hidden = true;
+      loadingEl.classList.add("hidden");
     };
 
     const renderAchievement = (achievement) => {
@@ -465,9 +498,10 @@ tailwind.config = {
       }).join("");
     };
 
-    const renderRankings = (entries) => {
+    const renderRankings = (entries, windowKey = "all") => {
       if (!entries.length) {
-        rankingsEl.innerHTML = '<li class="px-6 py-5 text-sm text-on-surface-variant">No leaderboard rows are available yet. Run dbt to materialize <code>mart_fan_loyalty</code>.</li>';
+        const emptyMessage = EMPTY_STATE_BY_WINDOW[windowKey] || EMPTY_STATE_BY_WINDOW.all;
+        rankingsEl.innerHTML = `<li class="px-6 py-5 text-sm text-on-surface-variant">${escapeHtml(emptyMessage)}</li>`;
         return;
       }
       rankingsEl.innerHTML = entries.map((entry) => `
@@ -532,8 +566,7 @@ tailwind.config = {
       errorEl.hidden = true;
       errorEl.classList.add("hidden");
       setFilterUi(windowKey);
-      loadingEl.hidden = false;
-      loadingEl.classList.remove("hidden");
+      setLoadingState("Loading live leaderboard data...");
 
       try {
         const response = await fetch(
@@ -552,19 +585,41 @@ tailwind.config = {
         }
 
         renderPodium(payload.podium || []);
-        renderRankings(payload.rankings || []);
+        const rankings = payload.rankings || [];
+        renderRankings(rankings, windowKey);
         renderFanOfMonth(payload.fan_of_the_month);
         renderAchievement(payload.achievement);
+
+        if (windowKey === "all" && rankings.length === 0 && warmupRetryAttempt < WARMUP_MAX_REFRESH_ATTEMPTS) {
+          warmupRetryAttempt += 1;
+          const remaining = WARMUP_MAX_REFRESH_ATTEMPTS - warmupRetryAttempt;
+          setLoadingState(
+            `Leaderboard is warming up. Retrying automatically in ${Math.round(WARMUP_REFRESH_MS / 1000)}s${remaining > 0 ? ` (${remaining} retries left)` : ""}...`,
+          );
+          clearWarmupRetry();
+          warmupRetryTimer = setTimeout(() => {
+            if (activeWindow === "all") {
+              loadLeaderboard("all");
+            }
+          }, WARMUP_REFRESH_MS);
+          return;
+        }
+
+        warmupRetryAttempt = 0;
+        clearWarmupRetry();
       } catch (error) {
+        clearWarmupRetry();
+        warmupRetryAttempt = 0;
         renderPodium([]);
-        renderRankings([]);
+        renderRankings([], windowKey);
         renderFanOfMonth(null);
         setError(error instanceof Error ? error.message : "Unable to load the leaderboard.");
         asOfEl.textContent = "Live leaderboard unavailable";
         floatingAsOfEl.textContent = "Unavailable";
       } finally {
-        loadingEl.hidden = true;
-        loadingEl.classList.add("hidden");
+        if (!warmupRetryTimer) {
+          hideLoadingState();
+        }
       }
     };
 
