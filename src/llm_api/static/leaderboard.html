@@ -241,13 +241,8 @@ tailwind.config = {
       <section class="lg:col-span-7" aria-labelledby="rankings-heading">
         <div class="flex items-center justify-between mb-6">
           <h2 id="rankings-heading" class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary">Top 25 Fans</h2>
-          <div class="flex flex-wrap gap-2 justify-end" role="group" aria-label="Leaderboard time range">
-            <button type="button" id="lb-filter-all" class="lb-window-btn px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-opacity hover:opacity-100 bg-primary-container text-on-primary" aria-pressed="true" data-window="all">All Time</button>
-            <button type="button" id="lb-filter-season" class="lb-window-btn px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-opacity hover:opacity-100 bg-secondary-container text-on-secondary-container opacity-80" aria-pressed="false" data-window="season">This Season</button>
-            <button type="button" id="lb-filter-month" class="lb-window-btn px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest transition-opacity hover:opacity-100 bg-secondary-container text-on-secondary-container opacity-80" aria-pressed="false" data-window="month">This Month</button>
-          </div>
         </div>
-        <p id="lb-window-hint" class="text-xs text-outline uppercase tracking-[0.18em] mb-4 font-headline">All-time uses mart_fan_loyalty; season (1 Aug–31 Jul UTC) and this calendar month use live ticket and purchase events.</p>
+        <p id="lb-window-hint" class="text-xs text-outline uppercase tracking-[0.18em] mb-4 font-headline">All-time uses mart_fan_loyalty based on attendance and spend activity.</p>
 
         <div class="bg-surface-container-low rounded-3xl overflow-hidden">
           <!-- Column headers -->
