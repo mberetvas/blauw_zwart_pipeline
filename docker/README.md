@@ -127,7 +127,7 @@ Full defaults and comments live in [`../.env.example`](../.env.example). These a
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `DBT_RUN_INTERVAL_MINUTES` | `5` | Compose dbt scheduler interval |
-| `DBT_RUN_SELECTOR` | `+mart_fan_loyalty` | Compose dbt model selector |
+| `DBT_RUN_SELECTOR` | `+mart_fan_loyalty +mart_player_season_summary` | Compose dbt model selector |
 | `LLM_READER_PASSWORD` | `change-this-dev-password` | Dev-only password for the read-only DB role |
 | `LLM_READER_DATABASE_URL` | `postgresql://llm_reader:...@postgres:5432/fan_pipeline` | Read-only DSN used by `llm-api` |
 | `OLLAMA_URL` | `http://host.docker.internal:11434` | Default Ollama base URL from the container |

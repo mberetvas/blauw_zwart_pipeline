@@ -166,6 +166,7 @@ Tie-breakers are `points DESC`, `matches_attended DESC`, `total_spend DESC`, the
 | --- | --- |
 | Provider errors in `/api/ask` | Ollama may not be running on the host, or OpenRouter credentials/model access may be wrong |
 | Host-run API cannot reach Postgres | Use `localhost:<POSTGRES_PORT>` in the DSN, not the Compose hostname `postgres` |
+| `relation "mart_player_season_summary" does not exist` in `/api/ask` | Ensure dbt has built player marts (default selector is `+mart_fan_loyalty +mart_player_season_summary`), then check `docker compose logs -f dbt-scheduler` |
 | `/player-stats` shows no players | The first scrape has not completed yet; check `proleague-scheduler` and `proleague-ingest` logs |
 | Player images do not load | The proxy route is `/api/player-stats/image`; inspect `docker compose logs -f llm-api` for upstream/proxy errors |
 | Schema-context startup error | Check `SCHEMA_FILES`, `DBT_MODELS_DIR`, `SCHEMA_FILE`, and the overflow settings |

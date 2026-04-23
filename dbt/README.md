@@ -34,7 +34,7 @@ docker compose up -d dbt-scheduler
 docker compose logs -f dbt-scheduler
 ```
 
-By default it refreshes `+mart_fan_loyalty` immediately on startup and then every `DBT_RUN_INTERVAL_MINUTES`.
+By default it refreshes `+mart_fan_loyalty +mart_player_season_summary` immediately on startup and then every `DBT_RUN_INTERVAL_MINUTES`.
 
 ## Run dbt locally (development only)
 
@@ -57,7 +57,7 @@ The project file lives at the repo root, so run dbt commands from the repo root 
 | `DBT_POSTGRES_PORT` | `5432` | Host-side Postgres port |
 | `DBT_TARGET_SCHEMA` | `dbt_dev` | Schema where dbt builds its relations |
 | `DBT_RUN_INTERVAL_MINUTES` | `5` | Compose scheduler interval |
-| `DBT_RUN_SELECTOR` | `+mart_fan_loyalty` | Compose scheduler model selector |
+| `DBT_RUN_SELECTOR` | `+mart_fan_loyalty +mart_player_season_summary` | Compose scheduler model selector |
 | `POSTGRES_USER` | from `.env` | dbt profile credential |
 | `POSTGRES_PASSWORD` | from `.env` | dbt profile credential |
 | `POSTGRES_DB` | from `.env` | dbt profile database |

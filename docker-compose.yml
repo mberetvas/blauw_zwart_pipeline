@@ -111,7 +111,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # ─── dbt scheduler (refresh mart_fan_loyalty + upstream parents on a fixed interval) ───
+  # ─── dbt scheduler (refresh fan + player marts with upstream parents on a fixed interval) ───
   dbt-scheduler:
     build:
       context: .
