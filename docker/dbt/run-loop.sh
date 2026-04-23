@@ -1,12 +1,16 @@
 #!/bin/sh
 set -u
 
-interval_minutes="${DBT_RUN_INTERVAL_MINUTES:-5}"
+interval_minutes="${DBT_RUN_INTERVAL_MINUTES:-}"
+if [ -z "$interval_minutes" ]; then
+  interval_minutes=5
+  echo "[dbt-scheduler] WARNING: DBT_RUN_INTERVAL_MINUTES not set; using default: ${interval_minutes}m" >&2
+fi
 selector="${DBT_RUN_SELECTOR:-+mart_fan_loyalty}"
 
 case "$interval_minutes" in
-  ''|*[!0-9]*)
-    echo "[dbt-scheduler] DBT_RUN_INTERVAL_MINUTES must be a positive integer, got: $interval_minutes" >&2
+  *[!0-9]*)
+    echo "[dbt-scheduler] DBT_RUN_INTERVAL_MINUTES must be a positive integer, got: '$interval_minutes'" >&2
     exit 2
     ;;
 esac

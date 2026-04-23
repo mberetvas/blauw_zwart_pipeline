@@ -85,12 +85,16 @@ stream-file out="out/mixed.ndjson":
 
 # ── Kafka ───────────────────────────────────────────────────────────
 # Run Kafka via Docker Compose (broker on localhost:9092; data persisted in volume kafka-data)
-kafka-up:
+compose-up:
     docker compose up -d
 
 # Stop Kafka Compose stack (volume kafka-data is kept; use `docker compose down -v` to wipe data)
-kafka-down:
+compose-down:
     docker compose down
+
+# Stop Kafka Compose stack and remove volumes, images, and orphans
+compose-down-clean:
+    docker compose down -v --rmi all --remove-orphans
 
 # Create Kafka topic fan_events (requires: just kafka-up; uses single replica to match local broker)
 # Use //opt/... so Git Bash on Windows does not rewrite /opt to Git's install directory before docker exec.
