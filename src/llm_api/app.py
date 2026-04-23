@@ -277,6 +277,16 @@ def _strip_fences(raw: str) -> str:
     return raw.strip()
 
 
+def _rewrite_layer_schema_qualifiers(sql: str) -> str:
+    """Map dbt layer labels used as schema qualifiers to dbt_dev.
+
+    Some smaller LLMs infer that "Layer: intermediate" means a SQL schema and
+    emit relation names such as intermediate.match_events. In this project, dbt
+    builds all relations into the single dbt_dev schema.
+    """
+    return re.sub(r"\b(?:staging|intermediate|marts)\.(\w+)\b", r"dbt_dev.\1", sql)
+
+
 # ---------------------------------------------------------------------------
 # Database execution
 # ---------------------------------------------------------------------------
@@ -961,7 +971,9 @@ def _ask_run_through_execution(
     sql_prompt = (
         "You are a PostgreSQL expert. Given the schema below, write a single "
         "SELECT query that answers the question. Return ONLY the SQL — no "
-        "explanation, no markdown, no code fences.\n\n"
+        "explanation, no markdown, no code fences.\n"
+        "Important: 'staging', 'intermediate', and 'marts' are dbt model layers, "
+        "not PostgreSQL schemas. Use unqualified table names or dbt_dev.<table>.\n\n"
         f"{semantic_section}"
         f"{conversation_section}"
         f"Schema:\n{schema_context}\n"
@@ -986,7 +998,7 @@ def _ask_run_through_execution(
             status,
         )
 
-    sql = _strip_fences(raw_sql)
+    sql = _rewrite_layer_schema_qualifiers(_strip_fences(raw_sql))
     log.info("Generated SQL (%s/%s): %s", provider, model, sql)
     trace = _build_trace(
         provider,
