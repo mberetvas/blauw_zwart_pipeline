@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from frontend_app.sql_agent.graph import AgentFailure, AgentResult, StreamEvent
+
 
 @pytest.fixture()
 def llm_app_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -127,8 +129,6 @@ def test_llm_config_routes_mask_and_persist_key(llm_app_module) -> None:
 
 
 def _stub_agent_result(llm_app_module, **overrides):
-    from frontend_app.sql_agent.graph import AgentResult
-
     defaults = {
         "answer": "Fan 1 is the latest supporter in the result set.",
         "sql": "WITH latest AS (SELECT 1 AS fan_id)\nSELECT fan_id FROM latest",
@@ -188,8 +188,6 @@ def _parse_sse_events(text: str) -> list[tuple[str, dict]]:
 def test_ask_stream_returns_sse_events_from_agent(
     llm_app_module, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from frontend_app.sql_agent.graph import StreamEvent
-
     def fake_run_ask_stream(req):
         meta_payload = {
             "sql": "SELECT 1",
@@ -224,8 +222,6 @@ def test_ask_stream_returns_sse_events_from_agent(
 def test_ask_route_returns_422_on_agent_failure(
     llm_app_module, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from frontend_app.sql_agent.graph import AgentFailure
-
     def fake_run_ask(req):
         return AgentFailure(
             error="SQL contains a forbidden mutating statement",

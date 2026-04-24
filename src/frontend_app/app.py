@@ -1205,21 +1205,20 @@ def ask() -> Any:
 @app.post("/api/ask/stream")
 def ask_stream() -> Any:
     req_id = new_request_id()
-    token = set_request_id(req_id)
     body: dict[str, Any] = request.get_json(force=True) or {}
     parsed = _build_request_or_error(body)
     if isinstance(parsed, tuple):
-        reset_request_id(token)
         payload, status = parsed
         return jsonify(payload), status
 
-    log.info("POST /api/ask/stream question=%.80s", parsed.question)
-
     @stream_with_context
     def event_stream() -> Iterator[str]:
-        # Re-set in generator context to ensure ContextVar propagation.
-        inner_token = set_request_id(req_id)
+        # Set req_id here, when the generator actually executes, so that all
+        # logging inside (including run_ask_stream) carries the correct correlation
+        # ID.  The route handler must not reset the ContextVar before this runs.
+        token = set_request_id(req_id)
         try:
+            log.info("POST /api/ask/stream question=%.80s", parsed.question)
             for evt in run_ask_stream(parsed):
                 log.debug("SSE event: %s", evt.name)
                 yield _format_sse(evt.name, evt.data)
@@ -1228,9 +1227,8 @@ def ask_stream() -> Any:
             yield _format_sse("error", {"message": f"Agent stream failed: {exc}"})
         finally:
             log.info("stream closed")
-            reset_request_id(inner_token)
+            reset_request_id(token)
 
-    reset_request_id(token)
     headers = {
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",
