@@ -2,6 +2,13 @@
 
 Flask UI + JSON API for the MVP demo. This package serves the Data Q&A chat, the fan leaderboard, the player-stats page, and the settings page that persists runtime LLM configuration.
 
+Current package split:
+
+- `app.py` remains the thin Flask HTTP/UI orchestrator and the runtime entrypoint (`python -m frontend_app.app`).
+- `sql_agent/` now owns the Text-to-SQL / LLM pipeline helpers (schema context, semantic layer loading, providers, guardrails, and DB execution).
+- `static/` still contains the browser assets served by the Flask routes; those files were not moved.
+- Tests intentionally still patch symbols on `frontend_app.app`, so the orchestration surface stays at the package root even though most pipeline internals moved into `sql_agent/`.
+
 ## How to run (at a glance)
 
 | | |
@@ -86,7 +93,7 @@ When the API runs on your machine against the Compose Postgres instance, use hos
 | --- | --- | --- |
 | `SCHEMA_FILES` | unset | Highest-priority comma-separated list of dbt schema files |
 | `DBT_MODELS_DIR` | unset | Folder scan mode for `*_schema.yaml` plus `marts/schema.yml` |
-| `SCHEMA_FILE` | `src/frontend_app/schema.yml` | Single-file fallback when the dbt-derived inputs are unset |
+| `SCHEMA_FILE` | `src/frontend_app/sql_agent/schema.yml` | Single-file fallback when the dbt-derived inputs are unset |
 | `DBT_RELATION_SCHEMA` | `dbt_dev` | Schema name echoed into the SQL prompt |
 | `SCHEMA_CONTEXT_MAX_CHARS` | `0` | Maximum merged schema length (`0` means unlimited) |
 | `SCHEMA_CONTEXT_OVERFLOW` | `error` | Overflow mode: `error` or `truncate` |
@@ -118,7 +125,7 @@ In one sentence: English question -> LLM proposes SQL -> the app runs a bounded 
 Current pipeline:
 
 1. The browser sends a question, provider/model selection, and a small slice of recent conversation.
-2. The app builds a SQL-generation prompt from dbt schema YAML, optional semantic-layer text, recent conversation, and the question itself.
+2. `app.py` delegates prompt/context assembly to `frontend_app.sql_agent`, which builds the SQL-generation prompt from dbt schema YAML, optional semantic-layer text, recent conversation, and the question itself.
 3. The first LLM call returns one PostgreSQL `SELECT` or `WITH ... SELECT`.
 4. Flask validates and executes that SQL as the `llm_reader` role.
 5. The app builds an answer prompt from the question plus real result rows.

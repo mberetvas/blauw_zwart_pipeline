@@ -22,7 +22,7 @@ This is for people who want to run the local stack once, work on one package wit
 | `src/fan_ingest/` | Kafka consumer that persists `fan_events` into Postgres |
 | `src/proleague_scraper/` | Pro League squad scraper, daily scheduler, and internal HTTP read layer |
 | `src/proleague_ingest/` | Kafka consumer that upserts `player_stats` into Postgres |
-| `src/frontend_app/` | Flask UI + API for Data Q&A, leaderboard, and player stats |
+| `src/frontend_app/` | Flask UI + API package: thin `app.py` orchestrator, `sql_agent/` Text-to-SQL pipeline, and static assets |
 | `dbt/` | Analytics models, dbt profiles, and local dbt workflow |
 | `docker-compose.yml` and `docker/` | Local operator stack, image definitions, and init SQL |
 | `specs/` | Deep feature quickstarts and contracts |
@@ -34,7 +34,7 @@ This is for people who want to run the local stack once, work on one package wit
 3. `proleague_scraper` scrapes Club Brugge squad data, publishes `player_stats`, and serves a small internal HTTP read layer.
 4. `proleague_ingest` consumes `player_stats` and upserts `public.player_stats`.
 5. `dbt` builds analytics models such as `mart_fan_loyalty`.
-6. `frontend_app` reads the dbt marts plus player stats and serves the browser UI and JSON API.
+6. `frontend_app` keeps `python -m frontend_app.app` as the entrypoint; `app.py` serves the browser UI and JSON API while `sql_agent/` handles the Text-to-SQL / LLM pipeline over the dbt marts plus player stats.
 
 ## Prerequisites
 
@@ -79,7 +79,7 @@ That path starts Kafka, Postgres, pgAdmin, the fan-event producer/consumer pair,
 | `fan_ingest` | [`src/fan_ingest/README.md`](src/fan_ingest/README.md) | Kafka-to-Postgres ingest flags, env vars, host-vs-Compose connection notes, and persistence docs |
 | `proleague_scraper` | [`src/proleague_scraper/README.md`](src/proleague_scraper/README.md) | Scheduler + HTTP read layer, internal routes, env vars, scrape workflow, and compliance notes |
 | `proleague_ingest` | [`src/proleague_ingest/README.md`](src/proleague_ingest/README.md) | `player_stats` consumer behavior, message shape, Postgres table summary, and verification commands |
-| `frontend_app` | [`src/frontend_app/README.md`](src/frontend_app/README.md) | Flask UI/API usage, provider config, Text-to-SQL flow, routes, screenshots, and guardrails |
+| `frontend_app` | [`src/frontend_app/README.md`](src/frontend_app/README.md) | Flask UI/API usage, provider config, Text-to-SQL flow, routes, screenshots, guardrails, and package split notes |
 | `dbt` | [`dbt/README.md`](dbt/README.md) | Local dbt setup, Compose dbt scheduler notes, profiles, env vars, and Windows-specific dbt guidance |
 | Local stack | [`docker/README.md`](docker/README.md) | Compose services, published ports, `.env` knobs, operator commands, `just` wrappers, and stack troubleshooting |
 
