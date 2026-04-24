@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from fan_events.v2_calendar import CalendarError, load_calendar_json, validate_and_parse_matches
+from fan_events.generation.v2_calendar import (
+    CalendarError,
+    load_calendar_json,
+    validate_and_parse_matches,
+)
 
 _FIX = Path(__file__).resolve().parent / "fixtures" / "calendar_two_tiny.json"
 
@@ -23,7 +27,7 @@ def test_duplicate_match_id() -> None:
 
 
 def test_home_attendance_over_capacity() -> None:
-    from fan_events.domain import JAN_BREYDEL_MAX_CAPACITY
+    from fan_events.core.domain import JAN_BREYDEL_MAX_CAPACITY
 
     doc = load_calendar_json(_FIX)
     doc["matches"][0]["attendance"] = JAN_BREYDEL_MAX_CAPACITY + 1

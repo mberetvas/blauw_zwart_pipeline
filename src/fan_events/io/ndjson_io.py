@@ -9,8 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fan_events.data import ITEMS, SHOP_IDS
-from fan_events.domain import MERCH_PURCHASE, RETAIL_PURCHASE, TICKET_SCAN
+from fan_events.core.data import ITEMS, SHOP_IDS
+from fan_events.core.domain import MERCH_PURCHASE, RETAIL_PURCHASE, TICKET_SCAN
 
 
 def dumps_canonical(obj: dict[str, Any]) -> str:

@@ -17,6 +17,20 @@ From the repo root after `uv sync`, run **`uv run fan_events --help`** (or `uv r
 
 ## What lives here
 
+### Package layout
+
+The package is organized into layered subpackages with a strict import DAG: **core → io → generation → cli** (sinks is optional, one-way from CLI).
+
+| Subpackage | Contents | Purpose |
+| --- | --- | --- |
+| `fan_events.core` | `data.py`, `domain.py` | Structured catalogs (merch items, stadium gates, shops) and domain constants |
+| `fan_events.io` | `ndjson_io.py`, `merge_keys.py` | NDJSON serialization, validation, atomic file writes, and merge-key ordering |
+| `fan_events.generation` | `v1_batch.py`, `v2_calendar.py`, `v3_retail.py`, `retail_intensity.py`, `fan_profiles.py`, `orchestrator.py` | Synthetic event generators (v1 rolling, v2 calendar, v3 retail), match-day intensity, fan profiles, and merged-stream orchestrator |
+| `fan_events.cli` | `main.py`, `term_style.py` | Argparse CLI wiring and TTY-aware ANSI styling |
+| `fan_events.sinks` | `kafka_sink.py` | Kafka producer sink (optional; requires `confluent-kafka`) |
+
+### Subcommands
+
 | Subcommand | What it does | Deep doc |
 | --- | --- | --- |
 | `generate_events` | Rolling-window fan events (v1) or calendar-driven match events (v2) | [`specs/002-match-calendar-events/quickstart.md`](../../specs/002-match-calendar-events/quickstart.md) |

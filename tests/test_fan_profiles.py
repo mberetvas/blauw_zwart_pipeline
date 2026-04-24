@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from fan_events.fan_profiles import (
+from fan_events.generation.fan_profiles import (
     AGE_BANDS,
     COUNTRY_REGIONS,
     GENDERS,
@@ -14,12 +14,12 @@ from fan_events.fan_profiles import (
     format_fans_sidecar_json,
     synthetic_fan_profile,
 )
-from fan_events.ndjson_io import dumps_canonical
-from fan_events.v3_retail import (
+from fan_events.generation.v3_retail import (
     generate_retail_batch,
     iter_retail_ndjson_lines,
     retail_stream_ndjson,
 )
+from fan_events.io.ndjson_io import dumps_canonical
 
 
 def test_derived_seed_stable_across_calls() -> None:

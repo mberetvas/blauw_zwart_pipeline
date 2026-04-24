@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from fan_events.cli import SUBCOMMAND_STREAM, parse_args, run_stream
-from fan_events.v2_calendar import (
+from fan_events.generation.v2_calendar import (
     filter_matches_by_date_range,
     iter_v2_records_merged_sorted,
     load_calendar_json,

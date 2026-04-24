@@ -7,8 +7,8 @@ import random
 
 import pytest
 
-from fan_events.ndjson_io import records_to_ndjson_v3, sort_key_v3, validate_record_v3
-from fan_events.v3_retail import generate_retail_batch
+from fan_events.generation.v3_retail import generate_retail_batch
+from fan_events.io.ndjson_io import records_to_ndjson_v3, sort_key_v3, validate_record_v3
 
 
 @pytest.mark.slow

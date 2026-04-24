@@ -19,31 +19,25 @@ import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from fan_events.domain import (
+from fan_events.cli.term_style import ColoredArgumentParser, ColoredHelpFormatter
+from fan_events.core.domain import (
     DEFAULT_MERCH_FACTOR,
     DEFAULT_RETAIL_SIM_EPOCH_UTC,
     DEFAULT_SCAN_FRACTION,
     MERCH_PURCHASE,
     TICKET_SCAN,
 )
-from fan_events.fan_profiles import build_fans_sidecar, format_fans_sidecar_json
-from fan_events.ndjson_io import (
-    records_to_ndjson_v1,
-    records_to_ndjson_v2,
-    records_to_ndjson_v3,
-    write_atomic_text,
-)
-from fan_events.orchestrator import (
+from fan_events.generation.fan_profiles import build_fans_sidecar, format_fans_sidecar_json
+from fan_events.generation.orchestrator import (
     compute_stream_t0,
     default_unified_fan_pool_max,
     iter_merged_records,
     open_append_sink,
     write_merged_stream,
 )
-from fan_events.retail_intensity import build_retail_rate_factor_fn
-from fan_events.term_style import ColoredArgumentParser, ColoredHelpFormatter
-from fan_events.v1_batch import FIXED_NOW_UTC, generate_batch
-from fan_events.v2_calendar import (
+from fan_events.generation.retail_intensity import build_retail_rate_factor_fn
+from fan_events.generation.v1_batch import FIXED_NOW_UTC, generate_batch
+from fan_events.generation.v2_calendar import (
     CalendarError,
     filter_matches_by_date_range,
     generate_v2_records,
@@ -52,11 +46,17 @@ from fan_events.v2_calendar import (
     load_calendar_json,
     validate_and_parse_matches,
 )
-from fan_events.v3_retail import (
+from fan_events.generation.v3_retail import (
     generate_retail_batch,
     iter_retail_ndjson_lines,
     iter_retail_records,
     retail_stream_ndjson,
+)
+from fan_events.io.ndjson_io import (
+    records_to_ndjson_v1,
+    records_to_ndjson_v2,
+    records_to_ndjson_v3,
+    write_atomic_text,
 )
 
 DEFAULT_OUTPUT = "out/fan_events.ndjson"
@@ -891,8 +891,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     md = st.add_argument_group(
         "Match-day retail (merged --calendar without --no-retail)",
         description=(
-            "Poisson rate scales as R_base × F(t). Default windows echo Jan Breydel match-day "
-            "lead times (see specs/006-stream-three-event-kinds/research.md §6)."
+            "Poisson rate scales as R_base ├ù F(t). Default windows echo Jan Breydel match-day "
+            "lead times (see specs/006-stream-three-event-kinds/research.md ┬º6)."
         ),
     )
     md.add_argument(
@@ -1258,7 +1258,7 @@ def _stream_t0_anchor_and_retail_epoch(
     include_retail: bool,
 ) -> tuple[datetime | None, datetime]:
     """``--max-duration`` anchor uses the effective retail emission epoch in ``compute_stream_t0``;
-    emission start follows research §3 (no backward retail vs first v2 window when calendar is
+    emission start follows research ┬º3 (no backward retail vs first v2 window when calendar is
     present). When ``--epoch`` is omitted, both emission and the t0 anchor use ``earliest_v2``
     so that duration semantics are aligned with the master-clock start actually used."""
     retail_epoch_cli = (
@@ -1409,7 +1409,7 @@ def _configure_kafka_observability(verbose: bool = False) -> None:
     """Attach a stderr handler to the ``fan_events.kafka`` logger.
 
     Called once when entering Kafka mode so non-Kafka subcommands are unaffected.
-    The level is resolved as: ``--verbose`` → DEBUG, else ``FAN_EVENTS_LOG_LEVEL`` /
+    The level is resolved as: ``--verbose`` ΓåÆ DEBUG, else ``FAN_EVENTS_LOG_LEVEL`` /
     ``LOGLEVEL`` env var, else INFO.
     """
     kafka_logger = logging.getLogger("fan_events.kafka")
@@ -1452,7 +1452,7 @@ def _run_stream_kafka(
         )
         sys.exit(1)
 
-    from fan_events.kafka_sink import (
+    from fan_events.sinks.kafka_sink import (
         KafkaSink,
         build_producer_config,
         kafka_config_from_env,
@@ -1471,7 +1471,7 @@ def _run_stream_kafka(
     })
 
     kafka_logger.info(
-        "Kafka mode — topic=%s  client_id=%s  bootstrap=%s",
+        "Kafka mode ΓÇö topic=%s  client_id=%s  bootstrap=%s",
         cfg.topic,
         cfg.client_id,
         summarize_bootstrap_for_log(cfg.bootstrap_servers),

@@ -1,7 +1,7 @@
 """Contract ordering for v1 and v2 sort keys."""
 
-from fan_events.domain import MERCH_PURCHASE, TICKET_SCAN
-from fan_events.ndjson_io import sort_key_v1, sort_key_v2
+from fan_events.core.domain import MERCH_PURCHASE, TICKET_SCAN
+from fan_events.io.ndjson_io import sort_key_v1, sort_key_v2
 
 
 def test_sort_key_v2_orders_match_id_before_location_ties() -> None:

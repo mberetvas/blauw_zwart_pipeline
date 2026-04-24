@@ -4,14 +4,14 @@ import random
 from datetime import date
 from pathlib import Path
 
-from fan_events.merge_keys import merge_key_tuple
-from fan_events.v2_calendar import (
+from fan_events.generation.v2_calendar import (
     filter_matches_by_date_range,
     generate_v2_records,
     iter_v2_records_merged_sorted,
     load_calendar_json,
     validate_and_parse_matches,
 )
+from fan_events.io.merge_keys import merge_key_tuple
 
 _FIX = Path(__file__).resolve().parent / "fixtures" / "calendar_two_tiny.json"
 _THREE = (

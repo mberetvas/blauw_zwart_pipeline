@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from fan_events.v2_calendar import MatchContext, shift_match_context_calendar_years
+from fan_events.generation.v2_calendar import MatchContext, shift_match_context_calendar_years
 
 
 def _shifted(ctx: MatchContext, k: int) -> MatchContext:

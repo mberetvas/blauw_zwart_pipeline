@@ -121,7 +121,8 @@ def summarize_bootstrap_for_log(servers: str) -> str:
 class KafkaSink:
     """Duck-typed sink that publishes NDJSON lines to a Kafka topic.
 
-    Designed to be passed to :func:`fan_events.orchestrator.write_merged_stream` in place of a
+    Designed to be passed to
+    :func:`fan_events.generation.orchestrator.write_merged_stream` in place of a
     :class:`io.TextIO` object.  Implements ``.write()`` and ``.flush()`` to match the interface
     used by ``write_merged_stream``, plus ``.close()`` for clean shutdown.
 

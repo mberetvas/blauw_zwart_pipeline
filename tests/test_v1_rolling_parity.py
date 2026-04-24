@@ -6,8 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from fan_events.ndjson_io import records_to_ndjson_v1
-from fan_events.v1_batch import FIXED_NOW_UTC, generate_batch
+from fan_events.generation.v1_batch import FIXED_NOW_UTC, generate_batch
+from fan_events.io.ndjson_io import records_to_ndjson_v1
 
 _FIX = Path(__file__).resolve().parent / "fixtures" / "v1_golden_seed1_n10_d30.ndjson"
 _V1_GOLDEN = _FIX.read_text(encoding="utf-8")

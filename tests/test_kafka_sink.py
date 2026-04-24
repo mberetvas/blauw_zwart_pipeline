@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from fan_events.cli import SUBCOMMAND_STREAM, parse_args
-from fan_events.kafka_sink import (
+from fan_events.sinks.kafka_sink import (
     KafkaConfig,
     KafkaSink,
     build_producer_config,

@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from fan_events.retail_intensity import build_retail_rate_factor_fn
-from fan_events.v2_calendar import build_match_context
+from fan_events.generation.retail_intensity import build_retail_rate_factor_fn
+from fan_events.generation.v2_calendar import build_match_context
 
 
 def _ctx_row(**kwargs: object) -> dict:

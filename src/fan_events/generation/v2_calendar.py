@@ -12,15 +12,15 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from fan_events.data import ITEMS, LOCATIONS, synthetic_line_amount_eur
-from fan_events.domain import (
+from fan_events.core.data import ITEMS, LOCATIONS, synthetic_line_amount_eur
+from fan_events.core.domain import (
     DEFAULT_MERCH_FACTOR,
     DEFAULT_SCAN_FRACTION,
     JAN_BREYDEL_MAX_CAPACITY,
     MERCH_PURCHASE,
     TICKET_SCAN,
 )
-from fan_events.merge_keys import merge_key_tuple
+from fan_events.io.merge_keys import merge_key_tuple
 
 
 class CalendarError(ValueError):

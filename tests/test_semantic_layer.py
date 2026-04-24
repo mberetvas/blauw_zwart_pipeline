@@ -86,7 +86,9 @@ def test_load_happy_path_returns_expected_keys(
 ) -> None:
     import importlib
 
-    from frontend_app.sql_agent import semantic_layer  # noqa: PLC0415  (import inside test intentional)
+    from frontend_app.sql_agent import (
+        semantic_layer,  # noqa: PLC0415  (import inside test intentional)
+    )
     importlib.reload(semantic_layer)
 
     yaml_file = _write_valid_yaml(tmp_path / "semantic_layer.yml")

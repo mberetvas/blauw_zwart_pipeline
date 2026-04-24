@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from fan_events.domain import ITEMS, MERCH_PURCHASE, RETAIL_PURCHASE, SHOP_IDS
-from fan_events.ndjson_io import (
+from fan_events.core.domain import ITEMS, MERCH_PURCHASE, RETAIL_PURCHASE, SHOP_IDS
+from fan_events.io.ndjson_io import (
     dumps_canonical,
     records_to_ndjson_v3,
     sort_key_v3,

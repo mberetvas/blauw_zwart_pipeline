@@ -7,20 +7,20 @@ from itertools import pairwise
 from pathlib import Path
 from unittest.mock import patch
 
-from fan_events.merge_keys import merge_key_tuple
-from fan_events.orchestrator import (
+from fan_events.generation.orchestrator import (
     default_unified_fan_pool_max,
     iter_merged_records,
     record_to_ndjson_line,
     write_merged_stream,
 )
-from fan_events.v2_calendar import (
+from fan_events.generation.v2_calendar import (
     filter_matches_by_date_range,
     iter_v2_records_merged_sorted,
     load_calendar_json,
     validate_and_parse_matches,
 )
-from fan_events.v3_retail import iter_retail_records
+from fan_events.generation.v3_retail import iter_retail_records
+from fan_events.io.merge_keys import merge_key_tuple
 
 _FIX = Path(__file__).resolve().parent / "fixtures" / "calendar_two_tiny.json"
 
@@ -107,7 +107,7 @@ def test_write_merged_stream_pacing_respects_max_events() -> None:
     def _track_sleep(sec: float) -> None:
         sleeps.append(sec)
 
-    with patch("fan_events.orchestrator.time.sleep", side_effect=_track_sleep):
+    with patch("fan_events.generation.orchestrator.time.sleep", side_effect=_track_sleep):
         n = write_merged_stream(
             merged,
             buf,

@@ -14,8 +14,7 @@ from fan_events.cli import (
     parse_args,
     run_stream,
 )
-from fan_events.merge_keys import parse_timestamp_utc_z
-from fan_events.v2_calendar import (
+from fan_events.generation.v2_calendar import (
     filter_matches_by_date_range,
     iter_looped_v2_records,
     iter_v2_records_merged_sorted,
@@ -23,6 +22,7 @@ from fan_events.v2_calendar import (
     shift_match_context,
     validate_and_parse_matches,
 )
+from fan_events.io.merge_keys import parse_timestamp_utc_z
 
 _FIX = Path(__file__).resolve().parent / "fixtures" / "calendar_two_tiny.json"
 
@@ -97,7 +97,7 @@ def test_looped_records_cycle1_timestamps_later_than_cycle0() -> None:
 
 def test_looped_records_monotonically_non_decreasing_per_cycle() -> None:
     """Each cycle's records are non-decreasing by merge_key_tuple."""
-    from fan_events.merge_keys import merge_key_tuple
+    from fan_events.io.merge_keys import merge_key_tuple
 
     contexts = _base_contexts()
     rng = random.Random(7)

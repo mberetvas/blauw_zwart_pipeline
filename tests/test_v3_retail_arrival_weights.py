@@ -6,8 +6,8 @@ import random
 
 import pytest
 
-from fan_events.domain import validate_shop_weights
-from fan_events.v3_retail import generate_retail_ndjson, iter_retail_records
+from fan_events.core.domain import validate_shop_weights
+from fan_events.generation.v3_retail import generate_retail_ndjson, iter_retail_records
 
 
 def test_invalid_weights_raise() -> None:
