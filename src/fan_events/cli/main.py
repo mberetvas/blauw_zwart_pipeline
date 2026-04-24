@@ -891,8 +891,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     md = st.add_argument_group(
         "Match-day retail (merged --calendar without --no-retail)",
         description=(
-            "Poisson rate scales as R_base ├ù F(t). Default windows echo Jan Breydel match-day "
-            "lead times (see specs/006-stream-three-event-kinds/research.md ┬º6)."
+            "Poisson rate scales as R_base × F(t). Default windows echo Jan Breydel match-day "
+            "lead times (see specs/006-stream-three-event-kinds/research.md §6)."
         ),
     )
     md.add_argument(
@@ -1258,7 +1258,7 @@ def _stream_t0_anchor_and_retail_epoch(
     include_retail: bool,
 ) -> tuple[datetime | None, datetime]:
     """``--max-duration`` anchor uses the effective retail emission epoch in ``compute_stream_t0``;
-    emission start follows research ┬º3 (no backward retail vs first v2 window when calendar is
+    emission start follows research §3 (no backward retail vs first v2 window when calendar is
     present). When ``--epoch`` is omitted, both emission and the t0 anchor use ``earliest_v2``
     so that duration semantics are aligned with the master-clock start actually used."""
     retail_epoch_cli = (
@@ -1409,7 +1409,7 @@ def _configure_kafka_observability(verbose: bool = False) -> None:
     """Attach a stderr handler to the ``fan_events.kafka`` logger.
 
     Called once when entering Kafka mode so non-Kafka subcommands are unaffected.
-    The level is resolved as: ``--verbose`` ΓåÆ DEBUG, else ``FAN_EVENTS_LOG_LEVEL`` /
+    The level is resolved as: ``--verbose`` → DEBUG, else ``FAN_EVENTS_LOG_LEVEL`` /
     ``LOGLEVEL`` env var, else INFO.
     """
     kafka_logger = logging.getLogger("fan_events.kafka")
@@ -1471,7 +1471,7 @@ def _run_stream_kafka(
     })
 
     kafka_logger.info(
-        "Kafka mode ΓÇö topic=%s  client_id=%s  bootstrap=%s",
+        "Kafka mode — topic=%s  client_id=%s  bootstrap=%s",
         cfg.topic,
         cfg.client_id,
         summarize_bootstrap_for_log(cfg.bootstrap_servers),
