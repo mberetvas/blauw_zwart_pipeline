@@ -2,8 +2,8 @@
 
 from datetime import datetime, timezone
 
-from fan_events.domain import MERCH_PURCHASE, RETAIL_PURCHASE, TICKET_SCAN
-from fan_events.merge_keys import merge_key_tuple, parse_timestamp_utc_z
+from fan_events.core.domain import MERCH_PURCHASE, RETAIL_PURCHASE, TICKET_SCAN
+from fan_events.io.merge_keys import merge_key_tuple, parse_timestamp_utc_z
 
 
 def test_parse_timestamp_utc_z() -> None:

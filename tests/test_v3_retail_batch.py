@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 import random
 
-from fan_events.ndjson_io import records_to_ndjson_v3, sort_key_v3, validate_record_v3
-from fan_events.v3_retail import (
+from fan_events.generation.v3_retail import (
     generate_retail_batch,
     generate_retail_ndjson,
     iter_retail_records,
 )
+from fan_events.io.ndjson_io import records_to_ndjson_v3, sort_key_v3, validate_record_v3
 
 
 def test_batch_byte_identical_twice() -> None:

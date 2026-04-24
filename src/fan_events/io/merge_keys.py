@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from fan_events.ndjson_io import dumps_canonical
+from fan_events.io.ndjson_io import dumps_canonical
 
 
 def parse_timestamp_utc_z(ts: str) -> datetime:

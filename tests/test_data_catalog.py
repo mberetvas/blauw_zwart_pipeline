@@ -6,7 +6,7 @@ import random
 
 import pytest
 
-from fan_events.data import (
+from fan_events.core.data import (
     ITEMS,
     MERCH_BY_NAME,
     MERCH_ITEMS,

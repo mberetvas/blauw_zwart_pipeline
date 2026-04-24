@@ -5,23 +5,17 @@ import random
 from datetime import date
 from pathlib import Path
 
-from fan_events.domain import MERCH_PURCHASE, TICKET_SCAN
-from fan_events.ndjson_io import records_to_ndjson_v2, validate_record_v2
-from fan_events.v2_calendar import (
+from fan_events.core.domain import MERCH_PURCHASE, TICKET_SCAN
+from fan_events.generation.v2_calendar import (
     filter_matches_by_date_range,
     generate_v2_records,
     load_calendar_json,
     validate_and_parse_matches,
 )
+from fan_events.io.ndjson_io import records_to_ndjson_v2, validate_record_v2
 
 _FIX = Path(__file__).resolve().parent / "fixtures" / "calendar_two_tiny.json"
-_THREE = (
-    Path(__file__).resolve().parents[1]
-    / "specs"
-    / "002-match-calendar-events"
-    / "fixtures"
-    / "calendar_three_matches.json"
-)
+_THREE = Path(__file__).resolve().parent / "fixtures" / "calendar_three_matches.json"
 
 
 def test_three_matches_date_filter_count() -> None:

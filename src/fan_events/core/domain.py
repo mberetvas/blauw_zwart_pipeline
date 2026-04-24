@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Sequence
 
-import fan_events.data as _data
+import fan_events.core.data as _data
 
-# Catalogs (single source: ``fan_events.data``; exposed for ``from fan_events.domain import …``).
+# Catalogs (single source: ``fan_events.core.data``).
+# Exposed for ``from fan_events.core.domain import …``.
 DEFAULT_SHOP_WEIGHTS = _data.DEFAULT_SHOP_WEIGHTS
 ITEMS = _data.ITEMS
 LOCATIONS = _data.LOCATIONS

@@ -12,14 +12,14 @@ from collections.abc import Callable, Iterator, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fan_events.data import ITEMS, SHOP_IDS, synthetic_line_amount_eur
-from fan_events.domain import (
+from fan_events.core.data import ITEMS, SHOP_IDS, synthetic_line_amount_eur
+from fan_events.core.domain import (
     DEFAULT_RETAIL_SIM_EPOCH_UTC,
     DEFAULT_SHOP_WEIGHTS,
     RETAIL_PURCHASE,
     validate_shop_weights,
 )
-from fan_events.ndjson_io import format_line_v3, records_to_ndjson_v3
+from fan_events.io.ndjson_io import format_line_v3, records_to_ndjson_v3
 
 
 def make_retail_purchase(

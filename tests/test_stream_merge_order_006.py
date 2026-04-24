@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from fan_events.cli import SUBCOMMAND_STREAM, parse_args, run_stream
-from fan_events.merge_keys import merge_key_tuple
+from fan_events.io.merge_keys import merge_key_tuple
 
 _REPO = Path(__file__).resolve().parents[1]
 _FIX = _REPO / "match_day.example.json"

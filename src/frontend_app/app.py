@@ -1,4 +1,4 @@
-"""Flask Text-to-SQL API backed by Ollama or OpenRouter and Postgres dbt marts.
+﻿"""Flask Text-to-SQL API backed by Ollama or OpenRouter and Postgres dbt marts.
 
 Flow
 ----
@@ -1173,7 +1173,7 @@ def leaderboard_api() -> Any:
         return jsonify({"error": str(exc)}), 400
     except psycopg2.OperationalError as exc:
         if not DATABASE_URL:
-            return jsonify({"error": str(exc)}), 503
+            return jsonify({"error": "No database URL configured"}), 503
         log.exception("Leaderboard query failed")
         return jsonify({"error": f"Leaderboard query failed: {exc}"}), 500
     except psycopg2.Error as exc:

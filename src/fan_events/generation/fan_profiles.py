@@ -35,7 +35,7 @@ import hashlib
 import random
 from typing import Any, Iterable
 
-from fan_events.ndjson_io import dumps_canonical
+from fan_events.io.ndjson_io import dumps_canonical
 
 LOYALTY_TIERS: tuple[str, ...] = ("bronze", "silver", "gold", "platinum")
 LOYALTY_WEIGHTS: tuple[float, float, float, float] = (0.50, 0.30, 0.15, 0.05)

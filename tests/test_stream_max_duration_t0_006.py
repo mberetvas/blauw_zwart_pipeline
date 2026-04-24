@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from io import StringIO
 
-from fan_events.data import ITEMS
-from fan_events.orchestrator import write_merged_stream
-from fan_events.v3_retail import make_retail_purchase
+from fan_events.core.data import ITEMS
+from fan_events.generation.orchestrator import write_merged_stream
+from fan_events.generation.v3_retail import make_retail_purchase
 
 
 def _r(ts: str) -> dict:

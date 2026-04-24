@@ -10,9 +10,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TextIO
 
-from fan_events.domain import JAN_BREYDEL_MAX_CAPACITY, RETAIL_PURCHASE
-from fan_events.merge_keys import merge_key_tuple, parse_timestamp_utc_z
-from fan_events.ndjson_io import format_line_v2, format_line_v3
+from fan_events.core.domain import JAN_BREYDEL_MAX_CAPACITY, RETAIL_PURCHASE
+from fan_events.io.merge_keys import merge_key_tuple, parse_timestamp_utc_z
+from fan_events.io.ndjson_io import format_line_v2, format_line_v3
 
 
 def compute_stream_t0(retail_epoch_utc: datetime, v2_contexts_pass0: list[Any]) -> datetime:

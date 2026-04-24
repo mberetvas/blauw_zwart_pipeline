@@ -6,7 +6,7 @@ from datetime import datetime
 
 import pytest
 
-from fan_events.v2_calendar import (
+from fan_events.generation.v2_calendar import (
     add_calendar_years_to_naive_local,
     build_match_context,
     shift_match_context_calendar_years,

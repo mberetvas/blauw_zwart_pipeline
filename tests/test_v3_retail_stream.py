@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import random
 
-from fan_events.v3_retail import retail_stream_ndjson
+from fan_events.generation.v3_retail import retail_stream_ndjson
 
 
 def test_stream_byte_identical_twice() -> None:

@@ -6,14 +6,14 @@ import random
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fan_events.data import (
+from fan_events.core.data import (
     ITEMS,
     LOCATIONS,
     SYNTHETIC_LINE_AMOUNT_RANDINT_HIGH,
     SYNTHETIC_LINE_AMOUNT_RANDINT_LOW,
     line_amount_eur_from_jitter_int,
 )
-from fan_events.domain import MERCH_PURCHASE, TICKET_SCAN
+from fan_events.core.domain import MERCH_PURCHASE, TICKET_SCAN
 
 # When --seed is set, wall-clock "now" would change between runs and break byte identity (FR-005).
 FIXED_NOW_UTC = datetime(2026, 4, 1, 15, 0, 0, tzinfo=timezone.utc)

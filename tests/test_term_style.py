@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from fan_events.term_style import (
+from fan_events.cli.term_style import (
     ColoredArgumentParser,
     ColoredHelpFormatter,
     blauw_zwart_banner,

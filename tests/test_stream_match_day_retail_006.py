@@ -6,13 +6,13 @@ import random
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fan_events.retail_intensity import build_retail_rate_factor_fn
-from fan_events.v2_calendar import (
+from fan_events.generation.retail_intensity import build_retail_rate_factor_fn
+from fan_events.generation.v2_calendar import (
     filter_matches_by_date_range,
     load_calendar_json,
     validate_and_parse_matches,
 )
-from fan_events.v3_retail import iter_retail_records
+from fan_events.generation.v3_retail import iter_retail_records
 
 _REPO = Path(__file__).resolve().parents[1]
 _CAL = _REPO / "match_day.example.json"
