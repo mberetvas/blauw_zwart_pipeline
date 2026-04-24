@@ -7,7 +7,15 @@ name = "blauw-zwart-fan-sim-pipeline"
 version = "0.1.0"
 requires-python = ">=3.12"
 # IANA time zone database for zoneinfo (required on Windows for Europe/Brussels etc.).
-dependencies = ["tzdata>=2024.1"]
+dependencies = [
+    "langchain>=1.2.15",
+    "langchain-community>=0.4.1",
+    "langchain-openrouter>=0.2.1",
+    "langgraph>=1.1.9",
+    "python-dotenv>=1.2.2",
+    "sqlglot[c]>=30.6.0",
+    "tzdata>=2024.1",
+]
 
 [project.optional-dependencies]
 # Kafka output for `fan_events stream --kafka-topic`; install with: uv sync --extra kafka
@@ -32,6 +40,7 @@ fan_ingest = "fan_ingest.main:main"
 dev = [
     "beautifulsoup4>=4.14.3",
     "confluent-kafka>=2.14.0",
+    "ipykernel>=7.2.0",
     "lxml>=6.0.4",
     "pytest>=9.0.2",
     "ruff>=0.8.0",
