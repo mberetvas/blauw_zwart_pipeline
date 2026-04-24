@@ -23,21 +23,29 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from decimal import Decimal
-from typing import Any, Iterator, Sequence
+from typing import Any, Iterator
 
 import psycopg2
 import requests
 from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 
-from .llm_runtime_config import (
+from .sql_agent.database import DATABASE_URL, _execute_sql, _json_default, _run_read_query
+from .sql_agent.guardrails import _rewrite_layer_schema_qualifiers, _strip_fences, _validate_sql
+from .sql_agent.llm_runtime_config import (
     apply_llm_config_update,
     get_llm_settings,
     init_llm_config,
     to_public_config,
 )
-from .schema_context import build_schema_context_text
-from .semantic_layer import (
+from .sql_agent.providers import (
+    _PROVIDER_DISPLAY,
+    KNOWN_PROVIDERS,
+    _iter_answer_stream,
+    _llm_request_error,
+    complete,
+)
+from .sql_agent.schema_context import build_schema_context_text
+from .sql_agent.semantic_layer import (
     SemanticLayerError,
     build_answer_semantic_context,
     build_sql_semantic_context,
@@ -48,15 +56,8 @@ from .semantic_layer import (
 # Configuration (environment variables)
 # ---------------------------------------------------------------------------
 
-# Schema loading is implemented in schema_context (SCHEMA_FILE, SCHEMA_FILES, DBT_MODELS_DIR).
-# Prefer read-only role URL; Compose maps LLM_READER_DATABASE_URL -> DATABASE_URL for this service.
-DATABASE_URL = (
-    os.environ.get("LLM_READER_DATABASE_URL", "").strip()
-    or os.environ.get("DATABASE_URL", "").strip()
-)
-
-KNOWN_PROVIDERS: frozenset[str] = frozenset({"ollama", "openrouter"})
-_PROVIDER_DISPLAY = {"ollama": "Ollama", "openrouter": "OpenRouter"}
+# Schema loading: sql_agent.schema_context (SCHEMA_FILE, SCHEMA_FILES, DBT_MODELS_DIR).
+# DATABASE_URL, KNOWN_PROVIDERS, _PROVIDER_DISPLAY: sql_agent submodules.
 LEADERBOARD_SUPPORTED_WINDOWS: frozenset[str] = frozenset({"all", "month", "season"})
 LEADERBOARD_LIMIT = 25
 LEADERBOARD_MATCH_POINTS = 1000
@@ -79,16 +80,8 @@ LEADERBOARD_TIE_BREAKERS = [
 ASK_CONTEXT_MAX_TURNS = 3
 ASK_CONTEXT_MAX_PREVIEW_ROWS = 5
 
-# ---------------------------------------------------------------------------
-# Security: forbidden SQL keywords that would mutate state
-# ---------------------------------------------------------------------------
-
-_MUTATING = re.compile(
-    r"\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE|ALTER|CREATE|REPLACE"
-    r"|GRANT|REVOKE|EXECUTE|EXEC|CALL|COPY|VACUUM|ANALYZE|COMMENT"
-    r"|LOCK|CLUSTER|REINDEX|REFRESH|SET\s+ROLE|RESET)\b",
-    re.IGNORECASE,
-)
+# SQL guardrails (_validate_sql, _strip_fences, _rewrite_layer_schema_qualifiers)
+# imported from sql_agent.guardrails.
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -120,77 +113,8 @@ def load_semantic_context() -> tuple[str, str]:
     return build_sql_semantic_context(layer), build_answer_semantic_context(layer)
 
 
-# ---------------------------------------------------------------------------
-# LLM provider helpers
-# ---------------------------------------------------------------------------
-
-
-def _call_ollama(prompt: str, model: str) -> str:
-    """Send a prompt to Ollama /api/generate and return the response text."""
-    s = get_llm_settings()
-    resp = requests.post(
-        f"{s['ollama_url']}/api/generate",
-        json={"model": model, "prompt": prompt, "stream": False},
-        timeout=int(s["ollama_timeout"]),
-    )
-    resp.raise_for_status()
-    return resp.json()["response"].strip()
-
-
-def _call_openrouter(prompt: str, model: str) -> str:
-    """Send a prompt to OpenRouter chat/completions and return the response text."""
-    s = get_llm_settings()
-    resp = requests.post(
-        f"{s['openrouter_base_url']}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {s['openrouter_api_key']}",
-            "Content-Type": "application/json",
-        },
-        json={"model": model, "messages": [{"role": "user", "content": prompt}]},
-        timeout=int(s["openrouter_timeout"]),
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"].strip()
-
-
-def complete(prompt: str, provider: str, model: str) -> str:
-    """Call the selected LLM provider and return the plain-text response."""
-    if provider == "openrouter":
-        return _call_openrouter(prompt, model)
-    return _call_ollama(prompt, model)
-
-
-def _llm_request_error(
-    provider_label: str,
-    stage: str,
-    exc: requests.exceptions.RequestException,
-) -> tuple[str, int]:
-    """Map provider request failures to clearer API responses."""
-    status_code = getattr(getattr(exc, "response", None), "status_code", None)
-    if status_code == 429:
-        return (
-            f"{provider_label} hit a rate limit during the {stage} step. "
-            "Wait a moment, switch model, or try the other provider.",
-            429,
-        )
-    if status_code in {401, 403}:
-        return (
-            f"{provider_label} rejected the request during the {stage} step. "
-            "Check the server-side API key and model access.",
-            503,
-        )
-    if isinstance(exc, requests.exceptions.Timeout):
-        return (
-            f"{provider_label} timed out during the {stage} step.",
-            504,
-        )
-    if isinstance(exc, requests.exceptions.ConnectionError):
-        return (
-            f"{provider_label} is unreachable during the {stage} step. "
-            "Check the provider connection and try again.",
-            503,
-        )
-    return (f"{provider_label} request failed during the {stage} step: {exc}", 503)
+# LLM provider helpers (complete, _call_ollama, _call_openrouter, _llm_request_error)
+# imported from sql_agent.providers.
 
 
 def _build_trace(
@@ -244,88 +168,10 @@ def _build_trace(
 
 
 # ---------------------------------------------------------------------------
-# SQL guardrails
-# ---------------------------------------------------------------------------
-
-
-def _validate_sql(sql: str) -> None:
-    """Raise ValueError if sql is not a safe, read-only SELECT statement."""
-    stripped = sql.strip()
-    starts_with = stripped.upper().lstrip("(\n\r\t ")
-    if not (starts_with.startswith("SELECT") or starts_with.startswith("WITH")):
-        raise ValueError(
-            "Generated SQL must begin with SELECT or WITH. "
-            f"Received: {stripped[:120]!r}"
-        )
-    if ";" in stripped:
-        raise ValueError(
-            "Generated SQL must contain exactly one SELECT statement and cannot include "
-            "';' inside the query."
-        )
-    match = _MUTATING.search(stripped)
-    if match:
-        raise ValueError(
-            f"Generated SQL contains forbidden keyword '{match.group()}'."
-        )
-
-
-def _strip_fences(raw: str) -> str:
-    """Remove markdown code fences that models sometimes wrap SQL in."""
-    raw = re.sub(r"^```[a-z]*\n?", "", raw, flags=re.MULTILINE)
-    raw = re.sub(r"```\s*$", "", raw, flags=re.MULTILINE)
-    raw = re.sub(r";+\s*$", "", raw.strip())
-    return raw.strip()
-
-
-def _rewrite_layer_schema_qualifiers(sql: str) -> str:
-    """Map dbt layer labels used as schema qualifiers to dbt_dev.
-
-    Some smaller LLMs infer that "Layer: intermediate" means a SQL schema and
-    emit relation names such as intermediate.match_events. In this project, dbt
-    builds all relations into the single dbt_dev schema.
-    """
-    return re.sub(r"\b(?:staging|intermediate|marts)\.(\w+)\b", r"dbt_dev.\1", sql)
-
-
-# ---------------------------------------------------------------------------
 # Database execution
 # ---------------------------------------------------------------------------
 
-
-def _json_default(obj: Any) -> Any:
-    """JSON serialiser for Decimal and other non-serialisable Postgres types."""
-    if isinstance(obj, Decimal):
-        return float(obj)
-    raise TypeError(f"Object of type {type(obj)} is not JSON serialisable")
-
-
-def _execute_sql(sql: str) -> list[dict[str, Any]]:
-    """Wrap sql in a LIMIT guard and execute it as the llm_reader role."""
-    wrapped = f"SELECT * FROM (\n{sql}\n) AS llm_query LIMIT 50"
-    return _run_read_query(wrapped)
-
-
-def _run_read_query(
-    sql: str, params: Sequence[Any] | None = None
-) -> list[dict[str, Any]]:
-    """Execute a read-only query with the shared reader DSN and timeout."""
-    if not DATABASE_URL:
-        raise psycopg2.OperationalError(
-            "No database URL: set LLM_READER_DATABASE_URL or DATABASE_URL "
-            "(see .env.example and docker/postgres/init/002_llm_reader.sql)."
-        )
-    conn = psycopg2.connect(DATABASE_URL)
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SET statement_timeout = '10s'")
-            if params is None:
-                cur.execute(sql)
-            else:
-                cur.execute(sql, params)
-            cols = [d[0] for d in cur.description]
-            return [dict(zip(cols, row)) for row in cur.fetchall()]
-    finally:
-        conn.close()
+# _run_read_query, _execute_sql, _json_default imported from sql_agent.database.
 
 
 def _leaderboard_points_sql(alias: str) -> str:
@@ -1084,82 +930,8 @@ def _format_sse(event: str, data: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, default=_json_default)}\n\n"
 
 
-def _streaming_timeout(total: int) -> tuple[int, int]:
-    """(connect, read) for streaming requests; read uses full provider timeout."""
-    c = min(30, max(1, total))
-    return (c, total)
-
-
-def _stream_ollama_answer(prompt: str, model: str) -> Iterator[str]:
-    s = get_llm_settings()
-    to = int(s["ollama_timeout"])
-    timeout = _streaming_timeout(to)
-    with requests.post(
-        f"{s['ollama_url']}/api/generate",
-        json={"model": model, "prompt": prompt, "stream": True},
-        stream=True,
-        timeout=timeout,
-    ) as resp:
-        resp.raise_for_status()
-        for line in resp.iter_lines(decode_unicode=True):
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except json.JSONDecodeError:
-                log.warning("Ollama stream: skip non-JSON line: %s", line[:200])
-                continue
-            piece = obj.get("response") or ""
-            if piece:
-                yield piece
-
-
-def _stream_openrouter_answer(prompt: str, model: str) -> Iterator[str]:
-    s = get_llm_settings()
-    to = int(s["openrouter_timeout"])
-    timeout = _streaming_timeout(to)
-    with requests.post(
-        f"{s['openrouter_base_url']}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {s['openrouter_api_key']}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": model,
-            "messages": [{"role": "user", "content": prompt}],
-            "stream": True,
-        },
-        stream=True,
-        timeout=timeout,
-    ) as resp:
-        resp.raise_for_status()
-        for line in resp.iter_lines(decode_unicode=True):
-            if not line:
-                continue
-            if not line.startswith("data:"):
-                continue
-            data = line[5:].lstrip()
-            if data == "[DONE]":
-                break
-            try:
-                obj = json.loads(data)
-            except json.JSONDecodeError:
-                continue
-            choices = obj.get("choices") or []
-            if not choices:
-                continue
-            delta = choices[0].get("delta") or {}
-            content = delta.get("content")
-            if content:
-                yield content
-
-
-def _iter_answer_stream(provider: str, model: str, answer_prompt: str) -> Iterator[str]:
-    """Yield non-empty UTF-8 text fragments from the provider's streaming answer API."""
-    if provider == "openrouter":
-        yield from _stream_openrouter_answer(answer_prompt, model)
-    else:
-        yield from _stream_ollama_answer(answer_prompt, model)
+# Streaming helpers (_streaming_timeout, _stream_ollama_answer, _stream_openrouter_answer,
+# _iter_answer_stream) imported from sql_agent.providers.
 
 
 # ---------------------------------------------------------------------------

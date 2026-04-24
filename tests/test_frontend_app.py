@@ -23,7 +23,7 @@ def llm_app_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     monkeypatch.setenv("LLM_PROVIDER", "ollama")
 
-    runtime_config = importlib.import_module("frontend_app.llm_runtime_config")
+    runtime_config = importlib.import_module("frontend_app.sql_agent.llm_runtime_config")
     importlib.reload(runtime_config)
     app_module = importlib.import_module("frontend_app.app")
     app_module = importlib.reload(app_module)
@@ -315,7 +315,7 @@ def test_semantic_load_failure_returns_500(
     llm_app_module, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """If load_semantic_context raises SemanticLayerError, /api/ask returns HTTP 500."""
-    from frontend_app.semantic_layer import SemanticLayerError  # noqa: PLC0415
+    from frontend_app.sql_agent.semantic_layer import SemanticLayerError  # noqa: PLC0415
 
     def boom() -> tuple[str, str]:
         raise SemanticLayerError("test: semantic file is corrupt")

@@ -90,7 +90,7 @@ When the API runs on your machine against the Compose Postgres instance, use hos
 | `DBT_RELATION_SCHEMA` | `dbt_dev` | Schema name echoed into the SQL prompt |
 | `SCHEMA_CONTEXT_MAX_CHARS` | `0` | Maximum merged schema length (`0` means unlimited) |
 | `SCHEMA_CONTEXT_OVERFLOW` | `error` | Overflow mode: `error` or `truncate` |
-| `SEMANTIC_LAYER_FILE` | `src/frontend_app/semantic/semantic_layer.yml` | Optional semantic layer YAML path |
+| `SEMANTIC_LAYER_FILE` | `src/frontend_app/sql_agent/semantic/semantic_layer.yml` | Optional semantic layer YAML path |
 | `SEMANTIC_CONTEXT_MAX_CHARS` | `0` | Maximum rendered semantic-layer length (`0` means unlimited) |
 
 ## Routes

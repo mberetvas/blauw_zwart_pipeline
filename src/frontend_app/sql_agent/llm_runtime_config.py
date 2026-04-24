@@ -95,7 +95,8 @@ def config_path() -> Path:
         if raw:
             _CONFIG_PATH = Path(raw).expanduser().resolve()
         else:
-            _CONFIG_PATH = (Path(__file__).resolve().parent / "llm_config.json")
+            # Default beside the frontend_app package root (one level up from sql_agent/).
+            _CONFIG_PATH = (Path(__file__).resolve().parent.parent / "llm_config.json")
     return _CONFIG_PATH
 
 
