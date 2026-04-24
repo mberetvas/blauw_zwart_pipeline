@@ -71,7 +71,7 @@ def build_chat_model(
         "openrouter_api_key": api_key,
         "openrouter_api_base": s["openrouter_base_url"],
         "model_name": model,
-        "request_timeout": int(s["openrouter_timeout"]),
+        "request_timeout": int(s["openrouter_timeout"]) * 1000,  # ChatOpenRouter expects ms
         "streaming": streaming,
     }
     if temperature is not None:

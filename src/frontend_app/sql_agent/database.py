@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import logging
 import os
 import time
@@ -23,6 +24,8 @@ def _json_default(obj: Any) -> Any:
     """JSON serialiser for Decimal and other non-serialisable Postgres types."""
     if isinstance(obj, Decimal):
         return float(obj)
+    if isinstance(obj, (datetime.datetime, datetime.date, datetime.time)):
+        return obj.isoformat()
     raise TypeError(f"Object of type {type(obj)} is not JSON serialisable")
 
 
