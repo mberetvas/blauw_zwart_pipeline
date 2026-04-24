@@ -6,13 +6,13 @@ Architecture
 A two-stage flow:
 
 1. **Primary agent** — a tool-calling ReAct agent built with
-   ``langgraph.prebuilt.create_react_agent`` and the ``agent_model``. It is
+   ``langchain.agents.create_agent`` and the ``agent_model``. It is
    given the full read-only toolset from :mod:`frontend_app.sql_agent.tools`
    and discovers schema on demand. It is expected to end by calling
    ``execute_select`` and producing a Markdown answer.
 
 2. **Repair pass** — when the primary agent did not call ``execute_select``
-   successfully, a one-shot ``create_react_agent`` over the ``repair_model`` is
+   successfully, a one-shot ``create_agent`` over the ``repair_model`` is
    invoked with a constrained toolset (``describe_table`` + ``execute_select``).
    At most one repair pass per request.
 
@@ -38,19 +38,22 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass, field
 from typing import Any, Iterator
 
+from langchain.agents import create_agent
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
     HumanMessage,
     ToolMessage,
 )
-from langgraph.prebuilt import create_react_agent
+from langgraph.errors import GraphRecursionError
 
 from .database import _json_default
 from .llm_runtime_config import resolve_agent_model, resolve_repair_model
+from .observability import AgentObservabilityHandler
 from .prompts import (
     AGENT_SYSTEM_PROMPT,
     REPAIR_SYSTEM_PROMPT,
@@ -172,7 +175,7 @@ def _result_to_data_preview(
 
 
 # ---------------------------------------------------------------------------
-# Run a single create_react_agent stage
+# Run a single LangChain agent stage (compiled LangGraph under the hood)
 # ---------------------------------------------------------------------------
 
 
@@ -183,16 +186,43 @@ def _run_stage(
     system_prompt: str,
     user_prompt: str,
     max_iterations: int,
+    stage_name: str = "primary",
 ) -> list[BaseMessage]:
-    """Invoke a create_react_agent stage and return its full message history."""
-    agent = create_react_agent(model=chat_model, tools=tools, prompt=system_prompt)
-    state = agent.invoke(
-        {"messages": [HumanMessage(content=user_prompt)]},
-        config={"recursion_limit": max_iterations * 2 + 5},
+    """Invoke a create_agent stage and return its full message history."""
+    recursion_limit = max_iterations * 2 + 5
+    model_name = getattr(chat_model, "model", None) or getattr(
+        chat_model, "model_name", "unknown"
     )
+    log.info(
+        "Stage start: stage=%s model=%s tools=%d max_iter=%d",
+        stage_name,
+        model_name,
+        len(tools),
+        max_iterations,
+    )
+    handler = AgentObservabilityHandler()
+    agent = create_agent(model=chat_model, tools=tools, system_prompt=system_prompt)
+    t0 = time.perf_counter()
+    try:
+        state = agent.invoke(
+            {"messages": [HumanMessage(content=user_prompt)]},
+            config={"recursion_limit": recursion_limit, "callbacks": [handler]},
+        )
+    except GraphRecursionError:
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        log.warning(
+            "Stage %s: iteration cap hit (recursion_limit=%d) after %.0f ms",
+            stage_name,
+            recursion_limit,
+            elapsed_ms,
+        )
+        raise
+    elapsed_ms = (time.perf_counter() - t0) * 1000
     msgs = state.get("messages") if isinstance(state, dict) else None
     if not isinstance(msgs, list):
+        log.info("Stage %s done: %.0f ms, 0 messages", stage_name, elapsed_ms)
         return []
+    log.info("Stage %s done: %.0f ms, %d messages", stage_name, elapsed_ms, len(msgs))
     return msgs
 
 
@@ -219,6 +249,7 @@ def _classify_outcome(
 
 def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
     """Run the primary agent + (if needed) one-shot repair. Synchronous."""
+    log.info("run_ask start: question=%.80s", request.question)
     agent_model_id = resolve_agent_model(request.agent_model)
     repair_model_id = resolve_repair_model(request.repair_model)
 
@@ -249,6 +280,19 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
             system_prompt=AGENT_SYSTEM_PROMPT,
             user_prompt=user_prompt,
             max_iterations=max_iter,
+            stage_name="primary",
+        )
+    except GraphRecursionError:
+        log.warning(
+            "run_ask failed: primary stage hit iteration cap (max_iter=%d)", max_iter
+        )
+        return AgentFailure(
+            error=f"Primary agent exceeded iteration cap ({max_iter} iterations).",
+            phase="iteration_cap",
+            sql=None,
+            agent_model=agent_model_id,
+            repair_model=repair_model_id,
+            notes=notes,
         )
     except Exception as exc:  # noqa: BLE001
         log.exception("Primary agent invocation failed")
@@ -263,6 +307,7 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
 
     parsed, raw_sql = _last_execute_select_result(primary_msgs)
     success, phase, err = _classify_outcome(parsed, raw_sql)
+    log.info("Primary stage complete: success=%s phase=%s", success, phase)
 
     if success:
         rows = list(parsed["rows"])  # type: ignore[index]
@@ -270,6 +315,7 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
         answer = _final_assistant_text(primary_msgs).strip()
         if not answer:
             answer = "_(The agent did not produce a natural-language answer.)_"
+        log.info("run_ask done: repaired=False rows=%d", len(rows))
         return AgentResult(
             answer=answer,
             sql=sql_used,
@@ -282,6 +328,7 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
         )
 
     # --- Repair pass ----------------------------------------------------
+    log.info("Repair pass triggered: phase=%s", phase)
     notes.append(
         f"Primary agent failed ({phase}); invoking repair pass with model {repair_model_id}."
     )
@@ -292,6 +339,7 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
         failure_message=err or "(unknown)",
         conversation_section=request.conversation_section,
     )
+    repair_max_iter = max(3, max_iter // 2)
     try:
         repair_chat = build_chat_model(repair_model_id)
         repair_msgs = _run_stage(
@@ -299,7 +347,20 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
             tools=REPAIR_TOOLS,
             system_prompt=REPAIR_SYSTEM_PROMPT,
             user_prompt=repair_user,
-            max_iterations=max(3, max_iter // 2),
+            max_iterations=repair_max_iter,
+            stage_name="repair",
+        )
+    except GraphRecursionError:
+        log.warning(
+            "run_ask failed: repair stage hit iteration cap (max_iter=%d)", repair_max_iter
+        )
+        return AgentFailure(
+            error=f"Repair agent exceeded iteration cap ({repair_max_iter} iterations).",
+            phase="iteration_cap",
+            sql=raw_sql,
+            agent_model=agent_model_id,
+            repair_model=repair_model_id,
+            notes=notes,
         )
     except Exception as exc:  # noqa: BLE001
         log.exception("Repair agent invocation failed")
@@ -321,6 +382,7 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
             primary_msgs
         ).strip() or "_(No natural-language answer was produced.)_"
         notes.append("Repair pass succeeded.")
+        log.info("run_ask done: repaired=True rows=%d", len(rows))
         return AgentResult(
             answer=answer,
             sql=sql_used,
@@ -333,6 +395,7 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
         )
 
     notes.append(f"Repair pass also failed ({phase_r}).")
+    log.error("run_ask failed: phase=%s error=%.200s", phase_r, err_r or "(none)")
     return AgentFailure(
         error=err_r or "Repair pass produced no usable SQL.",
         phase=phase_r,

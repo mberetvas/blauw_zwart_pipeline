@@ -26,6 +26,15 @@ generate-help:
 retail-help:
     uv run fan_events generate_retail --help
 
+# ── Linting ─────────────────────────────────────────────────────────
+# Run Ruff lint checks
+ruff-check:
+    uv run ruff check .
+
+# Run Ruff lint checks and auto-fix issues where possible
+ruff-fix:
+    uv run ruff check . --fix
+
 # ── Stream (merged v2 + v3 to stdout) ──────────────────────────────
 # Quickstart stream: calendar + retail merged to stdout (matches quickstart.md)
 stream:

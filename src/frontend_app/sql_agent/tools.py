@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from typing import Any
 
 from langchain_core.tools import tool
@@ -163,6 +164,7 @@ def list_tables() -> str:
     layer is one of ``staging``, ``intermediate``, ``marts``, ``unspecified``.
     Always call this first when you need to discover what data is available.
     """
+    log.debug("list_tables called")
     try:
         rows = _list_relations()
     except Exception as exc:
@@ -181,6 +183,7 @@ def describe_table(table: str) -> str:
 
     Returns a JSON object with keys ``name``, ``description``, ``columns``.
     """
+    log.debug("describe_table called: table=%s", table)
     try:
         validated = _ensure_known_table(table)
     except ValueError as exc:
@@ -233,6 +236,7 @@ def search_columns(pattern: str, limit: int = 20) -> str:
 
     Returns a JSON array of ``{table, column, data_type, description}``.
     """
+    log.debug("search_columns called: pattern=%s limit=%s", pattern, limit)
     if not isinstance(pattern, str) or not pattern.strip():
         return json.dumps({"error": "pattern must be a non-empty string"})
     schema = _dbt_schema()
@@ -279,6 +283,7 @@ def sample_table(table: str, limit: int = _DEFAULT_SAMPLE_ROWS) -> str:
 
     Returns a JSON array of row objects.
     """
+    log.debug("sample_table called: table=%s limit=%s", table, limit)
     try:
         validated = _ensure_known_table(table)
     except ValueError as exc:
@@ -306,6 +311,7 @@ def get_semantic_layer() -> str:
     Returns a JSON object (the parsed semantic layer YAML), or ``{}`` when no
     semantic layer file is configured.
     """
+    log.debug("get_semantic_layer called")
     try:
         data = load_semantic_layer()
     except Exception as exc:
@@ -336,12 +342,16 @@ def execute_select(sql: str) -> str:
             {"error": "sql must be a non-empty string", "phase": "validation"}
         )
     cleaned = _rewrite_layer_schema_qualifiers(_strip_fences(sql))
+    log.debug("execute_select: sql=%.200s", cleaned)
     try:
         _validate_sql(cleaned)
     except ValueError as exc:
+        log.warning("execute_select validation failed: %s", exc)
         return json.dumps(
             {"error": str(exc), "phase": "validation", "sql": cleaned}
         )
+    log.debug("execute_select: validation passed")
+    t0 = time.perf_counter()
     try:
         rows = _execute_sql(cleaned)
     except Exception as exc:
@@ -349,6 +359,8 @@ def execute_select(sql: str) -> str:
         return json.dumps(
             {"error": str(exc), "phase": "execution", "sql": cleaned}
         )
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    log.info("execute_select done: %d rows, %.0f ms", len(rows), elapsed_ms)
     return json.dumps(
         {"rows": rows, "row_count": len(rows), "sql": cleaned},
         default=_json_default,

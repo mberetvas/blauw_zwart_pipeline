@@ -29,6 +29,7 @@ import psycopg2
 import requests
 from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 
+from .sql_agent.observability import RequestIdFilter, new_request_id, reset_request_id, set_request_id
 from .sql_agent.database import (
     DATABASE_URL,
     _execute_sql,  # noqa: F401  (re-exported for tests)
@@ -104,7 +105,23 @@ ASK_CONTEXT_MAX_PREVIEW_ROWS = 5
 # ---------------------------------------------------------------------------
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
-logging.basicConfig(level=logging.INFO)
+
+# ---------------------------------------------------------------------------
+# Logging setup (before init_llm_config so early startup logs are formatted)
+# ---------------------------------------------------------------------------
+
+_log_level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
+_log_level = getattr(logging, _log_level_name, logging.INFO)
+_log_handler = logging.StreamHandler()
+_log_handler.addFilter(RequestIdFilter())
+_log_handler.setFormatter(
+    logging.Formatter(
+        "%(asctime)s %(levelname)-5s [%(req_id)s] %(name)s — %(message)s",
+        defaults={"req_id": "-"},
+    )
+)
+logging.basicConfig(level=_log_level, handlers=[_log_handler], force=True)
+
 log = logging.getLogger(__name__)
 init_llm_config()
 
@@ -1150,44 +1167,70 @@ def leaderboard_api() -> Any:
 
 @app.post("/api/ask")
 def ask() -> Any:
-    body: dict[str, Any] = request.get_json(force=True) or {}
-    parsed = _build_request_or_error(body)
-    if isinstance(parsed, tuple):
-        payload, status = parsed
-        return jsonify(payload), status
-
+    req_id = new_request_id()
+    token = set_request_id(req_id)
     try:
-        outcome = run_ask(parsed)
-    except Exception as exc:  # noqa: BLE001
-        log.exception("Agent invocation failed")
-        return jsonify({"error": f"Agent invocation failed: {exc}"}), 500
+        body: dict[str, Any] = request.get_json(force=True) or {}
+        parsed = _build_request_or_error(body)
+        if isinstance(parsed, tuple):
+            payload, status = parsed
+            return jsonify(payload), status
 
-    if isinstance(outcome, AgentFailure):
-        payload, status = _agent_failure_to_response(
-            outcome, parsed.conversation_turn_count
+        log.info("POST /api/ask question=%.80s", parsed.question)
+        try:
+            outcome = run_ask(parsed)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("Agent invocation failed")
+            return jsonify({"error": f"Agent invocation failed: {exc}"}), 500
+
+        if isinstance(outcome, AgentFailure):
+            log.warning(
+                "POST /api/ask failed: phase=%s error=%.200s", outcome.phase, outcome.error
+            )
+            payload, status = _agent_failure_to_response(
+                outcome, parsed.conversation_turn_count
+            )
+            return jsonify(payload), status
+
+        log.info(
+            "POST /api/ask completed: repaired=%s rows=%d",
+            outcome.repaired,
+            len(outcome.rows),
         )
-        return jsonify(payload), status
-
-    return jsonify(_agent_result_to_payload(outcome, parsed.conversation_turn_count))
+        return jsonify(_agent_result_to_payload(outcome, parsed.conversation_turn_count))
+    finally:
+        reset_request_id(token)
 
 
 @app.post("/api/ask/stream")
 def ask_stream() -> Any:
+    req_id = new_request_id()
+    token = set_request_id(req_id)
     body: dict[str, Any] = request.get_json(force=True) or {}
     parsed = _build_request_or_error(body)
     if isinstance(parsed, tuple):
+        reset_request_id(token)
         payload, status = parsed
         return jsonify(payload), status
 
+    log.info("POST /api/ask/stream question=%.80s", parsed.question)
+
     @stream_with_context
     def event_stream() -> Iterator[str]:
+        # Re-set in generator context to ensure ContextVar propagation.
+        inner_token = set_request_id(req_id)
         try:
             for evt in run_ask_stream(parsed):
+                log.debug("SSE event: %s", evt.name)
                 yield _format_sse(evt.name, evt.data)
         except Exception as exc:  # noqa: BLE001
             log.exception("Agent stream failed")
             yield _format_sse("error", {"message": f"Agent stream failed: {exc}"})
+        finally:
+            log.info("stream closed")
+            reset_request_id(inner_token)
 
+    reset_request_id(token)
     headers = {
         "Cache-Control": "no-cache",
         "X-Accel-Buffering": "no",

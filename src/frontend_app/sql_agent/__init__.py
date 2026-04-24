@@ -58,7 +58,7 @@ On failure, ``execute_select`` returns ``{"error": ..., "phase":
 Graph topology (in :mod:`frontend_app.sql_agent.graph`)
 -------------------------------------------------------
 
-1. **Primary agent** — ``langgraph.prebuilt.create_react_agent`` over
+1. **Primary agent** — ``langchain.agents.create_agent`` over
    ``ALL_TOOLS`` and the ``agent_model``. Bounded by
    ``AGENT_MAX_TOOL_ITERATIONS`` (env, default 8).
 2. If the primary agent did not produce a successful ``execute_select``, a

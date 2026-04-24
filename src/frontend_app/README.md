@@ -170,7 +170,60 @@ points = ROUND(
 
 Tie-breakers are `points DESC`, `matches_attended DESC`, `total_spend DESC`, then `fan_id ASC`.
 
-## Troubleshooting
+## Observability
+
+### Log level
+
+Set `LOG_LEVEL=DEBUG` (default: `INFO`) to enable verbose output including SQL queries, DB timing, and LLM/tool round-trip details.
+
+```bash
+# Docker Compose — add to .env or docker-compose.yml environment block
+LOG_LEVEL=DEBUG
+```
+
+### Log format
+
+Every log line carries a short **request ID** (`[req_id]`) that is generated per HTTP request and propagated through the full call stack (Flask → `run_ask` → agent stages → tools → DB):
+
+```
+2026-04-24 21:30:01,123 INFO  [a3f1c2d8] frontend_app.app — POST /api/ask/stream question="show top fans"
+2026-04-24 21:30:01,124 INFO  [a3f1c2d8] frontend_app.sql_agent.graph — run_ask start: question="show top fans"
+2026-04-24 21:30:01,125 INFO  [a3f1c2d8] frontend_app.sql_agent.graph — Stage start: stage=primary model=deepseek/deepseek-v3.2 tools=6 max_iter=8
+2026-04-24 21:30:01,130 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — LLM call start | model=deepseek/deepseek-v3.2
+2026-04-24 21:30:04,500 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — LLM call end — 3370 ms
+2026-04-24 21:30:04,501 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — Tool call start: list_tables | args={}
+2026-04-24 21:30:04,508 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — Tool call end: list_tables — 7 ms | output=[{"name":…
+2026-04-24 21:30:10,200 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — Tool call start: execute_select | args={"sql": "SELECT…
+2026-04-24 21:30:10,320 INFO  [a3f1c2d8] frontend_app.sql_agent.tools — execute_select done: 50 rows, 120 ms
+2026-04-24 21:30:10,321 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — Tool call end: execute_select — 121 ms | output={"rows"…
+2026-04-24 21:30:12,000 INFO  [a3f1c2d8] frontend_app.sql_agent.graph — Stage primary done: 10875 ms, 9 messages
+2026-04-24 21:30:12,001 INFO  [a3f1c2d8] frontend_app.sql_agent.graph — run_ask done: repaired=False rows=50
+2026-04-24 21:30:12,002 DEBUG [a3f1c2d8] frontend_app.app — SSE event: meta
+2026-04-24 21:30:12,003 DEBUG [a3f1c2d8] frontend_app.app — SSE event: answer_delta
+2026-04-24 21:30:12,004 DEBUG [a3f1c2d8] frontend_app.app — SSE event: done
+2026-04-24 21:30:12,005 INFO  [a3f1c2d8] frontend_app.app — stream closed
+```
+
+### Diagnosing a "spinning forever" question
+
+1. **Tail the logs**: `docker compose logs -f frontend-app`
+2. **Find the request ID** from the first `POST /api/ask/stream` line for the question in question.
+3. **Filter by req_id**: `docker compose logs frontend-app | grep '\[a3f1c2d8\]'`
+4. **Identify the hang point**:
+   - Stuck after `LLM call start` → the LLM is taking too long; check `OPENROUTER_TIMEOUT` (default 120 s) and the model's latency.
+   - Stuck after `Tool call start: execute_select` → the DB query is hanging; the `statement_timeout` (10 s) should kill it, but a slow connection setup (no connect timeout is set) could delay the error.
+   - `Stage X: iteration cap hit` warning → the agent hit `AGENT_MAX_TOOL_ITERATIONS * 2 + 5` LangGraph steps without producing a valid SQL result; increase `AGENT_MAX_TOOL_ITERATIONS` or the repair-pass model.
+   - No `run_ask start` after the HTTP log → the request was rejected at validation before entering the agent pipeline.
+
+### Known hang paths
+
+| Cause | Symptom in logs | Mitigation |
+| --- | --- | --- |
+| Slow LLM (default `OPENROUTER_TIMEOUT=120s` × up to 8 tool iterations) | Long gap between `LLM call start` and `LLM call end` | Reduce `AGENT_MAX_TOOL_ITERATIONS`; use a faster model |
+| `GraphRecursionError` (iteration cap) | `WARNING … iteration cap hit` then `run_ask failed: phase=iteration_cap` | Increase `AGENT_MAX_TOOL_ITERATIONS`; simplify the question |
+| Slow DB connection (no connect timeout) | `DB query: sql=…` appears but `DB query done` never follows | Add `connect_timeout=5` to `DATABASE_URL` DSN parameters |
+
+
 
 | Problem | What to check |
 | --- | --- |

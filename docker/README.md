@@ -135,6 +135,7 @@ Full defaults and comments live in [`../.env.example`](../.env.example). These a
 | `LLM_PROVIDER` | `ollama` | Server-side default provider |
 | `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | unset / `deepseek/deepseek-v3.2` | Hosted provider settings |
 | `LLM_API_PORT` | `8080` | Published host port for `frontend-app` |
+| `LOG_LEVEL` | `INFO` | Log verbosity for `frontend-app` (`DEBUG` enables SQL/LLM/tool timing) |
 
 ## `just` shortcuts
 
