@@ -35,7 +35,7 @@ Force an immediate re-scrape outside the normal interval:
 docker compose restart proleague-scheduler
 ```
 
-Normal browser users do not talk to this service directly. The host-facing entrypoint is the `llm_api` player-stats page at <http://localhost:8080/player-stats>.
+Normal browser users do not talk to this service directly. The host-facing entrypoint is the `frontend_app` player-stats page at <http://localhost:8080/player-stats>.
 
 ## Data flow
 
@@ -43,7 +43,7 @@ Normal browser users do not talk to this service directly. The host-facing entry
 proleague-scheduler -> Kafka topic player_stats -> proleague-ingest -> Postgres public.player_stats
                                                            |
                                                            +-> proleague-scraper /squad reads cached rows
-                                                           +-> llm_api /api/player-stats/* serves host-facing routes
+                                                           +-> frontend_app /api/player-stats/* serves host-facing routes
 ```
 
 ## Environment variables
@@ -81,6 +81,6 @@ The Compose service is not published to the host by default; these are internal 
 
 - [`../../README.md`](../../README.md) - repo-level overview
 - [`../proleague_ingest/README.md`](../proleague_ingest/README.md) - consumer and table docs for `player_stats`
-- [`../llm_api/README.md`](../llm_api/README.md) - host-facing player-stats routes and UI
+- [`../frontend_app/README.md`](../frontend_app/README.md) - host-facing player-stats routes and UI
 - [`../../docker/README.md`](../../docker/README.md) - Compose services, env vars, and operator commands
 - [`../../specs/005-compose-kafka-pipeline/quickstart.md`](../../specs/005-compose-kafka-pipeline/quickstart.md) - full local stack walkthrough

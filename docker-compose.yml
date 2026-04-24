@@ -271,17 +271,17 @@ services:
       kafka-init-scraper:
         condition: service_completed_successfully
 
-  # ─── Natural-language Q&A API (Flask + Ollama Text-to-SQL) ──────────────
+  # ─── frontend-app (Flask + Ollama Text-to-SQL) ───────────────────────────
   # Requires Ollama running on the host with `gemma4:e2b` pulled:
   #   ollama pull gemma4:e2b
   # The dbt-scheduler service keeps the marts schema fresh in the background, then query:
   #   curl -s -X POST http://localhost:8080/api/ask \
   #     -H 'Content-Type: application/json' \
   #     -d '{"question": "Who are the top 5 fans by total spend?"}' | jq .
-  llm-api:
+  frontend-app:
     build:
       context: .
-      dockerfile: docker/Dockerfile.api
+      dockerfile: docker/Dockerfile.frontend-app
     env_file: .env
     environment:
       # Keep the service URL aligned with the password provisioned in postgres init.
@@ -307,7 +307,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - llm-api-config:/data
+      - frontend-app-config:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -321,5 +321,5 @@ services:
 volumes:
   kafka-data:
   postgres-data:
-  llm-api-config:
+  frontend-app-config:
   producer-bootstrap-state:

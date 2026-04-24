@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_api.schema_context import (
+from frontend_app.schema_context import (
     SchemaContextOverflowError,
     build_schema_context_text,
 )

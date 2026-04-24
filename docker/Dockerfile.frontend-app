@@ -1,4 +1,4 @@
-# UV-based image for the Ollama Q&A Flask API (llm_api).
+# UV-based image for the Ollama Q&A Flask frontend app.
 FROM python:3.12-slim-bookworm
 
 # Pin uv to the same version used by Dockerfile.ingest for consistency.
@@ -22,4 +22,4 @@ COPY dbt/models/marts /app/dbt_schema/marts
 ENV DBT_MODELS_DIR=/app/dbt_schema
 
 EXPOSE 8080
-CMD ["python", "-m", "llm_api.app"]
+CMD ["python", "-m", "frontend_app.app"]

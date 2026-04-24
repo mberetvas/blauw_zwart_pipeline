@@ -75,7 +75,7 @@ instance/
 .webassets-cache
 
 # LLM API persisted settings (may contain API keys; optional local path)
-src/llm_api/llm_config.json
+src/frontend_app/llm_config.json
 
 # Scrapy stuff:
 .scrapy
