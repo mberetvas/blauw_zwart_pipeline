@@ -14,13 +14,7 @@ from fan_events.generation.v2_calendar import (
 from fan_events.io.merge_keys import merge_key_tuple
 
 _FIX = Path(__file__).resolve().parent / "fixtures" / "calendar_two_tiny.json"
-_THREE = (
-    Path(__file__).resolve().parents[1]
-    / "specs"
-    / "002-match-calendar-events"
-    / "fixtures"
-    / "calendar_three_matches.json"
-)
+_THREE = Path(__file__).resolve().parent / "fixtures" / "calendar_three_matches.json"
 
 
 def test_generate_v2_records_unchanged_vs_refactor() -> None:

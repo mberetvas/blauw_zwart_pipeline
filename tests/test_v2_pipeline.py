@@ -15,13 +15,7 @@ from fan_events.generation.v2_calendar import (
 from fan_events.io.ndjson_io import records_to_ndjson_v2, validate_record_v2
 
 _FIX = Path(__file__).resolve().parent / "fixtures" / "calendar_two_tiny.json"
-_THREE = (
-    Path(__file__).resolve().parents[1]
-    / "specs"
-    / "002-match-calendar-events"
-    / "fixtures"
-    / "calendar_three_matches.json"
-)
+_THREE = Path(__file__).resolve().parent / "fixtures" / "calendar_three_matches.json"
 
 
 def test_three_matches_date_filter_count() -> None:
