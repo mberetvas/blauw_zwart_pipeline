@@ -4,7 +4,7 @@
 
 | | |
 | --- | --- |
-| **Full stack** | From the **repo root**: `docker compose up -d` — **recommended** for all long-running services (Kafka, Postgres, producers, consumers, scrapers, dbt scheduler, `llm-api`, …). |
+| **Full stack** | From the **repo root**: `docker compose up -d` — **recommended** for all long-running services (Kafka, Postgres, producers, consumers, scrapers, dbt scheduler, `frontend-app`, …). |
 | **Host `uv`** | Use **`uv run fan_events …`** for the **synthetic fan-events CLI** only (optional second producer, local files, tests). Do **not** use `uv run` as the primary way to start ingest, the Flask API, or other Compose services for normal demos. |
 
 `docker compose up -d` is the fastest way to run the whole MVP once. The stack is practical and local-first: Kafka, Postgres, pgAdmin, the fan-event producer/consumer pair, the player-stats scraper/consumer pair, dbt scheduling, and the Flask UI/API.
@@ -26,9 +26,9 @@ The full acceptance-style walkthrough still lives in [`specs/005-compose-kafka-p
 | `proleague-ingest` | Consumes `player_stats` and upserts `public.player_stats` |
 | `proleague-scraper` | Internal HTTP read layer for player data |
 | `dbt-scheduler` | Periodic dbt runner for analytics marts |
-| `llm-api` | Host-facing UI + API over fan and player data |
+| `frontend-app` | Host-facing UI + API over fan and player data |
 
-Persisted state lives in the named volumes `kafka-data`, `postgres-data`, and `llm-api-config`.
+Persisted state lives in the named volumes `kafka-data`, `postgres-data`, and `frontend-app-config`.
 
 ## Fast path
 
@@ -47,7 +47,7 @@ If you want the default Data Q&A provider, run Ollama on the host and pull `gemm
 | Kafka | `localhost:9092` | `broker:29092` |
 | Postgres | `localhost:${POSTGRES_PORT:-5432}` | `postgres:5432` |
 | pgAdmin | `http://localhost:${PGADMIN_PORT:-5050}` | not usually consumed internally |
-| `llm-api` | `http://localhost:${LLM_API_PORT:-8080}` | `http://llm-api:8080` |
+| `frontend-app` | `http://localhost:${LLM_API_PORT:-8080}` | `http://frontend-app:8080` |
 
 ## Common operator commands
 
@@ -58,7 +58,7 @@ docker compose logs -f ingest
 docker compose logs -f proleague-scheduler
 docker compose logs -f proleague-ingest
 docker compose logs -f dbt-scheduler
-docker compose logs -f llm-api
+docker compose logs -f frontend-app
 ```
 
 Verify the fan-event side:
@@ -122,19 +122,19 @@ Full defaults and comments live in [`../.env.example`](../.env.example). These a
 | `SCRAPER_RUN_ON_STARTUP` | `1` | Immediate run on container start |
 | `PROLEAGUE_SQUAD_URL` | Club Brugge squad page | Scrape target override |
 
-### dbt and `llm-api`
+### dbt and `frontend-app`
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `DBT_RUN_INTERVAL_MINUTES` | `5` | Compose dbt scheduler interval |
 | `DBT_RUN_SELECTOR` | `+mart_fan_loyalty +mart_player_season_summary` | Compose dbt model selector |
 | `LLM_READER_PASSWORD` | `change-this-dev-password` | Dev-only password for the read-only DB role |
-| `LLM_READER_DATABASE_URL` | `postgresql://llm_reader:...@postgres:5432/fan_pipeline` | Read-only DSN used by `llm-api` |
+| `LLM_READER_DATABASE_URL` | `postgresql://llm_reader:...@postgres:5432/fan_pipeline` | Read-only DSN used by `frontend-app` |
 | `OLLAMA_URL` | `http://host.docker.internal:11434` | Default Ollama base URL from the container |
 | `OLLAMA_MODEL` | `gemma4:e2b` | Default local model |
 | `LLM_PROVIDER` | `ollama` | Server-side default provider |
 | `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | unset / `deepseek/deepseek-v3.2` | Hosted provider settings |
-| `LLM_API_PORT` | `8080` | Published host port for `llm-api` |
+| `LLM_API_PORT` | `8080` | Published host port for `frontend-app` |
 
 ## `just` shortcuts
 
@@ -167,7 +167,7 @@ The repo includes a few stack/operator helpers in [`../justfile`](../justfile):
 - [`../src/fan_ingest/README.md`](../src/fan_ingest/README.md) - fan-event ingest consumer
 - [`../src/proleague_scraper/README.md`](../src/proleague_scraper/README.md) - player scrape scheduler and internal HTTP layer
 - [`../src/proleague_ingest/README.md`](../src/proleague_ingest/README.md) - `player_stats` consumer and table notes
-- [`../src/llm_api/README.md`](../src/llm_api/README.md) - host-facing UI and API
+- [`../src/frontend_app/README.md`](../src/frontend_app/README.md) - host-facing UI and API
 - [`../dbt/README.md`](../dbt/README.md) - dbt workflow and scheduler notes
 - [`../specs/005-compose-kafka-pipeline/quickstart.md`](../specs/005-compose-kafka-pipeline/quickstart.md) - deeper end-to-end quickstart
 - [`../specs/005-compose-kafka-pipeline/contracts/local-stack-wiring.md`](../specs/005-compose-kafka-pipeline/contracts/local-stack-wiring.md) - wiring contract

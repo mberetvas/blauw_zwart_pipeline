@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS player_stats (
 );
 """
 
-# Same as docker/postgres/init/003_player_stats.sql — llm-api reads via role llm_reader.
+# Same as docker/postgres/init/003_player_stats.sql — frontend-app reads via role llm_reader.
 # One statement per execute (psycopg2 protocol).
 _GRANT_LLM_READER_ON_PLAYER_STATS = (
     "GRANT USAGE ON SCHEMA public TO llm_reader",

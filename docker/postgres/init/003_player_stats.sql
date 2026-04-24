@@ -1,5 +1,5 @@
 -- Player statistics scraped from proleague.be.
--- Upserted by the proleague-scraper microservice; read by the llm_api service.
+-- Upserted by the proleague-scraper microservice; read by the frontend-app service.
 -- IMPORTANT: Operators must verify proleague.be Terms of Use before production use.
 
 CREATE TABLE IF NOT EXISTS player_stats (

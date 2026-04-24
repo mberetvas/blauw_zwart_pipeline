@@ -16,7 +16,7 @@ The repo ships a dbt project under `dbt/` for analytics models such as `mart_fan
 | dbt project config | [`../dbt_project.yml`](../dbt_project.yml) |
 | Local profiles | [`profiles.yml`](profiles.yml) and [`profiles.yml.example`](profiles.yml.example) |
 | Loyalty mart | [`models/marts/mart_fan_loyalty.sql`](models/marts/mart_fan_loyalty.sql) |
-| Schema docs used by `llm_api` | `models/**/*_schema.yaml` and [`models/marts/schema.yml`](models/marts/schema.yml) |
+| Schema docs used by `frontend_app.sql_agent` | `models/**/*_schema.yaml` and [`models/marts/schema.yml`](models/marts/schema.yml) |
 
 ## Run dbt via Compose (recommended for the MVP)
 
@@ -73,9 +73,9 @@ uv run --env-file .env dbt ...
 
 Do not point `DBT_PROFILE` at a file path such as `dbt/profiles.yml`. If you set it at all, it should be the profile name `fan_sim_pipeline`.
 
-## Why `llm_api` cares about this folder
+## Why `frontend_app.sql_agent` cares about this folder
 
-`llm_api` can build its Text-to-SQL schema context directly from the dbt YAML docs in this project. In Compose the API image bakes in a copy of the dbt schemas; on the host you can point `DBT_MODELS_DIR=./dbt/models`.
+`frontend_app.sql_agent` builds the Text-to-SQL schema context directly from the dbt YAML docs in this project, while `frontend_app.app` stays the thin HTTP/UI orchestrator. In Compose the API image bakes in a copy of the dbt schemas; on the host you can point `DBT_MODELS_DIR=./dbt/models`.
 
 ## Troubleshooting
 
@@ -89,4 +89,4 @@ Do not point `DBT_PROFILE` at a file path such as `dbt/profiles.yml`. If you set
 
 - [`../README.md`](../README.md) - repo-level overview
 - [`../docker/README.md`](../docker/README.md) - Compose scheduler and stack-level docs
-- [`../src/llm_api/README.md`](../src/llm_api/README.md) - how dbt YAML docs feed the Text-to-SQL prompts
+- [`../src/frontend_app/README.md`](../src/frontend_app/README.md) - how dbt YAML docs feed the Text-to-SQL prompts

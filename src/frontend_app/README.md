@@ -1,13 +1,20 @@
-# llm_api
+# frontend_app
 
 Flask UI + JSON API for the MVP demo. This package serves the Data Q&A chat, the fan leaderboard, the player-stats page, and the settings page that persists runtime LLM configuration.
+
+Current package split:
+
+- `app.py` remains the thin Flask HTTP/UI orchestrator and the runtime entrypoint (`python -m frontend_app.app`).
+- `sql_agent/` now owns the Text-to-SQL / LLM pipeline helpers (schema context, semantic layer loading, providers, guardrails, and DB execution).
+- `static/` still contains the browser assets served by the Flask routes; those files were not moved.
+- Tests intentionally still patch symbols on `frontend_app.app`, so the orchestration surface stays at the package root even though most pipeline internals moved into `sql_agent/`.
 
 ## How to run (at a glance)
 
 | | |
 | --- | --- |
-| **Recommended** | From the repo root: **`docker compose up -d`** — the **`llm-api`** service serves <http://localhost:8080> (see [`../../docker/README.md`](../../docker/README.md)). |
-| **Host `uv`** | Optional **developer-only** path for debugging the Flask app (`uv run python -m llm_api.app` after `uv sync --extra api`). **Not** the primary way to run the demo UI. |
+| **Recommended** | From the repo root: **`docker compose up -d`** — the **`frontend-app`** service serves <http://localhost:8080> (see [`../../docker/README.md`](../../docker/README.md)). |
+| **Host `uv`** | Optional **developer-only** path for debugging the Flask app (`uv run python -m frontend_app.app` after `uv sync --extra api`). **Not** the primary way to run the demo UI. |
 
 ## Screenshots
 
@@ -54,7 +61,7 @@ For local debugging only — **not** the supported path for running the MVP demo
 
 ```bash
 uv sync --extra api
-uv run python -m llm_api.app
+uv run python -m frontend_app.app
 ```
 
 When the API runs on your machine against the Compose Postgres instance, use host-friendly DSNs (`localhost:<POSTGRES_PORT>`) instead of the Compose-internal `postgres:5432` addresses from `.env.example`.
@@ -76,7 +83,7 @@ When the API runs on your machine against the Compose Postgres instance, use hos
 | `OPENROUTER_MODEL` | first built-in default | Default OpenRouter model id |
 | `OPENROUTER_MODELS` | built-in defaults | Comma-separated suggestion list for the settings UI |
 | `OPENROUTER_TIMEOUT` | `120` | OpenRouter request timeout in seconds |
-| `LLM_CONFIG_PATH` | `src/llm_api/llm_config.json` or `/data/llm_config.json` in Compose | JSON file for persisted runtime config |
+| `LLM_CONFIG_PATH` | `src/frontend_app/llm_config.json` or `/data/llm_config.json` in Compose | JSON file for persisted runtime config |
 | `PROLEAGUE_SCRAPER_URL` | `http://proleague-scraper:8001` | Internal scraper base URL for player lookups and image proxying |
 | `PORT` | `8080` | Direct app port when running manually |
 
@@ -86,11 +93,11 @@ When the API runs on your machine against the Compose Postgres instance, use hos
 | --- | --- | --- |
 | `SCHEMA_FILES` | unset | Highest-priority comma-separated list of dbt schema files |
 | `DBT_MODELS_DIR` | unset | Folder scan mode for `*_schema.yaml` plus `marts/schema.yml` |
-| `SCHEMA_FILE` | `src/llm_api/schema.yml` | Single-file fallback when the dbt-derived inputs are unset |
+| `SCHEMA_FILE` | `src/frontend_app/sql_agent/schema.yml` | Single-file fallback when the dbt-derived inputs are unset |
 | `DBT_RELATION_SCHEMA` | `dbt_dev` | Schema name echoed into the SQL prompt |
 | `SCHEMA_CONTEXT_MAX_CHARS` | `0` | Maximum merged schema length (`0` means unlimited) |
 | `SCHEMA_CONTEXT_OVERFLOW` | `error` | Overflow mode: `error` or `truncate` |
-| `SEMANTIC_LAYER_FILE` | `src/llm_api/semantic/semantic_layer.yml` | Optional semantic layer YAML path |
+| `SEMANTIC_LAYER_FILE` | `src/frontend_app/sql_agent/semantic/semantic_layer.yml` | Optional semantic layer YAML path |
 | `SEMANTIC_CONTEXT_MAX_CHARS` | `0` | Maximum rendered semantic-layer length (`0` means unlimited) |
 
 ## Routes
@@ -118,7 +125,7 @@ In one sentence: English question -> LLM proposes SQL -> the app runs a bounded 
 Current pipeline:
 
 1. The browser sends a question, provider/model selection, and a small slice of recent conversation.
-2. The app builds a SQL-generation prompt from dbt schema YAML, optional semantic-layer text, recent conversation, and the question itself.
+2. `app.py` delegates prompt/context assembly to `frontend_app.sql_agent`, which builds the SQL-generation prompt from dbt schema YAML, optional semantic-layer text, recent conversation, and the question itself.
 3. The first LLM call returns one PostgreSQL `SELECT` or `WITH ... SELECT`.
 4. Flask validates and executes that SQL as the `llm_reader` role.
 5. The app builds an answer prompt from the question plus real result rows.
@@ -168,7 +175,7 @@ Tie-breakers are `points DESC`, `matches_attended DESC`, `total_spend DESC`, the
 | Host-run API cannot reach Postgres | Use `localhost:<POSTGRES_PORT>` in the DSN, not the Compose hostname `postgres` |
 | `relation "mart_player_season_summary" does not exist` in `/api/ask` | Ensure dbt has built player marts (default selector is `+mart_fan_loyalty +mart_player_season_summary`), then check `docker compose logs -f dbt-scheduler` |
 | `/player-stats` shows no players | The first scrape has not completed yet; check `proleague-scheduler` and `proleague-ingest` logs |
-| Player images do not load | The proxy route is `/api/player-stats/image`; inspect `docker compose logs -f llm-api` for upstream/proxy errors |
+| Player images do not load | The proxy route is `/api/player-stats/image`; inspect `docker compose logs -f frontend-app` for upstream/proxy errors |
 | Schema-context startup error | Check `SCHEMA_FILES`, `DBT_MODELS_DIR`, `SCHEMA_FILE`, and the overflow settings |
 
 ## Related docs

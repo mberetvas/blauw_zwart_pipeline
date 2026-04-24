@@ -77,7 +77,7 @@ The Kafka key is `player_id` bytes for deterministic partition routing. Duplicat
 | `source_url` | `TEXT` | Squad page used for the scrape |
 | `scraped_at` | `TIMESTAMPTZ` | Last successful scrape time |
 
-The `llm_reader` role also has `SELECT` access on this table so `llm_api` can query it.
+The `llm_reader` role also has `SELECT` access on this table so `frontend_app` can query it.
 
 ## Smoke checks
 
@@ -100,6 +100,6 @@ curl -s http://localhost:8080/api/player-stats/squad
 
 - [`../../README.md`](../../README.md) - repo-level overview
 - [`../proleague_scraper/README.md`](../proleague_scraper/README.md) - scheduler and internal HTTP layer
-- [`../llm_api/README.md`](../llm_api/README.md) - host-facing API that reads `player_stats`
+- [`../frontend_app/README.md`](../frontend_app/README.md) - host-facing API that reads `player_stats`
 - [`../../docker/README.md`](../../docker/README.md) - Compose services and operator commands
 - [`../../specs/005-compose-kafka-pipeline/quickstart.md`](../../specs/005-compose-kafka-pipeline/quickstart.md) - full stack quickstart
