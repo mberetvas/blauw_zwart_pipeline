@@ -5,7 +5,7 @@ Flask UI + JSON API for the MVP demo. This package serves the Data Q&A chat, the
 Current package split:
 
 - `app.py` remains the thin Flask HTTP/UI orchestrator and the runtime entrypoint (`python -m frontend_app.app`).
-- `sql_agent/` now owns the Text-to-SQL / LLM pipeline helpers (schema context, semantic layer loading, providers, guardrails, and DB execution).
+- `sql_agent/` is a tool-calling LangChain + LangGraph agent (OpenRouter only). It owns the data tools, sqlglot guardrails, and graph orchestration that turns a question into a validated SELECT, executes it as `llm_reader`, and returns a Markdown answer.
 - `static/` still contains the browser assets served by the Flask routes; those files were not moved.
 - Tests intentionally still patch symbols on `frontend_app.app`, so the orchestration surface stays at the package root even though most pipeline internals moved into `sql_agent/`.
 
@@ -37,13 +37,13 @@ Current package split:
 | Data Q&A (`/`) | Natural-language question -> SQL -> answer flow over Postgres |
 | Leaderboard (`/leaderboard`) | Reads `mart_fan_loyalty` and ranks fans |
 | Player stats (`/player-stats`) | Compares cached squad data and can fetch individual player details |
-| Settings (`/settings`) | Persists runtime Ollama / OpenRouter settings |
+| Settings (`/settings`) | Persists runtime OpenRouter settings |
 
 ## Run in Docker Compose (recommended)
 
 1. Copy `.env.example` to `.env`.
 2. Start the **full stack** with `docker compose up -d` from the repo root.
-3. If you use the default provider, run Ollama on the host and pull `gemma4:e2b`.
+3. Set `OPENROUTER_API_KEY` (and optionally `OPENROUTER_AGENT_MODEL` / `OPENROUTER_REPAIR_MODEL`) in `.env`.
 4. Wait for dbt to materialize the marts (`docker compose logs -f dbt-scheduler`).
 5. Open <http://localhost:8080>.
 
@@ -74,15 +74,14 @@ When the API runs on your machine against the Compose Postgres instance, use hos
 | --- | --- | --- |
 | `LLM_READER_DATABASE_URL` | falls back to `DATABASE_URL` | Read-only Postgres DSN used for SQL execution |
 | `DATABASE_URL` | unset | Fallback DB connection for read-only queries |
-| `LLM_PROVIDER` | `ollama` | Server-side default provider (`ollama` or `openrouter`) |
-| `OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama base URL |
-| `OLLAMA_MODEL` | `gemma4:e2b` | Default Ollama model |
-| `OLLAMA_TIMEOUT` | `120` | Ollama request timeout in seconds |
-| `OPENROUTER_API_KEY` | unset | OpenRouter API key |
+| `OPENROUTER_API_KEY` | unset | OpenRouter API key (required) |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | OpenRouter API base URL |
-| `OPENROUTER_MODEL` | first built-in default | Default OpenRouter model id |
+| `OPENROUTER_MODEL` | first built-in default | Fallback OpenRouter model id (used when neither agent_model nor repair_model is set) |
+| `OPENROUTER_AGENT_MODEL` | unset | Default model for the primary tool-calling agent (falls back to `OPENROUTER_MODEL`) |
+| `OPENROUTER_REPAIR_MODEL` | unset | Default model for the one-shot SQL repair pass (falls back to `OPENROUTER_AGENT_MODEL`) |
 | `OPENROUTER_MODELS` | built-in defaults | Comma-separated suggestion list for the settings UI |
 | `OPENROUTER_TIMEOUT` | `120` | OpenRouter request timeout in seconds |
+| `AGENT_MAX_TOOL_ITERATIONS` | `8` | Max tool-call iterations the primary agent may run before triggering the repair pass |
 | `LLM_CONFIG_PATH` | `src/frontend_app/llm_config.json` or `/data/llm_config.json` in Compose | JSON file for persisted runtime config |
 | `PROLEAGUE_SCRAPER_URL` | `http://proleague-scraper:8001` | Internal scraper base URL for player lookups and image proxying |
 | `PORT` | `8080` | Direct app port when running manually |
@@ -120,25 +119,29 @@ When the API runs on your machine against the Compose Postgres instance, use hos
 
 ## How the Data Q&A flow works
 
-In one sentence: English question -> LLM proposes SQL -> the app runs a bounded read-only query -> the LLM turns the result rows into a human answer.
+In one sentence: English question -> tool-calling agent discovers the schema and writes a SELECT -> sqlglot validates it -> the app runs a bounded read-only query -> the agent turns the result rows into a Markdown answer (with a one-shot repair pass on a separate model if needed).
 
 Current pipeline:
 
-1. The browser sends a question, provider/model selection, and a small slice of recent conversation.
-2. `app.py` delegates prompt/context assembly to `frontend_app.sql_agent`, which builds the SQL-generation prompt from dbt schema YAML, optional semantic-layer text, recent conversation, and the question itself.
-3. The first LLM call returns one PostgreSQL `SELECT` or `WITH ... SELECT`.
-4. Flask validates and executes that SQL as the `llm_reader` role.
-5. The app builds an answer prompt from the question plus real result rows.
-6. The second LLM call returns the final markdown answer, either as one JSON response or as SSE fragments.
+1. The browser sends a question, optional `agent_model` / `repair_model` overrides, and a small slice of recent conversation.
+2. `app.py` builds an `AgentRequest` (question + conversation context + model overrides) and hands it to `sql_agent.graph.run_ask` (or `run_ask_stream`).
+3. The **primary agent** (LangGraph `create_react_agent` over OpenRouter) discovers schema and semantic-layer hints by calling read-only tools — `list_tables`, `describe_table`, `search_columns`, `sample_table`, `get_semantic_layer` — and finally calls `execute_select` with one PostgreSQL `SELECT` or `WITH ... SELECT` statement.
+4. `execute_select` strips fences, rewrites `marts.x` / `staging.x` / `intermediate.x` to the dbt schema, runs **sqlglot** (single-statement check + AST DDL/DML rejection + legacy regex), then executes the SQL as the `llm_reader` role.
+5. The agent reads back the rows from the tool result and produces a Markdown answer.
+6. If the primary agent never produced a successful `execute_select` (or hit the iteration cap), a **one-shot repair pass** runs on the configured `repair_model` with a smaller toolset (`describe_table` + `execute_select`). At most one repair attempt per request.
 
 ### Guardrails
 
 | Guardrail | Detail |
 | --- | --- |
-| Read-only SQL only | Query must begin with `SELECT` or `WITH` |
-| No multi-statement input | Semicolons are rejected |
+| Read-only SQL only | `execute_select` is the only tool that runs free-form SQL |
+| sqlglot single-statement | Multi-statement input is rejected at parse time |
+| sqlglot AST DDL/DML reject | `Insert`, `Update`, `Delete`, `Drop`, `Create`, `Alter`, `TruncateTable`, `Merge`, `Copy`, `Command` nodes are rejected before execution |
+| Legacy regex fallback | Mutating keyword regex runs as a second pass |
+| Identifier whitelist | `describe_table` / `sample_table` reject any table not present in `list_tables()` output |
 | Outer row cap | Execution is wrapped in an outer `LIMIT 50` |
 | Time limit | Every DB session sets `statement_timeout` to 10 seconds |
+| Bounded iterations | Primary agent capped by `AGENT_MAX_TOOL_ITERATIONS` (default 8); repair pass capped at half that |
 
 ### Streaming details
 
@@ -171,7 +174,7 @@ Tie-breakers are `points DESC`, `matches_attended DESC`, `total_spend DESC`, the
 
 | Problem | What to check |
 | --- | --- |
-| Provider errors in `/api/ask` | Ollama may not be running on the host, or OpenRouter credentials/model access may be wrong |
+| Provider errors in `/api/ask` | OpenRouter API key missing or invalid, model id not accessible, or rate-limited |
 | Host-run API cannot reach Postgres | Use `localhost:<POSTGRES_PORT>` in the DSN, not the Compose hostname `postgres` |
 | `relation "mart_player_season_summary" does not exist` in `/api/ask` | Ensure dbt has built player marts (default selector is `+mart_fan_loyalty +mart_player_season_summary`), then check `docker compose logs -f dbt-scheduler` |
 | `/player-stats` shows no players | The first scrape has not completed yet; check `proleague-scheduler` and `proleague-ingest` logs |

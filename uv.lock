@@ -277,11 +277,16 @@ dbt = [
     { name = "dbt-postgres" },
 ]
 dev = [
+    { name = "asyncpg" },
     { name = "beautifulsoup4" },
     { name = "confluent-kafka" },
+    { name = "flask" },
     { name = "ipykernel" },
     { name = "lxml" },
+    { name = "psycopg2-binary" },
     { name = "pytest" },
+    { name = "pyyaml" },
+    { name = "requests" },
     { name = "ruff" },
 ]
 
@@ -310,11 +315,16 @@ dbt = [
     { name = "dbt-postgres", specifier = "~=1.8" },
 ]
 dev = [
+    { name = "asyncpg", specifier = ">=0.29" },
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "confluent-kafka", specifier = ">=2.14.0" },
+    { name = "flask", specifier = ">=3.0" },
     { name = "ipykernel", specifier = ">=7.2.0" },
     { name = "lxml", specifier = ">=6.0.4" },
+    { name = "psycopg2-binary", specifier = ">=2.9" },
     { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "requests", specifier = ">=2.31" },
     { name = "ruff", specifier = ">=0.8.0" },
 ]
 

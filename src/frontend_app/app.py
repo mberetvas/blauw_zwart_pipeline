@@ -29,8 +29,24 @@ import psycopg2
 import requests
 from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 
-from .sql_agent.database import DATABASE_URL, _execute_sql, _json_default, _run_read_query
-from .sql_agent.guardrails import _rewrite_layer_schema_qualifiers, _strip_fences, _validate_sql
+from .sql_agent.database import (
+    DATABASE_URL,
+    _execute_sql,  # noqa: F401  (re-exported for tests)
+    _json_default,
+    _run_read_query,
+)
+from .sql_agent.graph import (
+    AgentFailure,
+    AgentRequest,
+    AgentResult,
+    run_ask,
+    run_ask_stream,
+)
+from .sql_agent.guardrails import (  # noqa: F401  (re-exported for tests)
+    _rewrite_layer_schema_qualifiers,
+    _strip_fences,
+    _validate_sql,
+)
 from .sql_agent.llm_runtime_config import (
     apply_llm_config_update,
     get_llm_settings,
@@ -40,13 +56,13 @@ from .sql_agent.llm_runtime_config import (
 from .sql_agent.providers import (
     _PROVIDER_DISPLAY,
     KNOWN_PROVIDERS,
-    _iter_answer_stream,
-    _llm_request_error,
-    complete,
+    _iter_answer_stream,  # noqa: F401  (re-exported for tests)
+    _llm_request_error,  # noqa: F401  (re-exported for tests)
+    complete,  # noqa: F401  (re-exported for tests)
 )
 from .sql_agent.schema_context import build_schema_context_text
 from .sql_agent.semantic_layer import (
-    SemanticLayerError,
+    SemanticLayerError,  # noqa: F401  (re-exported for tests)
     build_answer_semantic_context,
     build_sql_semantic_context,
     load_semantic_layer,
@@ -756,10 +772,18 @@ def _conversation_context_section(history: list[ConversationTurn]) -> str:
     )
 
 
-def _ask_run_through_execution(
+def _phase_to_status(phase: str) -> int:
+    if phase in {"validation", "no_sql", "iteration_cap"}:
+        return 422
+    if phase == "execution":
+        return 500
+    return 500
+
+
+def _build_request_or_error(
     body: dict[str, Any],
-) -> AskPipelineOk | tuple[dict[str, Any], int]:
-    """Validate request, generate SQL, validate SQL, execute. Returns Ok or (error dict, status)."""
+) -> AgentRequest | tuple[dict[str, Any], int]:
+    """Validate the inbound JSON body and translate it into an :class:`AgentRequest`."""
     question: str = (body.get("question") or "").strip()
     if not question:
         return ({"error": "question is required"}, 400)
@@ -768,24 +792,30 @@ def _ask_run_through_execution(
     except ValueError as exc:
         return ({"error": str(exc)}, 400)
 
-    s = get_llm_settings()
-    provider = (body.get("provider") or s["default_provider"]).strip().lower()
-    if provider not in KNOWN_PROVIDERS:
+    raw_provider = (body.get("provider") or "openrouter").strip().lower()
+    if raw_provider == "ollama":
         return (
             {
                 "error": (
-                    f"Unknown provider '{provider}'. "
+                    "Ollama is no longer supported. "
+                    "Use 'openrouter' (or omit 'provider' entirely)."
+                )
+            },
+            400,
+        )
+    if raw_provider not in KNOWN_PROVIDERS:
+        return (
+            {
+                "error": (
+                    f"Unknown provider '{raw_provider}'. "
                     f"Valid values: {sorted(KNOWN_PROVIDERS)}"
                 )
             },
             400,
         )
 
-    model = (body.get("model") or "").strip() or (
-        s["ollama_model"] if provider == "ollama" else s["openrouter_model"]
-    )
-
-    if provider == "openrouter" and not s["openrouter_api_key"]:
+    s = get_llm_settings()
+    if not s["openrouter_api_key"]:
         return (
             {
                 "error": (
@@ -796,134 +826,69 @@ def _ask_run_through_execution(
             503,
         )
 
-    provider_label = _PROVIDER_DISPLAY.get(provider, provider)
+    # Per-request model overrides. Legacy 'model' field is treated as a synonym
+    # for agent_model so existing clients keep working.
+    legacy_model = (body.get("model") or "").strip()
+    agent_override = (body.get("agent_model") or "").strip() or legacy_model or None
+    repair_override = (body.get("repair_model") or "").strip() or None
 
-    try:
-        schema_context = load_schema_context()
-    except Exception as exc:
-        log.exception("Failed to load schema")
-        return ({"error": f"Schema load failed: {exc}"}, 500)
-
-    try:
-        sql_semantic_ctx, answer_semantic_ctx = load_semantic_context()
-    except SemanticLayerError as exc:
-        log.exception("Failed to load semantic layer")
-        return ({"error": f"Semantic layer load failed: {exc}"}, 500)
-
-    semantic_section = (
-        f"SEMANTIC LAYER:\n{sql_semantic_ctx}\n" if sql_semantic_ctx else ""
-    )
-    conversation_section = _conversation_context_section(history)
-    sql_prompt = (
-        "You are a PostgreSQL expert. Given the schema below, write a single "
-        "SELECT query that answers the question. Return ONLY the SQL — no "
-        "explanation, no markdown, no code fences.\n"
-        "Important: 'staging', 'intermediate', and 'marts' are dbt model layers, "
-        "not PostgreSQL schemas. Use unqualified table names or dbt_dev.<table>.\n\n"
-        f"{semantic_section}"
-        f"{conversation_section}"
-        f"Schema:\n{schema_context}\n"
-        f"Question: {question}\n\n"
-        "SQL:"
-    )
-    try:
-        raw_sql = complete(sql_prompt, provider, model)
-    except requests.exceptions.RequestException as exc:
-        log.exception("%s unreachable (SQL step)", provider_label)
-        error, status = _llm_request_error(provider_label, "SQL generation", exc)
-        return (
-            {
-                "error": error,
-                "trace": _build_trace(
-                    provider,
-                    provider_label,
-                    model,
-                    conversation_turn_count=len(history),
-                ),
-            },
-            status,
-        )
-
-    sql = _rewrite_layer_schema_qualifiers(_strip_fences(raw_sql))
-    log.info("Generated SQL (%s/%s): %s", provider, model, sql)
-    trace = _build_trace(
-        provider,
-        provider_label,
-        model,
-        conversation_turn_count=len(history),
-        raw_sql=raw_sql,
-        sql=sql,
-    )
-
-    try:
-        _validate_sql(sql)
-    except ValueError as exc:
-        return ({"error": str(exc), "raw_sql": raw_sql, "trace": trace}, 422)
-
-    try:
-        rows = _execute_sql(sql)
-    except psycopg2.Error as exc:
-        log.exception("Query execution failed")
-        err = str(exc)
-        if "password authentication failed" in err.lower():
-            err += (
-                " — check LLM_READER_DATABASE_URL matches LLM_READER_PASSWORD in "
-                ".env / docker-compose and the Postgres role password. "
-                "If Postgres was created before that init script existed, run: "
-                "ALTER ROLE llm_reader PASSWORD '<your-llm-reader-password>'; as a superuser, "
-                "or recreate the volume with docker compose down -v."
-            )
-        return (
-            {
-                "error": f"Query execution failed: {err}",
-                "sql": sql,
-                "trace": trace,
-            },
-            500,
-        )
-
-    preview = json.loads(json.dumps(rows[:10], default=_json_default))
-    answer_guidelines_section = (
-        f"{answer_semantic_ctx}\n" if answer_semantic_ctx else ""
-    )
-    answer_prompt = (
-        "You are a helpful data analyst for a football club. "
-        "Answer the question below using the data provided.\n\n"
-        "Output format — Markdown only:\n"
-        "- Respond only in GitHub-flavored Markdown (headings, bold, lists, tables, "
-        "inline `code`, fenced code blocks when useful).\n"
-        "- Do not wrap the entire answer in one outer fenced code block.\n"
-        "- Do not include raw HTML tags in your answer.\n\n"
-        f"{answer_guidelines_section}"
-        f"{conversation_section}"
-        f"Question: {question}\n\n"
-        f"Data (JSON, up to 10 rows):\n{json.dumps(preview, indent=2)}\n\n"
-        "Answer:"
-    )
-    data_preview = json.loads(json.dumps(rows, default=_json_default))
-    trace_with_rows = _build_trace(
-        provider,
-        provider_label,
-        model,
-        conversation_turn_count=len(history),
-        raw_sql=raw_sql,
-        sql=sql,
-        row_count=len(rows),
-    )
-
-    return AskPipelineOk(
+    return AgentRequest(
         question=question,
+        conversation_section=_conversation_context_section(history),
         conversation_turn_count=len(history),
-        provider=provider,
-        model=model,
-        provider_label=provider_label,
-        raw_sql=raw_sql,
-        sql=sql,
-        rows=rows,
-        data_preview=data_preview,
-        trace=trace_with_rows,
-        answer_prompt=answer_prompt,
+        agent_model=agent_override,
+        repair_model=repair_override,
     )
+
+
+def _agent_failure_to_response(
+    failure: AgentFailure, conversation_turn_count: int
+) -> tuple[dict[str, Any], int]:
+    provider_label = _PROVIDER_DISPLAY["openrouter"]
+    trace = _build_trace(
+        "openrouter",
+        provider_label,
+        failure.agent_model,
+        conversation_turn_count=conversation_turn_count,
+        raw_sql=failure.sql,
+        sql=failure.sql,
+    )
+    trace["notes"].extend(failure.notes)
+    return (
+        {
+            "error": failure.error,
+            "phase": failure.phase,
+            "sql": failure.sql,
+            "trace": trace,
+        },
+        _phase_to_status(failure.phase),
+    )
+
+
+def _agent_result_to_payload(
+    result: AgentResult, conversation_turn_count: int
+) -> dict[str, Any]:
+    provider_label = _PROVIDER_DISPLAY["openrouter"]
+    trace = _build_trace(
+        "openrouter",
+        provider_label,
+        result.agent_model,
+        conversation_turn_count=conversation_turn_count,
+        raw_sql=result.sql,
+        sql=result.sql,
+        row_count=len(result.rows),
+        answered=True,
+    )
+    trace["notes"].extend(result.notes)
+    if result.repaired:
+        trace["notes"].append(f"Repair model: {result.repair_model}")
+    return {
+        "answer": result.answer,
+        "sql": result.sql,
+        "data_preview": result.data_preview,
+        "trace": trace,
+        "repaired": result.repaired,
+    }
 
 
 def _format_sse(event: str, data: dict[str, Any]) -> str:
@@ -1186,94 +1151,42 @@ def leaderboard_api() -> Any:
 @app.post("/api/ask")
 def ask() -> Any:
     body: dict[str, Any] = request.get_json(force=True) or {}
-    result = _ask_run_through_execution(body)
-    if isinstance(result, tuple):
-        payload, status = result
+    parsed = _build_request_or_error(body)
+    if isinstance(parsed, tuple):
+        payload, status = parsed
         return jsonify(payload), status
 
-    ok = result
     try:
-        answer = complete(ok.answer_prompt, ok.provider, ok.model)
-    except requests.exceptions.RequestException as exc:
-        log.exception("%s unreachable (answer step)", ok.provider_label)
-        error, status = _llm_request_error(ok.provider_label, "answer", exc)
-        return (
-            jsonify(
-                {
-                    "error": error,
-                    "sql": ok.sql,
-                    "trace": _build_trace(
-                        ok.provider,
-                        ok.provider_label,
-                        ok.model,
-                        conversation_turn_count=ok.conversation_turn_count,
-                        raw_sql=ok.raw_sql,
-                        sql=ok.sql,
-                        row_count=len(ok.rows),
-                    ),
-                }
-            ),
-            status,
-        )
+        outcome = run_ask(parsed)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("Agent invocation failed")
+        return jsonify({"error": f"Agent invocation failed: {exc}"}), 500
 
-    return jsonify(
-        {
-            "answer": answer,
-            "sql": ok.sql,
-            "data_preview": ok.data_preview,
-            "trace": _build_trace(
-                ok.provider,
-                ok.provider_label,
-                ok.model,
-                conversation_turn_count=ok.conversation_turn_count,
-                raw_sql=ok.raw_sql,
-                sql=ok.sql,
-                row_count=len(ok.rows),
-                answered=True,
-            ),
-        }
-    )
+    if isinstance(outcome, AgentFailure):
+        payload, status = _agent_failure_to_response(
+            outcome, parsed.conversation_turn_count
+        )
+        return jsonify(payload), status
+
+    return jsonify(_agent_result_to_payload(outcome, parsed.conversation_turn_count))
 
 
 @app.post("/api/ask/stream")
 def ask_stream() -> Any:
     body: dict[str, Any] = request.get_json(force=True) or {}
-    pipeline = _ask_run_through_execution(body)
-    if isinstance(pipeline, tuple):
-        payload, status = pipeline
+    parsed = _build_request_or_error(body)
+    if isinstance(parsed, tuple):
+        payload, status = parsed
         return jsonify(payload), status
-
-    ok = pipeline
 
     @stream_with_context
     def event_stream() -> Iterator[str]:
-        yield _format_sse(
-            "meta",
-            {
-                "sql": ok.sql,
-                "data_preview": ok.data_preview,
-                "trace": ok.trace,
-            },
-        )
         try:
-            for fragment in _iter_answer_stream(
-                ok.provider, ok.model, ok.answer_prompt
-            ):
-                if fragment:
-                    yield _format_sse("answer_delta", {"text": fragment})
-        except requests.exceptions.RequestException as exc:
-            log.exception("%s unreachable (answer stream)", ok.provider_label)
-            msg, _ = _llm_request_error(ok.provider_label, "answer", exc)
-            yield _format_sse("error", {"message": msg})
-            return
-        except (json.JSONDecodeError, KeyError, TypeError) as exc:
-            log.exception("Answer stream parse error")
-            yield _format_sse(
-                "error",
-                {"message": f"Answer stream failed: {exc}"},
-            )
-            return
-        yield _format_sse("done", {})
+            for evt in run_ask_stream(parsed):
+                yield _format_sse(evt.name, evt.data)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("Agent stream failed")
+            yield _format_sse("error", {"message": f"Agent stream failed: {exc}"})
 
     headers = {
         "Cache-Control": "no-cache",

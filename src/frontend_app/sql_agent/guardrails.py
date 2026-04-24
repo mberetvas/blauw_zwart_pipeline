@@ -1,11 +1,17 @@
-"""SQL guardrails: validation, fence stripping, schema qualifier rewriting."""
+"""SQL guardrails: validation (sqlglot + regex), fence stripping, schema rewriting."""
 
 from __future__ import annotations
 
 import re
 
+import sqlglot
+from sqlglot import exp
+from sqlglot.errors import ParseError
+
 # ---------------------------------------------------------------------------
-# Security: forbidden SQL keywords that would mutate state
+# Security: forbidden SQL keywords (legacy belt-and-braces second pass).
+# The primary check is now AST-based via sqlglot; this regex remains so any
+# input the legacy validator rejected is still rejected.
 # ---------------------------------------------------------------------------
 
 _MUTATING = re.compile(
@@ -15,16 +21,84 @@ _MUTATING = re.compile(
     re.IGNORECASE,
 )
 
+# AST node types that imply mutation or otherwise unsafe operations. Any
+# occurrence anywhere in the parsed tree causes rejection.
+_MUTATING_AST_TYPES: tuple[type[exp.Expression], ...] = (
+    exp.Insert,
+    exp.Update,
+    exp.Delete,
+    exp.Drop,
+    exp.Create,
+    exp.Alter,
+    exp.AlterColumn,
+    exp.TruncateTable,
+    exp.Merge,
+    exp.Copy,
+    exp.Command,  # catch-all for unparsed statements like GRANT / REVOKE
+)
+
+
+def _validate_sql_with_sqlglot(sql: str) -> None:
+    """Parse-only validation with sqlglot (Postgres dialect).
+
+    Raises ``ValueError`` when the SQL fails to parse, contains more than one
+    top-level statement, or has any mutating AST node anywhere in the tree.
+    """
+    try:
+        statements = sqlglot.parse(sql, dialect="postgres")
+    except ParseError as exc:
+        raise ValueError(f"Generated SQL failed to parse (sqlglot): {exc}") from exc
+
+    statements = [s for s in statements if s is not None]
+    if not statements:
+        raise ValueError("Generated SQL is empty after parsing.")
+    if len(statements) > 1:
+        raise ValueError(
+            "Generated SQL must contain exactly one statement; "
+            f"sqlglot parsed {len(statements)}."
+        )
+
+    root = statements[0]
+    if not isinstance(root, (exp.Select, exp.Subquery, exp.Union, exp.With, exp.Paren)):
+        raise ValueError(
+            "Generated SQL must be a single SELECT/WITH/UNION read query. "
+            f"Got top-level node: {type(root).__name__}"
+        )
+
+    for node in root.walk():
+        candidate = node[0] if isinstance(node, tuple) else node
+        if isinstance(candidate, _MUTATING_AST_TYPES):
+            raise ValueError(
+                "Generated SQL contains forbidden node "
+                f"'{type(candidate).__name__}' (mutation not allowed)."
+            )
+
 
 def _validate_sql(sql: str) -> None:
-    """Raise ValueError if sql is not a safe, read-only SELECT statement."""
+    """Raise ``ValueError`` if *sql* is not a safe, read-only SELECT statement.
+
+    Two layers of validation run, in order:
+
+    1. **sqlglot** parses the SQL with the Postgres dialect and rejects any
+       AST that implies mutation (INSERT/UPDATE/DELETE/DROP/...), parse
+       failures, or multiple top-level statements.
+    2. The legacy regex check rejects mutating keywords and stray ``;`` chars.
+       It exists so any input the previous validator rejected is still
+       rejected (belt-and-braces).
+    """
     stripped = sql.strip()
+    if not stripped:
+        raise ValueError("Generated SQL is empty.")
+
     starts_with = stripped.upper().lstrip("(\n\r\t ")
     if not (starts_with.startswith("SELECT") or starts_with.startswith("WITH")):
         raise ValueError(
             "Generated SQL must begin with SELECT or WITH. "
             f"Received: {stripped[:120]!r}"
         )
+
+    _validate_sql_with_sqlglot(stripped)
+
     if ";" in stripped:
         raise ValueError(
             "Generated SQL must contain exactly one SELECT statement and cannot include "
