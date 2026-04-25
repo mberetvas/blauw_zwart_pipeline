@@ -10,11 +10,14 @@ Reads configuration from environment variables:
 
 from __future__ import annotations
 
-import logging
 import os
 import sys
 
+from common.logging_setup import configure_logging, get_logger
+
 from .consumer import run_consumer
+
+log = get_logger(__name__)
 
 
 def _env(name: str, default: str) -> str:
@@ -23,10 +26,7 @@ def _env(name: str, default: str) -> str:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s %(name)s %(message)s",
-    )
+    configure_logging(level=os.environ.get("LOG_LEVEL", "INFO"))
 
     bootstrap = _env("KAFKA_BOOTSTRAP_SERVERS", "broker:29092")
     topic = _env("SCRAPER_KAFKA_TOPIC", "player_stats")
@@ -34,7 +34,7 @@ def main() -> None:
     database_url = os.environ.get("DATABASE_URL", "").strip()
 
     if not database_url:
-        logging.error("DATABASE_URL is required")
+        log.info("startup_blocked reason=missing_database_url")
         sys.exit(1)
 
     run_consumer(

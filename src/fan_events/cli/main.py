@@ -19,6 +19,7 @@ import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from common.logging_setup import configure_logging
 from fan_events.cli.term_style import ColoredArgumentParser, ColoredHelpFormatter
 from fan_events.core.domain import (
     DEFAULT_MERCH_FACTOR,
@@ -1406,28 +1407,17 @@ def run_stream(args: argparse.Namespace) -> None:
 
 
 def _configure_kafka_observability(verbose: bool = False) -> None:
-    """Attach a stderr handler to the ``fan_events.kafka`` logger.
+    """Configure centralized Loguru output for Kafka mode.
 
     Called once when entering Kafka mode so non-Kafka subcommands are unaffected.
-    The level is resolved as: ``--verbose`` → DEBUG, else ``FAN_EVENTS_LOG_LEVEL`` /
+    The level is resolved as: ``--verbose`` → DEBUG, else ``FAN_EVENTS_LOG_LEVEL`` or
     ``LOGLEVEL`` env var, else INFO.
     """
-    kafka_logger = logging.getLogger("fan_events.kafka")
-
     if verbose:
-        level = logging.DEBUG
+        level = "DEBUG"
     else:
-        env_level = os.environ.get("FAN_EVENTS_LOG_LEVEL") or os.environ.get("LOGLEVEL")
-        if env_level:
-            level = getattr(logging, env_level.upper(), logging.INFO)
-        else:
-            level = logging.INFO
-
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
-    kafka_logger.addHandler(handler)
-    kafka_logger.setLevel(level)
-    kafka_logger.propagate = False
+        level = os.environ.get("FAN_EVENTS_LOG_LEVEL") or os.environ.get("LOGLEVEL") or "INFO"
+    configure_logging(level=level)
 
 
 def _run_stream_kafka(
@@ -1476,7 +1466,11 @@ def _run_stream_kafka(
         cfg.client_id,
         summarize_bootstrap_for_log(cfg.bootstrap_servers),
     )
-    kafka_logger.debug("Full bootstrap servers: %s", cfg.bootstrap_servers)
+    kafka_logger.debug(
+        "task=kafka_bootstrap_resolved previous=config_loaded next=create_producer "
+        "full_bootstrap=%s",
+        cfg.bootstrap_servers,
+    )
 
     producer = Producer(build_producer_config(cfg))
     sink = KafkaSink(producer, cfg.topic)

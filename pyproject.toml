@@ -12,6 +12,7 @@ dependencies = [
     "langchain-community>=0.4.1",
     "langchain-openrouter>=0.2.1",
     "langgraph>=1.1.9",
+    "loguru>=0.7.3",
     "python-dotenv>=1.2.2",
     "sqlglot[c]>=30.6.0",
     "tzdata>=2024.1",
@@ -31,6 +32,20 @@ api = [
     "requests>=2.31",
     "pyyaml>=6.0",
 ]
+# Pro League scraper service: `uv sync --extra scraper`
+scraper = [
+    "beautifulsoup4>=4.12",
+    "confluent-kafka>=2.3",
+    "flask>=3.0",
+    "lxml>=5.0",
+    "psycopg2-binary>=2.9",
+    "requests>=2.31",
+]
+# Pro League Kafka→Postgres ingest consumer: `uv sync --extra proleague-ingest`
+proleague-ingest = [
+    "confluent-kafka>=2.3",
+    "psycopg2-binary>=2.9",
+]
 
 [project.scripts]
 fan_events = "fan_events.cli:main"
@@ -38,8 +53,13 @@ fan_ingest = "fan_ingest.main:main"
 
 [dependency-groups]
 dev = [
+    "asyncpg>=0.29",
     "beautifulsoup4>=4.14.3",
     "confluent-kafka>=2.14.0",
+    "flask>=3.0",
+    "psycopg2-binary>=2.9",
+    "pyyaml>=6.0",
+    "requests>=2.31",
     "ipykernel>=7.2.0",
     "lxml>=6.0.4",
     "pytest>=9.0.2",

@@ -26,16 +26,17 @@ https://www.proleague.be before running in production.
 
 from __future__ import annotations
 
-import logging
 import os
 
 from flask import Flask, jsonify, request
 
+from common.logging_setup import configure_logging, get_logger
+
 from .scraper import DEFAULT_SQUAD_URL, scrape_player
 
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
-log = logging.getLogger(__name__)
+configure_logging(level=os.environ.get("LOG_LEVEL", "INFO"))
+log = get_logger(__name__)
 
 
 def _db_load_squad(source_url: str) -> dict:
@@ -61,7 +62,7 @@ def _db_load_squad(source_url: str) -> dict:
         finally:
             conn.close()
     except Exception as exc:
-        log.warning("DB load failed (non-fatal): %s", exc)
+        log.info("squad_cache_load_failed error={}", exc)
         return {"source_url": source_url, "fetched_at": None, "cached": True, "players": []}
 
 
@@ -90,7 +91,7 @@ def player():
     try:
         data = scrape_player(url)
     except Exception:
-        log.exception("Player scrape failed url=%s", url)
+        log.info("player_scrape_failed url={}", url)
         return jsonify({"error": "Failed to fetch player data"}), 502
     return jsonify(data)
 

@@ -86,7 +86,12 @@ tailwind.config = {
   .msg.error{background:rgba(147,0,10,.35);color:#ffb4ab;border-radius:.5rem;border-bottom-left-radius:.125rem;max-width:90%;padding:1rem 1.25rem}
   .msg.error .err-label{color:#ffb4ab;font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.35rem}
   /* ── Thinking dots ──────────────────────────────────── */
-  .msg.thinking{display:flex;align-items:center;gap:.4rem;background:#222a3d;border-radius:.5rem;border-bottom-left-radius:.125rem;padding:.85rem 1.25rem;width:fit-content}
+  .msg.thinking{display:flex;align-items:flex-start;gap:.7rem;background:#222a3d;border-radius:.5rem;border-bottom-left-radius:.125rem;padding:.9rem 1.25rem;min-width:17rem;max-width:32rem}
+  .thinking-copy{display:flex;flex-direction:column;gap:.15rem;min-width:0}
+  .thinking-title{font-size:.9rem;line-height:1.45;color:#dae2fd;font-weight:700}
+  .thinking-detail{font-size:.78rem;line-height:1.5;color:#adb4ce}
+  .thinking-badge{display:inline-flex;align-items:center;width:fit-content;border-radius:9999px;padding:.08rem .5rem;background:#171f33;color:#8c90a1;font-size:.62rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+  .thinking-dots{display:inline-flex;align-items:center;gap:.35rem;padding-top:.2rem;flex-shrink:0}
   .dot{width:6px;height:8px;border-radius:1px;background:#b0c6ff;animation:blink 1.4s ease-in-out infinite}
   .dot:nth-child(2){animation-delay:.18s}
   .dot:nth-child(3){animation-delay:.36s}
@@ -544,6 +549,7 @@ tailwind.config = {
         let accumulated = "";
         let metaReceived = false;
         let streamDone = false;
+        let lastProgressStep = "";
 
         function consumeSse(bufferStr) {
           const out = [];
@@ -577,7 +583,16 @@ tailwind.config = {
             buffer = parsed.rest;
             for (let i = 0; i < parsed.events.length; i++) {
               const { event, data: payload } = parsed.events[i];
-              if (event === "meta") {
+              if (event === "progress") {
+                if (!metaReceived) {
+                  updateThinkingProgress(thinking, payload || {});
+                  const stepKey = payload && payload.step_key ? String(payload.step_key) : "";
+                  if (stepKey && stepKey !== lastProgressStep) {
+                    lastProgressStep = stepKey;
+                    if (payload.title) announce(String(payload.title));
+                  }
+                }
+              } else if (event === "meta") {
                 thinking.remove();
                 metaReceived = true;
                 responseMeta = payload;
@@ -734,12 +749,36 @@ tailwind.config = {
     const div = document.createElement("div");
     div.className = "msg assistant thinking";
     div.setAttribute("aria-label", "Generating answer");
-    div.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+    div.innerHTML = ''
+      + '<div class="thinking-dots" aria-hidden="true">'
+      + '<span class="dot"></span><span class="dot"></span><span class="dot"></span>'
+      + '</div>'
+      + '<div class="thinking-copy">'
+      + '<span class="thinking-badge">In progress</span>'
+      + '<div class="thinking-title">Working on your question</div>'
+      + '<div class="thinking-detail">Preparing the analysis pipeline.</div>'
+      + '</div>';
     wrap.appendChild(div);
 
     messagesEl.appendChild(wrap);
     messagesEl.scrollTop = messagesEl.scrollHeight;
     return wrap;
+  }
+
+  function updateThinkingProgress(thinkingWrap, payload) {
+    if (!thinkingWrap || !payload || typeof payload !== "object") return;
+    const titleEl = thinkingWrap.querySelector(".thinking-title");
+    const detailEl = thinkingWrap.querySelector(".thinking-detail");
+    const badgeEl = thinkingWrap.querySelector(".thinking-badge");
+    if (titleEl && typeof payload.title === "string" && payload.title.trim()) {
+      titleEl.textContent = payload.title.trim();
+    }
+    if (detailEl && typeof payload.detail === "string" && payload.detail.trim()) {
+      detailEl.textContent = payload.detail.trim();
+    }
+    if (badgeEl && typeof payload.phase === "string" && payload.phase.trim()) {
+      badgeEl.textContent = payload.phase.trim();
+    }
   }
 
   function escHtml(s) {

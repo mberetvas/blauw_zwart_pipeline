@@ -5,7 +5,7 @@ Flask UI + JSON API for the MVP demo. This package serves the Data Q&A chat, the
 Current package split:
 
 - `app.py` remains the thin Flask HTTP/UI orchestrator and the runtime entrypoint (`python -m frontend_app.app`).
-- `sql_agent/` now owns the Text-to-SQL / LLM pipeline helpers (schema context, semantic layer loading, providers, guardrails, and DB execution).
+- `sql_agent/` is a tool-calling LangChain + LangGraph agent (OpenRouter only). It owns the data tools, sqlglot guardrails, and graph orchestration that turns a question into a validated SELECT, executes it as `llm_reader`, and returns a Markdown answer.
 - `static/` still contains the browser assets served by the Flask routes; those files were not moved.
 - Tests intentionally still patch symbols on `frontend_app.app`, so the orchestration surface stays at the package root even though most pipeline internals moved into `sql_agent/`.
 
@@ -37,13 +37,13 @@ Current package split:
 | Data Q&A (`/`) | Natural-language question -> SQL -> answer flow over Postgres |
 | Leaderboard (`/leaderboard`) | Reads `mart_fan_loyalty` and ranks fans |
 | Player stats (`/player-stats`) | Compares cached squad data and can fetch individual player details |
-| Settings (`/settings`) | Persists runtime Ollama / OpenRouter settings |
+| Settings (`/settings`) | Persists runtime OpenRouter settings |
 
 ## Run in Docker Compose (recommended)
 
 1. Copy `.env.example` to `.env`.
 2. Start the **full stack** with `docker compose up -d` from the repo root.
-3. If you use the default provider, run Ollama on the host and pull `gemma4:e2b`.
+3. Set `OPENROUTER_API_KEY` (and optionally `OPENROUTER_AGENT_MODEL` / `OPENROUTER_REPAIR_MODEL`) in `.env`.
 4. Wait for dbt to materialize the marts (`docker compose logs -f dbt-scheduler`).
 5. Open <http://localhost:8080>.
 
@@ -74,15 +74,14 @@ When the API runs on your machine against the Compose Postgres instance, use hos
 | --- | --- | --- |
 | `LLM_READER_DATABASE_URL` | falls back to `DATABASE_URL` | Read-only Postgres DSN used for SQL execution |
 | `DATABASE_URL` | unset | Fallback DB connection for read-only queries |
-| `LLM_PROVIDER` | `ollama` | Server-side default provider (`ollama` or `openrouter`) |
-| `OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama base URL |
-| `OLLAMA_MODEL` | `gemma4:e2b` | Default Ollama model |
-| `OLLAMA_TIMEOUT` | `120` | Ollama request timeout in seconds |
-| `OPENROUTER_API_KEY` | unset | OpenRouter API key |
+| `OPENROUTER_API_KEY` | unset | OpenRouter API key (required) |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | OpenRouter API base URL |
-| `OPENROUTER_MODEL` | first built-in default | Default OpenRouter model id |
+| `OPENROUTER_MODEL` | first built-in default | Fallback OpenRouter model id (used when neither agent_model nor repair_model is set) |
+| `OPENROUTER_AGENT_MODEL` | unset | Default model for the primary tool-calling agent (falls back to `OPENROUTER_MODEL`) |
+| `OPENROUTER_REPAIR_MODEL` | unset | Default model for the one-shot SQL repair pass (falls back to `OPENROUTER_AGENT_MODEL`) |
 | `OPENROUTER_MODELS` | built-in defaults | Comma-separated suggestion list for the settings UI |
 | `OPENROUTER_TIMEOUT` | `120` | OpenRouter request timeout in seconds |
+| `AGENT_MAX_TOOL_ITERATIONS` | `8` | Max tool-call iterations the primary agent may run before triggering the repair pass |
 | `LLM_CONFIG_PATH` | `src/frontend_app/llm_config.json` or `/data/llm_config.json` in Compose | JSON file for persisted runtime config |
 | `PROLEAGUE_SCRAPER_URL` | `http://proleague-scraper:8001` | Internal scraper base URL for player lookups and image proxying |
 | `PORT` | `8080` | Direct app port when running manually |
@@ -120,29 +119,41 @@ When the API runs on your machine against the Compose Postgres instance, use hos
 
 ## How the Data Q&A flow works
 
-In one sentence: English question -> LLM proposes SQL -> the app runs a bounded read-only query -> the LLM turns the result rows into a human answer.
+In one sentence: English question -> tool-calling agent discovers the schema and writes a SELECT -> sqlglot validates it -> the app runs a bounded read-only query -> the agent turns the result rows into a Markdown answer (with a one-shot repair pass on a separate model if needed).
 
 Current pipeline:
 
-1. The browser sends a question, provider/model selection, and a small slice of recent conversation.
-2. `app.py` delegates prompt/context assembly to `frontend_app.sql_agent`, which builds the SQL-generation prompt from dbt schema YAML, optional semantic-layer text, recent conversation, and the question itself.
-3. The first LLM call returns one PostgreSQL `SELECT` or `WITH ... SELECT`.
-4. Flask validates and executes that SQL as the `llm_reader` role.
-5. The app builds an answer prompt from the question plus real result rows.
-6. The second LLM call returns the final markdown answer, either as one JSON response or as SSE fragments.
+1. The browser sends a question, optional `agent_model` / `repair_model` overrides, and a small slice of recent conversation.
+2. `app.py` builds an `AgentRequest` (question + conversation context + model overrides) and hands it to `sql_agent.graph.run_ask` (or `run_ask_stream`).
+3. The **primary agent** (LangGraph `create_react_agent` over OpenRouter) discovers schema and semantic-layer hints by calling read-only tools — `list_tables`, `describe_table`, `search_columns`, `sample_table`, `get_semantic_layer` — and finally calls `execute_select` with one PostgreSQL `SELECT` or `WITH ... SELECT` statement.
+4. `execute_select` strips fences, rewrites `marts.x` / `staging.x` / `intermediate.x` to the dbt schema, runs **sqlglot** (single-statement check + AST DDL/DML rejection + legacy regex), then executes the SQL as the `llm_reader` role.
+5. The agent reads back the rows from the tool result and produces a Markdown answer.
+6. If the primary agent never produced a successful `execute_select` (or hit the iteration cap), a **one-shot repair pass** runs on the configured `repair_model` with a smaller toolset (`describe_table` + `execute_select`). At most one repair attempt per request.
 
 ### Guardrails
 
 | Guardrail | Detail |
 | --- | --- |
-| Read-only SQL only | Query must begin with `SELECT` or `WITH` |
-| No multi-statement input | Semicolons are rejected |
+| Read-only SQL only | `execute_select` is the only tool that runs free-form SQL |
+| sqlglot single-statement | Multi-statement input is rejected at parse time |
+| sqlglot AST DDL/DML reject | `Insert`, `Update`, `Delete`, `Drop`, `Create`, `Alter`, `TruncateTable`, `Merge`, `Copy`, `Command` nodes are rejected before execution |
+| Legacy regex fallback | Mutating keyword regex runs as a second pass |
+| Identifier whitelist | `describe_table` / `sample_table` reject any table not present in `list_tables()` output |
 | Outer row cap | Execution is wrapped in an outer `LIMIT 50` |
 | Time limit | Every DB session sets `statement_timeout` to 10 seconds |
+| Bounded iterations | Primary agent capped by `AGENT_MAX_TOOL_ITERATIONS` (default 8); repair pass capped at half that |
 
 ### Streaming details
 
-`POST /api/ask/stream` emits Server-Sent Events with `meta`, `answer_delta`, `done`, or `error` events. Successful follow-up questions also carry a small history window so prompts like "these fans" or "that match" stay scoped.
+`POST /api/ask/stream` emits Server-Sent Events with `progress`, `meta`, `answer_delta`, `done`, or `error` events. Successful follow-up questions also carry a small history window so prompts like "these fans" or "that match" stay scoped.
+
+`progress` events are advisory UX updates intended for "thinking out loud" feedback. Each payload includes:
+
+- `step_key` — stable machine key for the stage/tool step
+- `title` — short user-facing status line
+- `detail` — brief factual explanation of what is happening
+- `phase` — `primary`, `repair`, or `final`
+- `ts` — UTC ISO8601 timestamp
 
 ### What the model sees vs what the UI gets
 
@@ -167,11 +178,64 @@ points = ROUND(
 
 Tie-breakers are `points DESC`, `matches_attended DESC`, `total_spend DESC`, then `fan_id ASC`.
 
-## Troubleshooting
+## Observability
+
+### Log level
+
+Set `LOG_LEVEL=DEBUG` (default: `INFO`) to enable verbose output including SQL queries, DB timing, and LLM/tool round-trip details.
+
+```bash
+# Docker Compose — add to .env or docker-compose.yml environment block
+LOG_LEVEL=DEBUG
+```
+
+### Log format
+
+Every log line carries a short **request ID** (`[req_id]`) that is generated per HTTP request and propagated through the full call stack (Flask → `run_ask` → agent stages → tools → DB):
+
+```
+2026-04-24 21:30:01,123 INFO  [a3f1c2d8] frontend_app.app — POST /api/ask/stream question="show top fans"
+2026-04-24 21:30:01,124 INFO  [a3f1c2d8] frontend_app.sql_agent.graph — run_ask start: question="show top fans"
+2026-04-24 21:30:01,125 INFO  [a3f1c2d8] frontend_app.sql_agent.graph — Stage start: stage=primary model=deepseek/deepseek-v3.2 tools=6 max_iter=8
+2026-04-24 21:30:01,130 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — LLM call start | model=deepseek/deepseek-v3.2
+2026-04-24 21:30:04,500 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — LLM call end — 3370 ms
+2026-04-24 21:30:04,501 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — Tool call start: list_tables | args={}
+2026-04-24 21:30:04,508 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — Tool call end: list_tables — 7 ms | output=[{"name":…
+2026-04-24 21:30:10,200 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — Tool call start: execute_select | args={"sql": "SELECT…
+2026-04-24 21:30:10,320 INFO  [a3f1c2d8] frontend_app.sql_agent.tools — execute_select done: 50 rows, 120 ms
+2026-04-24 21:30:10,321 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — Tool call end: execute_select — 121 ms | output={"rows"…
+2026-04-24 21:30:12,000 INFO  [a3f1c2d8] frontend_app.sql_agent.graph — Stage primary done: 10875 ms, 9 messages
+2026-04-24 21:30:12,001 INFO  [a3f1c2d8] frontend_app.sql_agent.graph — run_ask done: repaired=False rows=50
+2026-04-24 21:30:12,002 DEBUG [a3f1c2d8] frontend_app.app — SSE event: meta
+2026-04-24 21:30:12,003 DEBUG [a3f1c2d8] frontend_app.app — SSE event: answer_delta
+2026-04-24 21:30:12,004 DEBUG [a3f1c2d8] frontend_app.app — SSE event: done
+2026-04-24 21:30:12,005 INFO  [a3f1c2d8] frontend_app.app — stream closed
+```
+
+### Diagnosing a "spinning forever" question
+
+1. **Tail the logs**: `docker compose logs -f frontend-app`
+2. **Find the request ID** from the first `POST /api/ask/stream` line for the question in question.
+3. **Filter by req_id**: `docker compose logs frontend-app | grep '\[a3f1c2d8\]'`
+4. **Identify the hang point**:
+   - Stuck after `LLM call start` → the LLM is taking too long; check `OPENROUTER_TIMEOUT` (default 120 s) and the model's latency.
+   - Stuck after `Tool call start: execute_select` → the DB query is hanging; the `statement_timeout` (10 s) should kill it, but a slow connection setup (no connect timeout is set) could delay the error.
+   - `Stage X: iteration cap hit` warning → the agent hit `AGENT_MAX_TOOL_ITERATIONS * 2 + 5` LangGraph steps without producing a valid SQL result; increase `AGENT_MAX_TOOL_ITERATIONS` or the repair-pass model.
+   - No `run_ask start` after the HTTP log → the request was rejected at validation before entering the agent pipeline.
+
+### Known hang paths
+
+| Cause | Symptom in logs | Mitigation |
+| --- | --- | --- |
+| Slow LLM (default `OPENROUTER_TIMEOUT=120s` × up to 8 tool iterations) | Long gap between `LLM call start` and `LLM call end` | Reduce `AGENT_MAX_TOOL_ITERATIONS`; use a faster model |
+| `GraphRecursionError` (iteration cap) | `WARNING … iteration cap hit` then `run_ask failed: phase=iteration_cap` | Increase `AGENT_MAX_TOOL_ITERATIONS`; simplify the question |
+| Slow DB connection (no connect timeout) | `DB query: sql=…` appears but `DB query done` never follows | Add `connect_timeout=5` to `DATABASE_URL` DSN parameters |
+
+
 
 | Problem | What to check |
 | --- | --- |
-| Provider errors in `/api/ask` | Ollama may not be running on the host, or OpenRouter credentials/model access may be wrong |
+| Provider errors in `/api/ask` | OpenRouter API key missing or invalid, model id not accessible, or rate-limited |
 | Host-run API cannot reach Postgres | Use `localhost:<POSTGRES_PORT>` in the DSN, not the Compose hostname `postgres` |
 | `relation "mart_player_season_summary" does not exist` in `/api/ask` | Ensure dbt has built player marts (default selector is `+mart_fan_loyalty +mart_player_season_summary`), then check `docker compose logs -f dbt-scheduler` |
 | `/player-stats` shows no players | The first scrape has not completed yet; check `proleague-scheduler` and `proleague-ingest` logs |

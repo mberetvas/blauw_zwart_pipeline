@@ -9,19 +9,23 @@ from pathlib import Path
 import pytest
 import yaml
 
+from frontend_app.sql_agent.graph import AgentFailure, AgentResult, StreamEvent
+
 
 @pytest.fixture()
 def llm_app_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     config_path = tmp_path / "llm_config.json"
     monkeypatch.setenv("LLM_CONFIG_PATH", str(config_path))
-    monkeypatch.setenv("OLLAMA_URL", "http://localhost:11434")
-    monkeypatch.setenv("OLLAMA_MODEL", "gemma4:e2b")
-    monkeypatch.setenv("OLLAMA_TIMEOUT", "120")
     monkeypatch.setenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
     monkeypatch.setenv("OPENROUTER_MODEL", "mistralai/mistral-7b-instruct:free")
     monkeypatch.setenv("OPENROUTER_TIMEOUT", "120")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "")
-    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-fixture-key")
+    monkeypatch.delenv("OPENROUTER_AGENT_MODEL", raising=False)
+    monkeypatch.delenv("OPENROUTER_REPAIR_MODEL", raising=False)
+    monkeypatch.delenv("OLLAMA_URL", raising=False)
+    monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+    monkeypatch.delenv("OLLAMA_TIMEOUT", raising=False)
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
 
     runtime_config = importlib.import_module("frontend_app.sql_agent.llm_runtime_config")
     importlib.reload(runtime_config)
@@ -38,10 +42,39 @@ def test_validate_sql_allows_select_and_with(llm_app_module) -> None:
 
 
 def test_validate_sql_rejects_mutating_keyword(llm_app_module) -> None:
-    with pytest.raises(ValueError, match="forbidden keyword 'DELETE'"):
+    # sqlglot's AST walk catches the DELETE first; legacy regex remains as second pass.
+    with pytest.raises(ValueError, match=r"(?i)delete|mutation not allowed"):
         llm_app_module._validate_sql(
             "WITH removed AS (DELETE FROM fans RETURNING id) SELECT id FROM removed"
         )
+
+
+def test_validate_sql_rejects_sqlglot_parse_failure(llm_app_module) -> None:
+    with pytest.raises(ValueError, match=r"(?i)sqlglot|parse"):
+        llm_app_module._validate_sql("SELECT FROM WHERE 1 ===")
+
+
+def test_validate_sql_rejects_multiple_top_level_statements(llm_app_module) -> None:
+    # The legacy regex rejects ';' early, but sqlglot also catches multi-statement input.
+    with pytest.raises(ValueError):
+        llm_app_module._validate_sql("SELECT 1; SELECT 2")
+
+
+def test_validate_sql_rejects_ddl_via_ast(llm_app_module) -> None:
+    with pytest.raises(ValueError, match=r"(?i)mutation|drop"):
+        llm_app_module._validate_sql("DROP TABLE fans")
+
+
+def test_validate_sql_accepts_complex_cte(llm_app_module) -> None:
+    sql = (
+        "WITH ranked AS ("
+        "  SELECT fan_id, total_spend, "
+        "         RANK() OVER (ORDER BY total_spend DESC) AS r "
+        "  FROM dbt_dev.mart_fan_loyalty"
+        ") "
+        "SELECT fan_id, total_spend FROM ranked WHERE r <= 10"
+    )
+    llm_app_module._validate_sql(sql)
 
 
 def test_strip_fences_removes_markdown_and_trailing_semicolons(llm_app_module) -> None:
@@ -58,25 +91,27 @@ def test_llm_config_routes_mask_and_persist_key(llm_app_module) -> None:
     put_response = client.put(
         "/api/llm-config",
         json={
-            "default_provider": "openrouter",
-            "ollama_url": "http://localhost:11434/",
-            "ollama_model": "gemma4:e2b",
-            "ollama_timeout": 45,
             "openrouter_base_url": "https://openrouter.ai/api/v1/",
             "openrouter_model": "openai/gpt-4.1-mini",
             "openrouter_timeout": 90,
             "openrouter_api_key": "sk-test-1234",
+            "agent_model": "openai/gpt-4.1-mini",
+            "repair_model": "anthropic/claude-3.5-sonnet",
         },
     )
 
     assert put_response.status_code == 200
     body = put_response.get_json()
-    assert body["default_provider"] == "openrouter"
-    assert body["ollama_timeout"] == 45
     assert body["openrouter_timeout"] == 90
     assert body["openrouter_api_key_configured"] is True
     assert body["openrouter_api_key_masked"] == "****1234"
+    assert body["agent_model"] == "openai/gpt-4.1-mini"
+    assert body["repair_model"] == "anthropic/claude-3.5-sonnet"
+    assert body["resolved_repair_model"] == "anthropic/claude-3.5-sonnet"
     assert "sk-test-1234" not in json.dumps(body)
+    # Ollama keys are gone from the public config.
+    assert "ollama_url" not in body
+    assert "default_provider" not in body
 
     get_response = client.get("/api/llm-config")
     assert get_response.status_code == 200
@@ -88,28 +123,40 @@ def test_llm_config_routes_mask_and_persist_key(llm_app_module) -> None:
 
     persisted = json.loads(Path(public_body["config_file"]).read_text(encoding="utf-8"))
     assert persisted["openrouter_api_key"] == "sk-test-1234"
-    assert persisted["ollama_url"] == "http://localhost:11434"
     assert persisted["openrouter_base_url"] == "https://openrouter.ai/api/v1"
+    assert persisted["agent_model"] == "openai/gpt-4.1-mini"
+    assert persisted["repair_model"] == "anthropic/claude-3.5-sonnet"
 
 
-def test_ask_route_accepts_cte_sql_and_returns_answer(
+def _stub_agent_result(llm_app_module, **overrides):
+    defaults = {
+        "answer": "Fan 1 is the latest supporter in the result set.",
+        "sql": "WITH latest AS (SELECT 1 AS fan_id)\nSELECT fan_id FROM latest",
+        "rows": [{"fan_id": 1}],
+        "data_preview": [{"fan_id": 1}],
+        "agent_model": "openrouter/test-agent",
+        "repair_model": "openrouter/test-agent",
+        "repaired": False,
+        "notes": [],
+    }
+    defaults.update(overrides)
+    return AgentResult(**defaults)
+
+
+def test_ask_route_returns_answer_from_agent(
     llm_app_module, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(llm_app_module, "load_schema_context", lambda: "Table: fans")
-    monkeypatch.setattr(
-        llm_app_module,
-        "complete",
-        lambda prompt, provider, model: (
-            "```sql\nWITH latest AS (SELECT 1 AS fan_id)\nSELECT fan_id FROM latest;\n```"
-            if "SQL:" in prompt
-            else "Fan 1 is the latest supporter in the result set."
-        ),
-    )
-    monkeypatch.setattr(llm_app_module, "_execute_sql", lambda sql: [{"fan_id": 1}])
+    captured: dict[str, object] = {}
+
+    def fake_run_ask(req):
+        captured["request"] = req
+        return _stub_agent_result(llm_app_module)
+
+    monkeypatch.setattr(llm_app_module, "run_ask", fake_run_ask)
 
     response = llm_app_module.app.test_client().post(
         "/api/ask",
-        json={"question": "Who is the latest fan?", "provider": "ollama"},
+        json={"question": "Who is the latest fan?", "provider": "openrouter"},
     )
 
     assert response.status_code == 200
@@ -117,6 +164,8 @@ def test_ask_route_accepts_cte_sql_and_returns_answer(
     assert body["sql"] == "WITH latest AS (SELECT 1 AS fan_id)\nSELECT fan_id FROM latest"
     assert body["answer"] == "Fan 1 is the latest supporter in the result set."
     assert body["data_preview"] == [{"fan_id": 1}]
+    assert body["repaired"] is False
+    assert captured["request"].question == "Who is the latest fan?"
 
 
 def _parse_sse_events(text: str) -> list[tuple[str, dict]]:
@@ -136,74 +185,205 @@ def _parse_sse_events(text: str) -> list[tuple[str, dict]]:
     return events
 
 
-def test_ask_stream_returns_sse_meta_deltas_done(
+def test_ask_stream_returns_sse_events_from_agent(
     llm_app_module, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(llm_app_module, "load_schema_context", lambda: "Table: fans")
+    def fake_run_ask_stream(req):
+        meta_payload = {
+            "sql": "SELECT 1",
+            "data_preview": [{"x": 1}],
+            "trace_notes": [],
+            "repaired": False,
+        }
+        yield StreamEvent("meta", meta_payload)
+        yield StreamEvent("answer_delta", {"text": "Hel"})
+        yield StreamEvent("answer_delta", {"text": "lo"})
+        yield StreamEvent("done", {})
 
-    def fake_complete(prompt: str, provider: str, model: str) -> str:
-        if "SQL:" in prompt:
-            return (
-                "```sql\nWITH latest AS (SELECT 1 AS fan_id)\n"
-                "SELECT fan_id FROM latest;\n```"
-            )
-        raise AssertionError("complete must not be used for the answer step in /stream")
-
-    monkeypatch.setattr(llm_app_module, "complete", fake_complete)
-    monkeypatch.setattr(llm_app_module, "_execute_sql", lambda sql: [{"fan_id": 1}])
-    monkeypatch.setattr(
-        llm_app_module,
-        "_iter_answer_stream",
-        lambda provider, model, answer_prompt: iter(["Hel", "lo"]),
-    )
+    monkeypatch.setattr(llm_app_module, "run_ask_stream", fake_run_ask_stream)
 
     response = llm_app_module.app.test_client().post(
         "/api/ask/stream",
-        json={"question": "Who is the latest fan?", "provider": "ollama"},
+        json={"question": "Who is the latest fan?", "provider": "openrouter"},
     )
 
     assert response.status_code == 200
-    assert response.content_type is not None
-    assert "text/event-stream" in response.content_type
-    assert response.headers.get("Cache-Control") == "no-cache"
-
+    assert "text/event-stream" in (response.content_type or "")
     text = response.get_data(as_text=True)
     events = _parse_sse_events(text)
     types = [e[0] for e in events]
     assert types == ["meta", "answer_delta", "answer_delta", "done"]
-
-    meta = events[0][1]
-    assert meta["sql"] == "WITH latest AS (SELECT 1 AS fan_id)\nSELECT fan_id FROM latest"
-    assert meta["data_preview"] == [{"fan_id": 1}]
-    assert "trace" in meta
-
+    assert events[0][1]["sql"] == "SELECT 1"
     assert events[1][1]["text"] == "Hel"
     assert events[2][1]["text"] == "lo"
     assert events[3][1] == {}
 
 
-def test_ask_stream_pre_stream_validation_returns_json(
+def test_ask_stream_passes_through_progress_events(
     llm_app_module, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(llm_app_module, "load_schema_context", lambda: "Table: fans")
-    monkeypatch.setattr(
-        llm_app_module,
-        "complete",
-        lambda prompt, provider, model: (
-            "DROP TABLE fans;" if "SQL:" in prompt else "n/a"
-        ),
-    )
+    def fake_run_ask_stream(req):
+        yield StreamEvent(
+            "progress",
+            {
+                "step_key": "tool_start",
+                "title": "Cleaning the attic",
+                "detail": "Reviewing available tables.",
+                "phase": "primary",
+                "ts": "2026-04-25T09:00:00Z",
+            },
+        )
+        yield StreamEvent(
+            "meta",
+            {
+                "sql": "SELECT 1",
+                "data_preview": [{"x": 1}],
+                "trace_notes": [],
+                "repaired": False,
+            },
+        )
+        yield StreamEvent("answer_delta", {"text": "Hi"})
+        yield StreamEvent("done", {})
+
+    monkeypatch.setattr(llm_app_module, "run_ask_stream", fake_run_ask_stream)
 
     response = llm_app_module.app.test_client().post(
         "/api/ask/stream",
-        json={"question": "bad?", "provider": "ollama"},
+        json={"question": "status please", "provider": "openrouter"},
+    )
+
+    assert response.status_code == 200
+    events = _parse_sse_events(response.get_data(as_text=True))
+    assert [e[0] for e in events] == ["progress", "meta", "answer_delta", "done"]
+    assert events[0][1]["title"] == "Cleaning the attic"
+
+
+def test_ask_route_returns_422_on_agent_failure(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_run_ask(req):
+        return AgentFailure(
+            error="SQL contains a forbidden mutating statement",
+            phase="validation",
+            sql="DROP TABLE fans",
+            agent_model="openrouter/test-agent",
+            repair_model="openrouter/test-repair",
+            notes=[
+                "Primary agent failed (validation); invoking repair pass.",
+                "Repair pass also failed (validation).",
+            ],
+        )
+
+    monkeypatch.setattr(llm_app_module, "run_ask", fake_run_ask)
+
+    response = llm_app_module.app.test_client().post(
+        "/api/ask",
+        json={"question": "drop everything", "provider": "openrouter"},
     )
 
     assert response.status_code == 422
     body = response.get_json()
-    assert body is not None
     assert "error" in body
-    assert "text/event-stream" not in (response.content_type or "")
+    assert body["phase"] == "validation"
+    assert body["sql"] == "DROP TABLE fans"
+
+
+def test_ask_route_passes_model_overrides_to_agent(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run_ask(req):
+        captured["request"] = req
+        return _stub_agent_result(llm_app_module)
+
+    monkeypatch.setattr(llm_app_module, "run_ask", fake_run_ask)
+
+    llm_app_module.app.test_client().post(
+        "/api/ask",
+        json={
+            "question": "Q",
+            "provider": "openrouter",
+            "agent_model": "openai/gpt-4.1-mini",
+            "repair_model": "anthropic/claude-3.5-sonnet",
+        },
+    )
+
+    req = captured["request"]
+    assert req.agent_model == "openai/gpt-4.1-mini"
+    assert req.repair_model == "anthropic/claude-3.5-sonnet"
+
+
+def test_ask_route_legacy_model_field_treated_as_agent_model(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run_ask(req):
+        captured["request"] = req
+        return _stub_agent_result(llm_app_module)
+
+    monkeypatch.setattr(llm_app_module, "run_ask", fake_run_ask)
+
+    llm_app_module.app.test_client().post(
+        "/api/ask",
+        json={"question": "Q", "provider": "openrouter", "model": "openai/gpt-4.1-mini"},
+    )
+
+    assert captured["request"].agent_model == "openai/gpt-4.1-mini"
+
+
+def test_ask_route_passes_history_to_agent(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run_ask(req):
+        captured["request"] = req
+        return _stub_agent_result(llm_app_module)
+
+    monkeypatch.setattr(llm_app_module, "run_ask", fake_run_ask)
+
+    response = llm_app_module.app.test_client().post(
+        "/api/ask",
+        json={
+            "question": "Can you also tell me what they spent it on?",
+            "provider": "openrouter",
+            "history": [
+                {
+                    "question": "Why are these fans top 3?",
+                    "answer": "They are the top 3 by total spend.",
+                    "sql": (
+                        "SELECT fan_id, total_spend FROM mart_fan_loyalty "
+                        "ORDER BY total_spend DESC LIMIT 3"
+                    ),
+                    "data_preview": [
+                        {"fan_id": "fan_03248", "total_spend": 512.4},
+                        {"fan_id": "fan_17965", "total_spend": 417.59},
+                        {"fan_id": "fan_00219", "total_spend": 336.7},
+                    ],
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    req = captured["request"]
+    assert req.conversation_turn_count == 1
+    assert "RECENT CONVERSATION CONTEXT" in req.conversation_section
+    assert "fan_03248" in req.conversation_section
+    assert "fan_17965" in req.conversation_section
+    assert "fan_00219" in req.conversation_section
+
+
+def test_ask_route_rejects_ollama_provider(llm_app_module) -> None:
+    response = llm_app_module.app.test_client().post(
+        "/api/ask",
+        json={"question": "Q", "provider": "ollama"},
+    )
+    assert response.status_code == 400
+    body = response.get_json()
+    assert "Ollama is no longer supported" in body["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -248,157 +428,11 @@ def _write_minimal_semantic_yaml(path: Path) -> None:
     path.write_text(yaml.dump(data), encoding="utf-8")
 
 
-def test_sql_prompt_includes_semantic_section(
-    llm_app_module, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The prompt sent to `complete` must contain 'SEMANTIC LAYER' when a valid YAML is present."""
-    semantic_file = tmp_path / "semantic_layer.yml"
-    _write_minimal_semantic_yaml(semantic_file)
-    monkeypatch.setenv("SEMANTIC_LAYER_FILE", str(semantic_file))
-
-    captured_prompts: list[str] = []
-
-    def fake_complete(prompt: str, provider: str, model: str) -> str:
-        captured_prompts.append(prompt)
-        if "SQL:" in prompt:
-            return "SELECT 1 AS fan_id"
-        return "One fan found."
-
-    monkeypatch.setattr(llm_app_module, "load_schema_context", lambda: "Table: fans")
-    monkeypatch.setattr(llm_app_module, "complete", fake_complete)
-    monkeypatch.setattr(llm_app_module, "_execute_sql", lambda sql: [{"fan_id": 1}])
-
-    response = llm_app_module.app.test_client().post(
-        "/api/ask",
-        json={"question": "Who spent the most?", "provider": "ollama"},
-    )
-
-    assert response.status_code == 200
-    sql_prompt = next(p for p in captured_prompts if "SQL:" in p)
-    assert "SEMANTIC LAYER" in sql_prompt
-    assert "mart_fan_loyalty" in sql_prompt
-
-
-def test_answer_prompt_includes_answer_guidelines(
-    llm_app_module, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The answer prompt sent to `complete` must contain 'ANSWER GUIDELINES'."""
-    semantic_file = tmp_path / "semantic_layer.yml"
-    _write_minimal_semantic_yaml(semantic_file)
-    monkeypatch.setenv("SEMANTIC_LAYER_FILE", str(semantic_file))
-
-    captured_prompts: list[str] = []
-
-    def fake_complete(prompt: str, provider: str, model: str) -> str:
-        captured_prompts.append(prompt)
-        if "SQL:" in prompt:
-            return "SELECT 1 AS fan_id"
-        return "One fan."
-
-    monkeypatch.setattr(llm_app_module, "load_schema_context", lambda: "Table: fans")
-    monkeypatch.setattr(llm_app_module, "complete", fake_complete)
-    monkeypatch.setattr(llm_app_module, "_execute_sql", lambda sql: [{"fan_id": 1}])
-
-    response = llm_app_module.app.test_client().post(
-        "/api/ask",
-        json={"question": "Who spent the most?", "provider": "ollama"},
-    )
-
-    assert response.status_code == 200
-    answer_prompt = next(p for p in captured_prompts if "Answer:" in p)
-    assert "ANSWER GUIDELINES" in answer_prompt
-    assert "EUR" in answer_prompt
-    assert "GitHub-flavored Markdown" in answer_prompt
-
-
-def test_semantic_load_failure_returns_500(
-    llm_app_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """If load_semantic_context raises SemanticLayerError, /api/ask returns HTTP 500."""
-    from frontend_app.sql_agent.semantic_layer import SemanticLayerError  # noqa: PLC0415
-
-    def boom() -> tuple[str, str]:
-        raise SemanticLayerError("test: semantic file is corrupt")
-
-    monkeypatch.setattr(llm_app_module, "load_schema_context", lambda: "Table: fans")
-    monkeypatch.setattr(llm_app_module, "load_semantic_context", boom)
-
-    response = llm_app_module.app.test_client().post(
-        "/api/ask",
-        json={"question": "Who spent the most?", "provider": "ollama"},
-    )
-
-    assert response.status_code == 500
-    body = response.get_json()
-    assert "error" in body
-    assert "semantic" in body["error"].lower()
-
-
-def test_ask_prompt_includes_recent_history_for_follow_up_scope(
-    llm_app_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    captured_prompts: list[str] = []
-
-    def fake_complete(prompt: str, provider: str, model: str) -> str:
-        captured_prompts.append(prompt)
-        if "SQL:" in prompt:
-            return (
-                "SELECT fan_id, merch_total_spend, retail_total_spend "
-                "FROM mart_fan_loyalty WHERE fan_id IN "
-                "('fan_03248', 'fan_17965', 'fan_00219')"
-            )
-        return "They spent money on merch and retail items."
-
-    monkeypatch.setattr(llm_app_module, "load_schema_context", lambda: "Table: mart_fan_loyalty")
-    monkeypatch.setattr(llm_app_module, "load_semantic_context", lambda: ("", ""))
-    monkeypatch.setattr(llm_app_module, "complete", fake_complete)
-    monkeypatch.setattr(
-        llm_app_module,
-        "_execute_sql",
-        lambda sql: [
-            {
-                "fan_id": "fan_03248",
-                "merch_total_spend": 267.54,
-                "retail_total_spend": 244.86,
-            }
-        ],
-    )
-
-    response = llm_app_module.app.test_client().post(
-        "/api/ask",
-        json={
-            "question": "Can you also tell me what they spent it on?",
-            "provider": "ollama",
-            "history": [
-                {
-                    "question": "Why are these fans top 3?",
-                    "answer": "They are the top 3 by total spend.",
-                    "sql": (
-                        "SELECT fan_id, total_spend FROM mart_fan_loyalty "
-                        "ORDER BY total_spend DESC LIMIT 3"
-                    ),
-                    "data_preview": [
-                        {"fan_id": "fan_03248", "total_spend": 512.4},
-                        {"fan_id": "fan_17965", "total_spend": 417.59},
-                        {"fan_id": "fan_00219", "total_spend": 336.7},
-                    ],
-                }
-            ],
-        },
-    )
-
-    assert response.status_code == 200
-    body = response.get_json()
-    assert body["trace"]["notes"][2].startswith("Included 1 recent conversation turn")
-
-    sql_prompt = next(prompt for prompt in captured_prompts if "SQL:" in prompt)
-    answer_prompt = next(prompt for prompt in captured_prompts if "Answer:" in prompt)
-    assert "RECENT CONVERSATION CONTEXT" in sql_prompt
-    assert "keep the SQL scoped to that subset" in sql_prompt
-    assert "fan_03248" in sql_prompt
-    assert "fan_17965" in sql_prompt
-    assert "fan_00219" in sql_prompt
-    assert "RECENT CONVERSATION CONTEXT" in answer_prompt
+# NOTE: tests for prompt construction (semantic section, answer guidelines,
+# semantic-load failure, history injection into the prompt) were removed in the
+# LangGraph tool-calling refactor. The model now discovers schema and semantic
+# layer through tools (see tests/test_sql_agent_tools.py + test_sql_agent_graph.py),
+# so those concerns are no longer enforced at the prompt-string level.
 
 
 def test_ask_route_rejects_invalid_history_payload(llm_app_module) -> None:
@@ -406,7 +440,7 @@ def test_ask_route_rejects_invalid_history_payload(llm_app_module) -> None:
         "/api/ask",
         json={
             "question": "Who spent the most?",
-            "provider": "ollama",
+            "provider": "openrouter",
             "history": {"question": "bad shape"},
         },
     )

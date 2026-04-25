@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import logging
 import os
 import signal
 import sys
 
 from confluent_kafka import Consumer, KafkaException
 
+from common.logging_setup import configure_logging, get_logger
 from fan_ingest.db import create_pool
 from fan_ingest.runner import IngestRuntime
+
+log = get_logger(__name__)
 
 
 def _env_or_default(name: str, default: str) -> str:
@@ -85,15 +87,15 @@ async def _async_main(args: argparse.Namespace) -> None:
         topic=args.kafka_topic,
     )
     runtime.start()
-    logging.info(
-        "ingest_started topic=%s bootstrap=%s group=%s",
+    log.info(
+        "ingest_started topic={} bootstrap={} group={}",
         args.kafka_topic,
         args.kafka_bootstrap_servers,
         args.kafka_consumer_group,
     )
 
     await stop.wait()
-    logging.info("ingest_shutting_down")
+    log.info("ingest_shutting_down")
     runtime.stop()
     runtime.join(timeout=120.0)
 
@@ -101,10 +103,7 @@ async def _async_main(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s %(name)s %(message)s",
-    )
+    configure_logging(level=os.environ.get("LOG_LEVEL", "INFO"))
     args = _build_arg_parser().parse_args()
     try:
         asyncio.run(_async_main(args))

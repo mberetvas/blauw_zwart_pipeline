@@ -1,11 +1,26 @@
 """Runtime LLM settings: environment defaults, JSON file overlay, thread-safe updates.
 
+OpenRouter is the only supported provider. Two model roles are configurable:
+
+- ``agent_model``  — drives the tool-calling agent loop. Cheap/fast.
+- ``repair_model`` — used by the bounded one-shot SQL repair pass. May be a
+  stronger (and more expensive) model. Falls back to ``agent_model`` when unset.
+
 Precedence
 ----------
-1. On startup, values are loaded from environment variables (same names as before).
+1. On startup, values are loaded from environment variables.
 2. If ``LLM_CONFIG_PATH`` points to an existing JSON file, its keys overlay the env
    defaults (persisted settings win).
 3. ``PUT /api/llm-config`` updates the in-memory state and rewrites that JSON file.
+
+Backward compatibility
+----------------------
+- The legacy ``openrouter_model`` field is kept as a synonym for ``agent_model``.
+  When ``agent_model`` is unset, ``openrouter_model`` is used. When both are set,
+  ``agent_model`` wins.
+- Legacy Ollama keys (``ollama_url``, ``ollama_model``, ``ollama_timeout``) and
+  ``LLM_PROVIDER=ollama`` are silently ignored at startup; a deprecation warning
+  is logged once. They no longer appear in API responses.
 
 OpenRouter API keys are stored only in the JSON file or environment — never exposed
 in full to clients (GET returns a masked suffix only).
@@ -23,7 +38,6 @@ from urllib.parse import urlparse
 
 log = logging.getLogger(__name__)
 
-# Default OpenRouter model IDs (suggestions + env fallback when OPENROUTER_MODEL is unset).
 DEFAULT_OPENROUTER_MODELS: tuple[str, ...] = (
     "deepseek/deepseek-v3.2",
     "google/gemini-3.1-flash-lite-preview",
@@ -34,29 +48,32 @@ DEFAULT_OPENROUTER_MODELS: tuple[str, ...] = (
 _lock = threading.RLock()
 _state: dict[str, Any] = {}
 _CONFIG_PATH: Path | None = None
+_DEPRECATION_LOGGED = False
 
 _MERGE_KEYS = frozenset(
     {
-        "ollama_url",
-        "ollama_model",
-        "ollama_timeout",
         "openrouter_base_url",
         "openrouter_model",
         "openrouter_models",
         "openrouter_timeout",
         "openrouter_api_key",
-        "default_provider",
+        "agent_model",
+        "repair_model",
     }
 )
 
 _STR_KEYS = frozenset(
     {
-        "ollama_url",
-        "ollama_model",
         "openrouter_base_url",
         "openrouter_model",
-        "default_provider",
+        "agent_model",
+        "repair_model",
     }
+)
+
+_LEGACY_OLLAMA_ENV_VARS = ("OLLAMA_URL", "OLLAMA_MODEL", "OLLAMA_TIMEOUT", "LLM_PROVIDER")
+_LEGACY_OLLAMA_JSON_KEYS = frozenset(
+    {"ollama_url", "ollama_model", "ollama_timeout", "default_provider"}
 )
 
 
@@ -87,6 +104,16 @@ def coerce_openrouter_models(raw: Any) -> list[str]:
     return items
 
 
+def _coerce_optional_model(raw: Any, field: str) -> str:
+    """Coerce an optional model id to a stripped string (empty allowed = unset)."""
+    if raw is None:
+        return ""
+    val = str(raw).strip()
+    if len(val) > 256:
+        raise ValueError(f"{field} must be at most 256 characters")
+    return val
+
+
 def config_path() -> Path:
     """Resolved path to the persisted JSON file (default: beside this package)."""
     global _CONFIG_PATH
@@ -95,18 +122,28 @@ def config_path() -> Path:
         if raw:
             _CONFIG_PATH = Path(raw).expanduser().resolve()
         else:
-            # Default beside the frontend_app package root (one level up from sql_agent/).
             _CONFIG_PATH = (Path(__file__).resolve().parent.parent / "llm_config.json")
     return _CONFIG_PATH
 
 
+def _warn_legacy_ollama_env() -> None:
+    global _DEPRECATION_LOGGED
+    if _DEPRECATION_LOGGED:
+        return
+    seen = [v for v in _LEGACY_OLLAMA_ENV_VARS if os.environ.get(v, "").strip()]
+    if seen:
+        log.warning(
+            "Ollama support has been removed; ignoring env vars: %s. "
+            "Set OPENROUTER_API_KEY (and optionally OPENROUTER_AGENT_MODEL / "
+            "OPENROUTER_REPAIR_MODEL) instead.",
+            ", ".join(seen),
+        )
+    _DEPRECATION_LOGGED = True
+
+
 def _defaults_from_env() -> dict[str, Any]:
+    _warn_legacy_ollama_env()
     return {
-        "ollama_url": os.environ.get(
-            "OLLAMA_URL", "http://host.docker.internal:11434"
-        ).rstrip("/"),
-        "ollama_model": os.environ.get("OLLAMA_MODEL", "gemma4:e2b").strip(),
-        "ollama_timeout": int(os.environ.get("OLLAMA_TIMEOUT", "120")),
         "openrouter_base_url": os.environ.get(
             "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
         ).rstrip("/"),
@@ -117,7 +154,8 @@ def _defaults_from_env() -> dict[str, Any]:
         "openrouter_models": _openrouter_models_from_env(),
         "openrouter_timeout": int(os.environ.get("OPENROUTER_TIMEOUT", "120")),
         "openrouter_api_key": os.environ.get("OPENROUTER_API_KEY", "").strip(),
-        "default_provider": os.environ.get("LLM_PROVIDER", "ollama").strip().lower(),
+        "agent_model": os.environ.get("OPENROUTER_AGENT_MODEL", "").strip(),
+        "repair_model": os.environ.get("OPENROUTER_REPAIR_MODEL", "").strip(),
     }
 
 
@@ -130,20 +168,15 @@ def _validate_url(url: str, field: str) -> None:
 
 
 def _validate_state(s: dict[str, Any]) -> None:
-    _validate_url(s["ollama_url"], "ollama_url")
     _validate_url(s["openrouter_base_url"], "openrouter_base_url")
-    if not s["ollama_model"] or len(s["ollama_model"]) > 256:
-        raise ValueError("ollama_model must be a non-empty string (max 256 chars)")
     if not s["openrouter_model"] or len(s["openrouter_model"]) > 256:
         raise ValueError("openrouter_model must be a non-empty string (max 256 chars)")
     s["openrouter_models"] = coerce_openrouter_models(s["openrouter_models"])
-    ot = int(s["ollama_timeout"])
     rt = int(s["openrouter_timeout"])
-    if not (1 <= ot <= 600 and 1 <= rt <= 600):
-        raise ValueError("ollama_timeout and openrouter_timeout must be 1–600 seconds")
-    dp = s["default_provider"]
-    if dp not in ("ollama", "openrouter"):
-        raise ValueError("default_provider must be 'ollama' or 'openrouter'")
+    if not (1 <= rt <= 600):
+        raise ValueError("openrouter_timeout must be 1–600 seconds")
+    s["agent_model"] = _coerce_optional_model(s.get("agent_model"), "agent_model")
+    s["repair_model"] = _coerce_optional_model(s.get("repair_model"), "repair_model")
 
 
 def _overlay_file(base: dict[str, Any], path: Path) -> dict[str, Any]:
@@ -159,6 +192,13 @@ def _overlay_file(base: dict[str, Any], path: Path) -> dict[str, Any]:
         return out
     if not isinstance(data, dict):
         return out
+
+    legacy_present = sorted(k for k in _LEGACY_OLLAMA_JSON_KEYS if k in data)
+    if legacy_present:
+        log.warning(
+            "Ignoring legacy Ollama keys in %s: %s", path, ", ".join(legacy_present)
+        )
+
     for key in _MERGE_KEYS:
         if key not in data or data[key] is None:
             continue
@@ -206,6 +246,34 @@ def get_llm_settings() -> dict[str, Any]:
         return {**_state}
 
 
+def resolve_agent_model(override: str | None = None) -> str:
+    """Return the model id to use for the agent role, resolved by precedence.
+
+    Precedence: ``override`` > ``agent_model`` > legacy ``openrouter_model``.
+    """
+    s = get_llm_settings()
+    if override and override.strip():
+        return override.strip()
+    am = (s.get("agent_model") or "").strip()
+    if am:
+        return am
+    return s["openrouter_model"]
+
+
+def resolve_repair_model(override: str | None = None) -> str:
+    """Return the model id to use for the repair role, resolved by precedence.
+
+    Precedence: ``override`` > ``repair_model`` > resolved agent model.
+    """
+    if override and override.strip():
+        return override.strip()
+    s = get_llm_settings()
+    rm = (s.get("repair_model") or "").strip()
+    if rm:
+        return rm
+    return resolve_agent_model()
+
+
 def _mask_key(key: str) -> tuple[bool, str]:
     if not key:
         return False, ""
@@ -218,16 +286,16 @@ def to_public_config() -> dict[str, Any]:
     s = get_llm_settings()
     configured, masked = _mask_key(s.get("openrouter_api_key", ""))
     return {
-        "ollama_url": s["ollama_url"],
-        "ollama_model": s["ollama_model"],
-        "ollama_timeout": s["ollama_timeout"],
         "openrouter_base_url": s["openrouter_base_url"],
         "openrouter_model": s["openrouter_model"],
         "openrouter_models": list(s["openrouter_models"]),
         "openrouter_timeout": s["openrouter_timeout"],
         "openrouter_api_key_masked": masked,
         "openrouter_api_key_configured": configured,
-        "default_provider": s["default_provider"],
+        "agent_model": s.get("agent_model", ""),
+        "repair_model": s.get("repair_model", ""),
+        "resolved_agent_model": resolve_agent_model(),
+        "resolved_repair_model": resolve_repair_model(),
         "config_file": str(config_path()),
         "precedence": (
             "Environment variables seed defaults. If config_file exists, its values "
@@ -250,6 +318,12 @@ def apply_llm_config_update(body: dict[str, Any]) -> dict[str, Any]:
     with _lock:
         merged = {**_state}
 
+    legacy_present = sorted(k for k in _LEGACY_OLLAMA_JSON_KEYS if k in body)
+    if legacy_present:
+        log.warning(
+            "Ignoring legacy Ollama keys in update body: %s", ", ".join(legacy_present)
+        )
+
     for key in _STR_KEYS:
         if key in body and body[key] is not None:
             val = str(body[key]).strip()
@@ -257,8 +331,6 @@ def apply_llm_config_update(body: dict[str, Any]) -> dict[str, Any]:
                 val = val.rstrip("/")
             merged[key] = val
 
-    if "ollama_timeout" in body and body["ollama_timeout"] is not None:
-        merged["ollama_timeout"] = int(body["ollama_timeout"])
     if "openrouter_timeout" in body and body["openrouter_timeout"] is not None:
         merged["openrouter_timeout"] = int(body["openrouter_timeout"])
 
