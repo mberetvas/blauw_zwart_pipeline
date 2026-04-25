@@ -78,4 +78,56 @@ def test_ticket_scan_shape() -> None:
     recs = generate_v2_records(ctx, rng)
     for r in recs:
         if r["event"] == TICKET_SCAN:
-            assert set(r.keys()) == {"event", "fan_id", "location", "match_id", "timestamp"}
+            assert {
+                "event",
+                "fan_id",
+                "location",
+                "match_id",
+                "timestamp",
+                "kickoff_local",
+                "timezone",
+                "attendance",
+                "home_away",
+                "venue_label",
+            }.issubset(r.keys())
+
+
+def test_optional_calendar_metadata_propagates_to_v2_records() -> None:
+    doc = load_calendar_json(_FIX)
+    doc["club_home_venue_metadata"] = {
+        "club": "Club Brugge",
+        "stadium": "Jan Breydelstadion",
+        "stadium_capacity": 29062,
+        "reported_total_attendance": 343759,
+        "reported_average_attendance": 22917,
+        "reported_home_matches": 15,
+        "reported_sold_out_matches": 1,
+        "reported_capacity_pct": 78.9,
+    }
+    doc["matches"][0]["opponent"] = "Tiny Genk"
+    doc["matches"][0]["encounter_type"] = "home"
+    doc["matches"][0]["home_score"] = 2
+    doc["matches"][0]["away_score"] = 1
+    doc["matches"][1]["opponent"] = "Tiny Away"
+    doc["matches"][1]["encounter_type"] = "away"
+    doc["matches"][1]["home_score"] = 0
+    doc["matches"][1]["away_score"] = 1
+
+    rows = validate_and_parse_matches(doc)
+    ctx = filter_matches_by_date_range(rows, date(2026, 1, 1), date(2027, 12, 31))
+    rng = random.Random(5)
+    recs = generate_v2_records(ctx, rng)
+
+    home_rec = next(r for r in recs if r["match_id"] == "m-tiny-home")
+    away_rec = next(r for r in recs if r["match_id"] == "m-tiny-away")
+
+    assert home_rec["opponent"] == "Tiny Genk"
+    assert home_rec["encounter_type"] == "home"
+    assert home_rec["home_score"] == 2
+    assert home_rec["away_score"] == 1
+    assert home_rec["club_home_stadium_capacity"] == 29062
+    assert home_rec["club_home_reported_capacity_pct"] == 78.9
+
+    assert away_rec["opponent"] == "Tiny Away"
+    assert away_rec["encounter_type"] == "away"
+    assert away_rec["club_home_stadium"] == "Jan Breydelstadion"

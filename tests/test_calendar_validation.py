@@ -40,3 +40,24 @@ def test_non_positive_attendance() -> None:
     doc["matches"][0]["attendance"] = 0
     with pytest.raises(CalendarError, match="> 0"):
         validate_and_parse_matches(doc)
+
+
+def test_encounter_type_must_match_home_away() -> None:
+    doc = load_calendar_json(_FIX)
+    doc["matches"][0]["encounter_type"] = "away"
+    with pytest.raises(CalendarError, match="encounter_type must match home_away"):
+        validate_and_parse_matches(doc)
+
+
+def test_score_fields_must_arrive_as_a_pair() -> None:
+    doc = load_calendar_json(_FIX)
+    doc["matches"][0]["home_score"] = 2
+    with pytest.raises(CalendarError, match="home_score and away_score"):
+        validate_and_parse_matches(doc)
+
+
+def test_home_venue_metadata_capacity_must_be_positive() -> None:
+    doc = load_calendar_json(_FIX)
+    doc["club_home_venue_metadata"] = {"stadium_capacity": 0}
+    with pytest.raises(CalendarError, match="stadium_capacity must be > 0"):
+        validate_and_parse_matches(doc)

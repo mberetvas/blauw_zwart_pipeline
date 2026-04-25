@@ -47,16 +47,117 @@ def load_calendar_json(path: Path) -> dict[str, Any]:
     return doc
 
 
+_DOC_HOME_VENUE_META_ROW_MAP: dict[str, str] = {
+    "club": "club_home_club",
+    "stadium": "club_home_stadium",
+    "stadium_capacity": "club_home_stadium_capacity",
+    "reported_total_attendance": "club_home_reported_total_attendance",
+    "reported_average_attendance": "club_home_reported_average_attendance",
+    "reported_home_matches": "club_home_reported_home_matches",
+    "reported_sold_out_matches": "club_home_reported_sold_out_matches",
+    "reported_capacity_pct": "club_home_reported_capacity_pct",
+}
+
+_PROPAGATED_MATCH_ROW_KEYS: tuple[str, ...] = (
+    "kickoff_local",
+    "timezone",
+    "attendance",
+    "home_away",
+    "encounter_type",
+    "opponent",
+    "home_score",
+    "away_score",
+    "venue_label",
+    "club_home_club",
+    "club_home_stadium",
+    "club_home_stadium_capacity",
+    "club_home_reported_total_attendance",
+    "club_home_reported_average_attendance",
+    "club_home_reported_home_matches",
+    "club_home_reported_sold_out_matches",
+    "club_home_reported_capacity_pct",
+)
+
+
+def _validate_non_empty_string(*, value: Any, field_name: str, mid: str | None = None) -> str:
+    if not isinstance(value, str) or not value.strip():
+        prefix = f"match {mid!r}: " if mid is not None else ""
+        raise CalendarError(f"{prefix}{field_name} must be a non-empty string")
+    return value
+
+
+def _validate_non_negative_int(*, value: Any, field_name: str, mid: str | None = None) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        prefix = f"match {mid!r}: " if mid is not None else ""
+        raise CalendarError(f"{prefix}{field_name} must be an integer")
+    if value < 0:
+        prefix = f"match {mid!r}: " if mid is not None else ""
+        raise CalendarError(f"{prefix}{field_name} must be >= 0")
+    return value
+
+
+def _validate_optional_home_venue_metadata(doc: dict[str, Any]) -> dict[str, Any]:
+    meta = doc.get("club_home_venue_metadata")
+    if meta is None:
+        return {}
+    if not isinstance(meta, dict):
+        raise CalendarError("calendar 'club_home_venue_metadata' must be a JSON object")
+
+    out: dict[str, Any] = {}
+    for src_key in ("club", "stadium"):
+        if src_key in meta:
+            out[_DOC_HOME_VENUE_META_ROW_MAP[src_key]] = _validate_non_empty_string(
+                value=meta[src_key],
+                field_name=f"club_home_venue_metadata.{src_key}",
+            )
+
+    for src_key in (
+        "stadium_capacity",
+        "reported_total_attendance",
+        "reported_average_attendance",
+        "reported_home_matches",
+        "reported_sold_out_matches",
+    ):
+        if src_key in meta:
+            val = _validate_non_negative_int(
+                value=meta[src_key],
+                field_name=f"club_home_venue_metadata.{src_key}",
+            )
+            if src_key == "stadium_capacity" and val <= 0:
+                raise CalendarError("club_home_venue_metadata.stadium_capacity must be > 0")
+            out[_DOC_HOME_VENUE_META_ROW_MAP[src_key]] = val
+
+    if "reported_capacity_pct" in meta:
+        pct = meta["reported_capacity_pct"]
+        if not isinstance(pct, (int, float)) or isinstance(pct, bool):
+            raise CalendarError("club_home_venue_metadata.reported_capacity_pct must be numeric")
+        if pct < 0 or pct > 100:
+            raise CalendarError("club_home_venue_metadata.reported_capacity_pct must be between 0 and 100")
+        out[_DOC_HOME_VENUE_META_ROW_MAP["reported_capacity_pct"]] = float(pct)
+
+    return out
+
+
+def _match_payload_metadata(row: dict[str, Any]) -> dict[str, Any]:
+    return {key: row[key] for key in _PROPAGATED_MATCH_ROW_KEYS if key in row}
+
+
 def validate_and_parse_matches(doc: dict[str, Any]) -> list[dict[str, Any]]:
     matches = doc.get("matches")
     if matches is None:
         raise CalendarError("calendar must contain 'matches'")
     if not isinstance(matches, list):
         raise CalendarError("'matches' must be an array")
+
+    doc_home_meta = _validate_optional_home_venue_metadata(doc)
     seen: set[str] = set()
-    for row in matches:
-        if not isinstance(row, dict):
+    parsed: list[dict[str, Any]] = []
+    for raw_row in matches:
+        if not isinstance(raw_row, dict):
             raise CalendarError("each match must be an object")
+        row = dict(raw_row)
+        for meta_key, meta_value in doc_home_meta.items():
+            row.setdefault(meta_key, meta_value)
         mid = row.get("match_id")
         if not mid or not isinstance(mid, str):
             raise CalendarError("match_id required (non-empty string)")
@@ -82,8 +183,7 @@ def validate_and_parse_matches(doc: dict[str, Any]) -> list[dict[str, Any]]:
             raise CalendarError(f"match {mid!r}: home_away must be 'home' or 'away'")
         if ha == "home" and att > JAN_BREYDEL_MAX_CAPACITY:
             raise CalendarError(
-                f"match {mid!r}: home attendance {att} exceeds Jan Breydel capacity "
-                f"{JAN_BREYDEL_MAX_CAPACITY}"
+                f"match {mid!r}: home attendance {att} exceeds Jan Breydel capacity {JAN_BREYDEL_MAX_CAPACITY}"
             )
         try:
             ZoneInfo(str(row["timezone"]))
@@ -93,7 +193,29 @@ def validate_and_parse_matches(doc: dict[str, Any]) -> list[dict[str, Any]]:
             datetime.fromisoformat(str(row["kickoff_local"]))
         except ValueError as e:
             raise CalendarError(f"match {mid!r}: invalid kickoff_local: {e}") from e
-    return list(matches)
+
+        if "opponent" in row:
+            _validate_non_empty_string(value=row["opponent"], field_name="opponent", mid=mid)
+
+        if "encounter_type" in row:
+            encounter_type = row["encounter_type"]
+            if encounter_type not in ("home", "away"):
+                raise CalendarError(f"match {mid!r}: encounter_type must be 'home' or 'away'")
+            if encounter_type != ha:
+                raise CalendarError(f"match {mid!r}: encounter_type must match home_away")
+
+        has_home_score = "home_score" in row
+        has_away_score = "away_score" in row
+        if has_home_score != has_away_score:
+            raise CalendarError(
+                f"match {mid!r}: home_score and away_score must either both be present or both be absent"
+            )
+        if has_home_score:
+            _validate_non_negative_int(value=row["home_score"], field_name="home_score", mid=mid)
+            _validate_non_negative_int(value=row["away_score"], field_name="away_score", mid=mid)
+
+        parsed.append(row)
+    return parsed
 
 
 def kickoff_utc_for_row(row: dict[str, Any]) -> datetime:
@@ -207,15 +329,15 @@ def records_for_match(
         fan_id = pool[i % len(pool)]
         loc = rng.choice(LOCATIONS) if row["home_away"] == "home" else venue
         ts = _ts_string_from_epoch(rng, start_sec, end_sec)
-        records.append(
-            {
-                "event": TICKET_SCAN,
-                "fan_id": fan_id,
-                "location": loc,
-                "match_id": mid,
-                "timestamp": ts,
-            }
-        )
+        rec: dict[str, Any] = {
+            "event": TICKET_SCAN,
+            "fan_id": fan_id,
+            "location": loc,
+            "match_id": mid,
+            "timestamp": ts,
+        }
+        rec.update(_match_payload_metadata(row))
+        records.append(rec)
     for _ in range(merch_count):
         fan_id = pool[rng.randrange(0, len(pool))]
         ts = _ts_string_from_epoch(rng, start_sec, end_sec)
@@ -230,6 +352,7 @@ def records_for_match(
             "timestamp": ts,
         }
         rec["location"] = venue
+        rec.update(_match_payload_metadata(row))
         records.append(rec)
     return records
 
@@ -388,9 +511,7 @@ def iter_looped_v2_records(
         if cycle == 0:
             contexts = base_contexts
         else:
-            contexts = [
-                shift_match_context_calendar_years(ctx, cycle) for ctx in base_contexts
-            ]
+            contexts = [shift_match_context_calendar_years(ctx, cycle) for ctx in base_contexts]
         yield from iter_v2_records_merged_sorted(
             contexts,
             rng,

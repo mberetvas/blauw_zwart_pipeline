@@ -6,12 +6,18 @@ config-version: 2
 profile: fan_sim_pipeline
 
 # Project assets live under dbt/; this file is at repo root so `uv run dbt debug` works from the repo root.
-model-paths: [dbt/models]
-macro-paths: [dbt/macros]
+model-paths: [ dbt/models ]
+macro-paths: [ dbt/macros ]
 
 clean-targets:
   - dbt/target
   - dbt/dbt_packages
+
+# Append a row per executed node (model/test/snapshot/seed) to
+# {{ target.schema }}.dbt_run_results after every invocation. The companion
+# mart `mart_dbt_run_results` exposes this for querying.
+on-run-end:
+  - "{{ log_dbt_results() }}"
 
 models:
   fan_sim_pipeline:

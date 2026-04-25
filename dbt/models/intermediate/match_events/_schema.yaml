@@ -3,10 +3,12 @@ version: 2
 models:
   - name: match_events
     description: >
-      All ingested fan events that include a non-empty match_id in the payload (e.g. ticket_scan,
-      merch_purchase). Merch-only columns (item, amount) are null for non-purchase events.
+      All ingested fan events that include a non-empty match_id in the payload
+      (e.g. ticket_scan, merch_purchase). Merch-only columns (item, amount) are
+      null for non-purchase events. Calendar-enriched match metadata columns are
+      surfaced when present in the payload.
     config:
-      tags: [intermediate, fan_events, match]
+      tags: [ intermediate, fan_events, match ]
     columns:
       - name: id
         description: Surrogate primary key from the ingest table (same as staging).
@@ -38,6 +40,40 @@ models:
         data_type: text
         tests:
           - not_null
+      - name: kickoff_local
+        data_type: text
+      - name: timezone
+        data_type: text
+      - name: attendance
+        data_type: integer
+      - name: home_away
+        data_type: text
+      - name: encounter_type
+        data_type: text
+      - name: opponent
+        data_type: text
+      - name: home_score
+        data_type: integer
+      - name: away_score
+        data_type: integer
+      - name: venue_label
+        data_type: text
+      - name: club_home_club
+        data_type: text
+      - name: club_home_stadium
+        data_type: text
+      - name: club_home_stadium_capacity
+        data_type: integer
+      - name: club_home_reported_total_attendance
+        data_type: integer
+      - name: club_home_reported_average_attendance
+        data_type: integer
+      - name: club_home_reported_home_matches
+        data_type: integer
+      - name: club_home_reported_sold_out_matches
+        data_type: integer
+      - name: club_home_reported_capacity_pct
+        data_type: numeric
       - name: location
         data_type: text
       - name: item
@@ -45,4 +81,52 @@ models:
         data_type: text
       - name: amount
         description: Purchase amount when event_type is merch_purchase.
+        data_type: numeric
+
+  - name: match_metadata
+    description: >
+      One row per match_id with calendar metadata propagated through
+      match-related v2 event payloads. Use this model for match-level analytics
+      without event-row duplication.
+    config:
+      tags: [ intermediate, fan_events, match ]
+    columns:
+      - name: match_id
+        data_type: text
+        tests:
+          - not_null
+          - unique
+      - name: kickoff_local
+        data_type: text
+      - name: timezone
+        data_type: text
+      - name: attendance
+        data_type: integer
+      - name: home_away
+        data_type: text
+      - name: encounter_type
+        data_type: text
+      - name: opponent
+        data_type: text
+      - name: home_score
+        data_type: integer
+      - name: away_score
+        data_type: integer
+      - name: venue_label
+        data_type: text
+      - name: club_home_club
+        data_type: text
+      - name: club_home_stadium
+        data_type: text
+      - name: club_home_stadium_capacity
+        data_type: integer
+      - name: club_home_reported_total_attendance
+        data_type: integer
+      - name: club_home_reported_average_attendance
+        data_type: integer
+      - name: club_home_reported_home_matches
+        data_type: integer
+      - name: club_home_reported_sold_out_matches
+        data_type: integer
+      - name: club_home_reported_capacity_pct
         data_type: numeric

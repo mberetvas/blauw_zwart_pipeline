@@ -1,4 +1,14 @@
 {
+  "club_home_venue_metadata": {
+    "club": "Club Brugge",
+    "stadium": "Jan Breydelstadion",
+    "stadium_capacity": 29062,
+    "reported_total_attendance": 343759,
+    "reported_average_attendance": 22917,
+    "reported_home_matches": 15,
+    "reported_sold_out_matches": 1,
+    "reported_capacity_pct": 78.9
+  },
   "matches": [
     {
       "match_id": "jpl-2025-26-01",
@@ -6,6 +16,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 24500,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "KRC Genk",
+      "home_score": 2,
+      "away_score": 1,
       "venue_label": "Jan Breydel Stadium"
     },
     {
@@ -14,6 +28,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 12000,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "KV Mechelen",
+      "home_score": 2,
+      "away_score": 1,
       "venue_label": "AFAS Stadion (KV Mechelen)"
     },
     {
@@ -22,6 +40,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 28500,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "Cercle Brugge",
+      "home_score": 2,
+      "away_score": 0,
       "venue_label": "Jan Breydel Stadium"
     },
     {
@@ -30,6 +52,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 9500,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "Zulte Waregem",
+      "home_score": 0,
+      "away_score": 1,
       "venue_label": "Elindus Arena (Zulte Waregem)"
     },
     {
@@ -38,6 +64,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 17500,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "KAA Gent",
+      "home_score": 1,
+      "away_score": 1,
       "venue_label": "Planet Group Arena (KAA Gent)"
     },
     {
@@ -46,6 +76,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 8000,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "RAAL La Louvière",
+      "home_score": 1,
+      "away_score": 0,
       "venue_label": "Stade de la Louvière"
     },
     {
@@ -54,6 +88,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 23800,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "STVV",
+      "home_score": 2,
+      "away_score": 0,
       "venue_label": "Jan Breydel Stadium"
     },
     {
@@ -62,6 +100,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 22000,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "Westerlo",
+      "home_score": 5,
+      "away_score": 5,
       "venue_label": "Jan Breydel Stadium"
     },
     {
@@ -70,6 +112,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 14000,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "Standard",
+      "home_score": 1,
+      "away_score": 2,
       "venue_label": "Stade Maurice Dufrasne (Standard)"
     },
     {
@@ -78,6 +124,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 26000,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "Union SG",
+      "home_score": 1,
+      "away_score": 0,
       "venue_label": "Jan Breydel Stadium"
     },
     {
@@ -86,6 +136,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 11000,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "OH Leuven",
+      "home_score": 0,
+      "away_score": 1,
       "venue_label": "Den Dreef (OH Leuven)"
     },
     {
@@ -94,6 +148,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 13000,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "Antwerp",
+      "home_score": 0,
+      "away_score": 1,
       "venue_label": "Bosuilstadion (Antwerp)"
     },
     {
@@ -102,6 +160,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 23200,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "FCV Dender EH",
+      "home_score": 2,
+      "away_score": 1,
       "venue_label": "Jan Breydel Stadium"
     },
     {
@@ -110,6 +172,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 21000,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "Anderlecht",
+      "home_score": 1,
+      "away_score": 0,
       "venue_label": "Lotto Park (Anderlecht)"
     },
     {
@@ -118,6 +184,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 24800,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "Charleroi",
+      "home_score": 1,
+      "away_score": 0,
       "venue_label": "Jan Breydel Stadium"
     },
     {
@@ -126,6 +196,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 27500,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "Antwerp",
+      "home_score": 0,
+      "away_score": 1,
       "venue_label": "Jan Breydel Stadium"
     },
     {
@@ -134,6 +208,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 10500,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "STVV",
+      "home_score": 3,
+      "away_score": 2,
       "venue_label": "Stayen (STVV)"
     },
     {
@@ -142,6 +220,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 8800,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "FCV Dender EH",
+      "home_score": 1,
+      "away_score": 5,
       "venue_label": "Florent Beeckmanstadion (FCV Dender)"
     },
     {
@@ -150,6 +232,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 26800,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "KAA Gent",
+      "home_score": 2,
+      "away_score": 1,
       "venue_label": "Jan Breydel Stadium"
     },
     {
@@ -158,6 +244,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 16500,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "KRC Genk",
+      "home_score": 3,
+      "away_score": 5,
       "venue_label": "Cegeka Arena (KRC Genk)"
     },
     {
@@ -166,6 +256,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 24100,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "RAAL La Louvière",
+      "home_score": 2,
+      "away_score": 3,
       "venue_label": "Jan Breydel Stadium"
     },
     {
@@ -174,6 +268,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 25100,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "Zulte Waregem",
+      "home_score": 4,
+      "away_score": 3,
       "venue_label": "Jan Breydel Stadium"
     },
     {
@@ -182,6 +280,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 9000,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "Union SG",
+      "home_score": 1,
+      "away_score": 0,
       "venue_label": "Stade Joseph Marien (Union SG)"
     },
     {
@@ -190,6 +292,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 25500,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "Standard",
+      "home_score": 3,
+      "away_score": 0,
       "venue_label": "Jan Breydel Stadium"
     },
     {
@@ -198,6 +304,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 11500,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "Cercle Brugge",
+      "home_score": 1,
+      "away_score": 2,
       "venue_label": "Jan Breydel Stadium (Cercle Brugge home)"
     },
     {
@@ -206,6 +316,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 23900,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "OH Leuven",
+      "home_score": 2,
+      "away_score": 1,
       "venue_label": "Jan Breydel Stadium"
     },
     {
@@ -214,6 +328,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 10200,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "Charleroi",
+      "home_score": 1,
+      "away_score": 2,
       "venue_label": "Stade du Pays de Charleroi"
     },
     {
@@ -222,6 +340,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 27200,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "Anderlecht",
+      "home_score": 2,
+      "away_score": 2,
       "venue_label": "Jan Breydel Stadium"
     },
     {
@@ -230,6 +352,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 7800,
       "home_away": "away",
+      "encounter_type": "away",
+      "opponent": "Westerlo",
+      "home_score": 1,
+      "away_score": 2,
       "venue_label": "Het Kuipje (Westerlo)"
     },
     {
@@ -238,6 +364,10 @@
       "timezone": "Europe/Brussels",
       "attendance": 26500,
       "home_away": "home",
+      "encounter_type": "home",
+      "opponent": "KV Mechelen",
+      "home_score": 4,
+      "away_score": 1,
       "venue_label": "Jan Breydel Stadium"
     }
   ]

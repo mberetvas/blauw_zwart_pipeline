@@ -1,6 +1,51 @@
 version: 2
 
 models:
+  - name: mart_dbt_run_results
+    description: >
+      Observability mart: one row per dbt node (model, test, snapshot, seed) per
+      invocation. Populated by the `log_dbt_results` macro that runs as an
+      `on-run-end` hook after every `dbt build` / `dbt run` / `dbt test`. Use
+      this to track success/failure history, error messages, slow models, and
+      recurring test failures over time.
+    config:
+      materialized: view
+      tags: [ mart, observability ]
+    columns:
+      - name: invocation_id
+        description: Unique id for the dbt invocation that produced this row.
+        tests:
+          - not_null
+      - name: run_started_at
+        description: UTC timestamp of when the dbt invocation started.
+        tests:
+          - not_null
+      - name: node_unique_id
+        description: dbt's internal unique node id, e.g.
+          `model.fan_sim_pipeline.mart_fan_loyalty`.
+      - name: node_name
+        description: Short node name (model/test/snapshot/seed name).
+      - name: resource_type
+        description: One of `model`, `test`, `snapshot`, `seed`, `operation`.
+      - name: status
+        description: >
+          dbt result status. Models: `success` / `error`. Tests: `pass` / `fail`
+          / `error` / `warn`. See dbt RunResult docs.
+        tests:
+          - not_null
+      - name: is_success
+        description: Convenience boolean derived from `status`.
+      - name: is_failure
+        description: Convenience boolean derived from `status`.
+      - name: execution_time_s
+        description: Wall-clock execution time in seconds for this node.
+      - name: rows_affected
+        description: Rows reported by the warehouse adapter (NULL when not applicable).
+      - name: failures
+        description: Number of failing rows for tests; 0 for models that built successfully.
+      - name: message
+        description: Free-form status message; populated with the error text on failures.
+
   - name: mart_fan_loyalty
     description: >
       Fan loyalty mart: one row per fan with lifetime spend and match-attendance
@@ -115,6 +160,155 @@ models:
           (merch_purchase, retail_purchase, match_events) for this fan. Used
           internally by dbt to identify which fans need reprocessing on the next
           incremental run. Not directly useful for end-user Q&A.
+        data_type: timestamp with time zone
+
+  - name: mart_match_summary
+    description: >
+      Match summary mart: one row per match that combines calendar metadata
+      (opponent, venue, kickoff, attendance, scoreline, home/away) with
+      aggregated synthetic engagement signals from match_events and
+      merch_purchase. Materialised as an incremental table: on each dbt run only
+      matches with new source events are reprocessed; use `dbt run
+      --full-refresh` to rebuild from scratch. Use this table for match-level
+      questions such as "Who did Club Brugge play?", "What was the score?", "How
+      full was Jan Breydel?", or "Which matches generated the most merchandise
+      revenue?".
+    config:
+      materialized: table
+      tags: [ mart, match_summary ]
+    columns:
+      - name: match_id
+        description: Unique match identifier. Primary key of this mart.
+        data_type: text
+        tests:
+          - not_null
+          - unique
+
+      - name: kickoff_local
+        description: Scheduled kickoff timestamp in Europe/Brussels local time.
+        data_type: timestamp without time zone
+
+      - name: timezone
+        description: IANA timezone label carried from the calendar source.
+        data_type: text
+
+      - name: home_away
+        description: >
+          Whether Club Brugge played at home or away for this match.
+        data_type: text
+
+      - name: encounter_type
+        description: >
+          Duplicate friendly label for home/away context from the source
+          calendar.
+        data_type: text
+
+      - name: opponent
+        description: Opposing club for the fixture.
+        data_type: text
+
+      - name: venue_label
+        description: Human-readable venue or stadium label for the fixture.
+        data_type: text
+
+      - name: home_score
+        description: Goals scored by the home team in the final result.
+        data_type: integer
+
+      - name: away_score
+        description: Goals scored by the away team in the final result.
+        data_type: integer
+
+      - name: club_brugge_score
+        description: >
+          Goals scored by Club Brugge, derived from home_score/away_score using
+          home_away.
+        data_type: integer
+
+      - name: opponent_score
+        description: >
+          Goals conceded to the opponent, derived from home_score/away_score.
+        data_type: integer
+
+      - name: match_result
+        description: >
+          Match outcome from Club Brugge's perspective: win, draw, or loss.
+        data_type: text
+
+      - name: reported_attendance
+        description: >
+          Reported crowd size from the calendar source, distinct from synthetic
+          ticket_scan counts in this mart.
+        data_type: integer
+
+      - name: match_event_count
+        description: >
+          Total ingested match-linked events for the fixture across ticket_scan
+          and merch_purchase rows.
+        data_type: bigint
+
+      - name: ticket_scan_count
+        description: Number of ticket_scan events recorded for the match.
+        data_type: bigint
+
+      - name: ticket_scanned_fans
+        description: Distinct fans with a ticket_scan event for the match.
+        data_type: bigint
+
+      - name: ticket_scan_pct_of_reported_attendance
+        description: >
+          Ticket scan count divided by reported_attendance, expressed as a
+          percentage. Useful for comparing synthetic scans vs reported crowd.
+        data_type: numeric
+
+      - name: merch_purchase_count
+        description: Number of stadium merchandise purchase events for the match.
+        data_type: bigint
+
+      - name: unique_merch_buyers
+        description: Distinct fans who made a merch purchase during the match.
+        data_type: bigint
+
+      - name: merch_revenue
+        description: Total stadium merchandise revenue for the match in EUR.
+        data_type: numeric
+
+      - name: top_merch_item
+        description: Most frequently purchased merch item for the match.
+        data_type: text
+
+      - name: club_home_stadium
+        description: Club Brugge home stadium label from top-level venue metadata.
+        data_type: text
+
+      - name: club_home_stadium_capacity
+        description: Capacity of Club Brugge's home stadium (Jan Breydelstadion).
+        data_type: integer
+
+      - name: home_capacity_utilization_pct
+        description: >
+          Reported attendance as a percentage of club_home_stadium_capacity for
+          home matches. NULL for away fixtures.
+        data_type: numeric
+
+      - name: is_home_capacity_sellout
+        description: >
+          TRUE when a home match's reported attendance reaches or exceeds the
+          recorded home-stadium capacity; NULL for away matches.
+        data_type: boolean
+
+      - name: first_event_time
+        description: Earliest event_time observed for the match.
+        data_type: timestamp with time zone
+
+      - name: last_event_time
+        description: Latest event_time observed for the match.
+        data_type: timestamp with time zone
+
+      - name: last_updated_at
+        description: >
+          Watermark: the latest ingested_at timestamp among source rows used to
+          build this match summary. Used by the incremental model.
         data_type: timestamp with time zone
 
   - name: mart_player_season_summary

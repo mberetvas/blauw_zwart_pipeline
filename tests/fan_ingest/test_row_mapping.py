@@ -22,7 +22,8 @@ def test_parse_event_time_invalid_returns_none() -> None:
 def test_v2_merch_purchase_row_shape() -> None:
     raw = (
         b'{"amount":12.5,"event":"merch_purchase","fan_id":"f1","item":"scarf",'
-        b'"match_id":"m99","timestamp":"2024-01-01T12:00:00Z"}'
+        b'"match_id":"m99","opponent":"KRC Genk","home_score":2,'
+        b'"away_score":1,"timestamp":"2024-01-01T12:00:00Z"}'
     )
     row = kafka_message_to_row(
         kafka_topic="fan_events",
@@ -37,6 +38,9 @@ def test_v2_merch_purchase_row_shape() -> None:
     assert row["event_time"] == datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
     assert row["payload_json"]["fan_id"] == "f1"
     assert row["payload_json"]["item"] == "scarf"
+    assert row["payload_json"]["opponent"] == "KRC Genk"
+    assert row["payload_json"]["home_score"] == 2
+    assert row["payload_json"]["away_score"] == 1
 
 
 def test_v3_retail_purchase_row_shape() -> None:
@@ -82,20 +86,14 @@ def test_parse_failure_raises_parse_error(value: bytes) -> None:
 
 def test_parse_error_includes_detail_for_json_error() -> None:
     with pytest.raises(ParseError, match="JSON parse error"):
-        kafka_message_to_row(
-            kafka_topic="t", kafka_partition=0, kafka_offset=0, value=b"{not json"
-        )
+        kafka_message_to_row(kafka_topic="t", kafka_partition=0, kafka_offset=0, value=b"{not json")
 
 
 def test_parse_error_includes_detail_for_non_object() -> None:
     with pytest.raises(ParseError, match="expected JSON object"):
-        kafka_message_to_row(
-            kafka_topic="t", kafka_partition=0, kafka_offset=0, value=b"[1,2,3]"
-        )
+        kafka_message_to_row(kafka_topic="t", kafka_partition=0, kafka_offset=0, value=b"[1,2,3]")
 
 
 def test_parse_error_includes_detail_for_empty_body() -> None:
     with pytest.raises(ParseError, match="empty or missing"):
-        kafka_message_to_row(
-            kafka_topic="t", kafka_partition=0, kafka_offset=0, value=b""
-        )
+        kafka_message_to_row(kafka_topic="t", kafka_partition=0, kafka_offset=0, value=b"")

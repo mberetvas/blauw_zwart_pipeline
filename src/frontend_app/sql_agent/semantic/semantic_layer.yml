@@ -19,6 +19,21 @@ subjects:
       timestamps, Kafka metadata (topic, partition, offset), or match-level
       breakdown not available in the mart.
 
+  - name: match
+    primary_mart: mart_match_summary
+    description: >
+      One row per match. Use mart_match_summary for opponent, venue, kickoff,
+      scoreline, reported attendance, capacity utilisation, ticket scan counts,
+      and match-day merchandise revenue. It combines one-row-per-match calendar
+      metadata with aggregated synthetic event activity.
+    prefer_mart_when: >
+      Match-level summaries and KPIs: opponent, home/away, scoreline, venue,
+      reported attendance, capacity utilisation, ticket scan counts, match-day
+      merch revenue, and top merch item.
+    prefer_event_tables_when: >
+      Event-level detail: individual ticket scans, merch transactions, per-event
+      timestamps, Kafka metadata, or fan-level rows within a match.
+
   - name: proleague_player
     primary_mart: mart_player_season_summary
     description: >
@@ -97,6 +112,31 @@ metrics:
     aggregation: sum
     unit: transactions
     description: Retail channel purchase transactions.
+
+  - name: match_reported_attendance
+    table: mart_match_summary
+    column: reported_attendance
+    aggregation: sum
+    unit: attendees
+    description: >
+      Reported crowd size per match row from calendar metadata. Summing across
+      rows yields total attendance over the selected matches.
+
+  - name: match_ticket_scan_count
+    table: mart_match_summary
+    column: ticket_scan_count
+    aggregation: sum
+    unit: scans
+    description: >
+      Count of ticket_scan events aggregated to one row per match.
+
+  - name: match_merch_revenue
+    table: mart_match_summary
+    column: merch_revenue
+    aggregation: sum
+    unit: EUR
+    description: >
+      Stadium merchandise revenue aggregated to one row per match.
 
   - name: player_goals
     table: mart_player_season_summary
@@ -299,9 +339,63 @@ dimensions:
 
   - name: match_id
     tables:
+      - mart_match_summary
       - merch_purchase
       - match_events
+      - match_metadata
     description: Match identifier for event-level queries.
+
+  - name: opponent
+    tables:
+      - mart_match_summary
+      - match_metadata
+    description: Opposing club for the match.
+
+  - name: encounter_type
+    tables:
+      - mart_match_summary
+      - match_metadata
+    description: Whether Club Brugge played the match at home or away.
+
+  - name: home_away
+    tables:
+      - mart_match_summary
+      - match_metadata
+    description: Whether Club Brugge was the home or away side.
+
+  - name: venue_label
+    tables:
+      - mart_match_summary
+      - match_metadata
+    description: Human-readable stadium / venue label for the match.
+
+  - name: kickoff_local
+    tables:
+      - mart_match_summary
+      - match_metadata
+    description: Scheduled kickoff in Europe/Brussels local wall-clock time.
+
+  - name: home_score
+    tables:
+      - mart_match_summary
+      - match_metadata
+    description: Goals scored by the home team in the final result.
+
+  - name: away_score
+    tables:
+      - mart_match_summary
+      - match_metadata
+    description: Goals scored by the away team in the final result.
+
+  - name: match_result
+    tables:
+      - mart_match_summary
+    description: "Match outcome from Club Brugge's perspective: win, draw, or loss."
+
+  - name: club_home_stadium
+    tables:
+      - mart_match_summary
+    description: Club Brugge home stadium label from the calendar metadata.
 
   - name: shop
     tables:
@@ -404,6 +498,16 @@ join_paths:
     on: "match_events.fan_id = mart_fan_loyalty.fan_id"
     note: Match-level events to fan summary.
 
+  - from_table: merch_purchase
+    to_table: mart_match_summary
+    on: "merch_purchase.match_id = mart_match_summary.match_id"
+    note: Merchandise event rows to one-row-per-match match summary mart.
+
+  - from_table: match_events
+    to_table: mart_match_summary
+    on: "match_events.match_id = mart_match_summary.match_id"
+    note: Match event rows to one-row-per-match match summary mart.
+
   - from_table: int_player_stat_lines
     to_table: mart_player_season_summary
     on: "int_player_stat_lines.player_id = mart_player_season_summary.player_id"
@@ -436,6 +540,14 @@ layering_rules:
       Use merch_purchase, retail_purchase, or match_events only when the
       question requires individual event rows, per-event timestamps, Kafka
       metadata, or match-level detail not available in the mart.
+
+  - id: prefer_match_mart_for_match_kpis
+    description: >
+      For one-row-per-match questions (opponent, venue, kickoff, attendance,
+      scoreline, home/away, match-day merch revenue, scan counts), prefer
+      mart_match_summary. Join merch_purchase or match_events to
+      mart_match_summary by match_id only when you need event rows plus match
+      context.
 
   - id: staging_is_raw
     description: >

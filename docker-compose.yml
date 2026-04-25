@@ -129,6 +129,9 @@ services:
       DBT_PROFILES_DIR: /app/dbt
       DBT_POSTGRES_HOST: postgres
       DBT_POSTGRES_PORT: 5432
+      # When DBT_FAIL_FAST=1 (default), the scheduler exits on dbt build failure so
+      # `restart: unless-stopped` surfaces the issue instead of silently looping.
+      DBT_FAIL_FAST: ${DBT_FAIL_FAST:-1}
       # DBT_RUN_INTERVAL_MINUTES and DBT_RUN_SELECTOR are intentionally omitted here.
       # They are injected directly from env_file (.env) to avoid Compose YAML interpolation
       # picking up a stale host-shell value and silently overriding the .env setting.

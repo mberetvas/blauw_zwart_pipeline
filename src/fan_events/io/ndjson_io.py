@@ -13,6 +13,78 @@ from fan_events.core.data import ITEMS, SHOP_IDS
 from fan_events.core.domain import MERCH_PURCHASE, RETAIL_PURCHASE, TICKET_SCAN
 
 
+_V2_OPTIONAL_MATCH_FIELDS = frozenset(
+    {
+        "kickoff_local",
+        "timezone",
+        "attendance",
+        "home_away",
+        "encounter_type",
+        "opponent",
+        "home_score",
+        "away_score",
+        "venue_label",
+        "club_home_club",
+        "club_home_stadium",
+        "club_home_stadium_capacity",
+        "club_home_reported_total_attendance",
+        "club_home_reported_average_attendance",
+        "club_home_reported_home_matches",
+        "club_home_reported_sold_out_matches",
+        "club_home_reported_capacity_pct",
+    }
+)
+
+
+def _validate_allowed_keys(*, rec: dict[str, Any], required: set[str], optional: set[str], label: str) -> None:
+    keys = set(rec.keys())
+    missing = required - keys
+    invalid = keys - required - optional
+    if missing:
+        raise ValueError(f"{label} missing required keys: {sorted(missing)}")
+    if invalid:
+        raise ValueError(f"{label} has invalid keys: {sorted(invalid)}")
+
+
+def _validate_optional_v2_match_fields(rec: dict[str, Any]) -> None:
+    for key in (
+        "kickoff_local",
+        "timezone",
+        "opponent",
+        "venue_label",
+        "club_home_club",
+        "club_home_stadium",
+    ):
+        if key in rec and (not isinstance(rec[key], str) or not rec[key]):
+            raise ValueError(f"v2 record: {key} must be a non-empty string when present")
+
+    for key in (
+        "attendance",
+        "home_score",
+        "away_score",
+        "club_home_stadium_capacity",
+        "club_home_reported_total_attendance",
+        "club_home_reported_average_attendance",
+        "club_home_reported_home_matches",
+        "club_home_reported_sold_out_matches",
+    ):
+        if key in rec:
+            val = rec[key]
+            if not isinstance(val, int) or isinstance(val, bool):
+                raise ValueError(f"v2 record: {key} must be an integer when present")
+            if val < 0:
+                raise ValueError(f"v2 record: {key} must be >= 0 when present")
+
+    for key in ("home_away", "encounter_type"):
+        if key in rec and rec[key] not in ("home", "away"):
+            raise ValueError(f"v2 record: {key} must be 'home' or 'away' when present")
+
+    if "club_home_reported_capacity_pct" in rec:
+        pct = rec["club_home_reported_capacity_pct"]
+        if not isinstance(pct, (int, float)) or isinstance(pct, bool):
+            raise ValueError("v2 record: club_home_reported_capacity_pct must be numeric")
+
+
 def dumps_canonical(obj: dict[str, Any]) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
@@ -107,17 +179,25 @@ def validate_record_v2(rec: dict[str, Any]) -> None:
         raise ValueError("record must be a dict")
     ev = rec.get("event")
     if ev == TICKET_SCAN:
-        allowed = {"event", "fan_id", "location", "match_id", "timestamp"}
-        if set(rec.keys()) != allowed:
-            raise ValueError(f"v2 ticket_scan must have exactly keys {sorted(allowed)}")
+        required = {"event", "fan_id", "location", "match_id", "timestamp"}
+        _validate_allowed_keys(
+            rec=rec,
+            required=required,
+            optional=set(_V2_OPTIONAL_MATCH_FIELDS),
+            label="v2 ticket_scan",
+        )
         for k in ("fan_id", "location", "match_id", "timestamp"):
             if not rec[k]:
                 raise ValueError(f"v2 ticket_scan: {k} must be non-empty")
+        _validate_optional_v2_match_fields(rec)
     elif ev == MERCH_PURCHASE:
         base = {"amount", "event", "fan_id", "item", "match_id", "timestamp"}
-        keys = set(rec.keys())
-        if keys not in (base, base | {"location"}):
-            raise ValueError(f"v2 merch_purchase has invalid keys: {sorted(keys)}")
+        _validate_allowed_keys(
+            rec=rec,
+            required=base,
+            optional=set(_V2_OPTIONAL_MATCH_FIELDS) | {"location"},
+            label="v2 merch_purchase",
+        )
         for k in ("fan_id", "item", "match_id", "timestamp"):
             if not rec[k]:
                 raise ValueError(f"v2 merch_purchase: {k} must be non-empty")
@@ -128,6 +208,7 @@ def validate_record_v2(rec: dict[str, Any]) -> None:
             raise ValueError("merch_purchase: amount must be a number")
         if amt <= 0:
             raise ValueError("merch_purchase: amount must be > 0")
+        _validate_optional_v2_match_fields(rec)
     else:
         raise ValueError(f"unknown event: {ev!r}")
 
