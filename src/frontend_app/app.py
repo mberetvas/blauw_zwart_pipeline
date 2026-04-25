@@ -6,7 +6,7 @@ Flow
 2. Load merged dbt schema YAML context (staging / intermediate / marts column docs).
 3. Prompt the selected LLM provider -> raw SQL.
 4. Validate: must be SELECT-only; no mutating keywords.
-5. Execute wrapped SQL (LIMIT 50, statement_timeout 10 s) as llm_reader.
+5. Execute wrapped SQL (LIMIT 100, statement_timeout 10 s) as llm_reader.
 6. Prompt the LLM again with the result rows -> natural language answer.
 7. Return {"answer", "sql", "data_preview"}.
 
@@ -175,7 +175,7 @@ def _build_trace(
         notes.append("Validated the SQL as read-only before sending it to Postgres.")
     if row_count is not None:
         notes.append(
-            f"Executed the query with a 10 second timeout and outer LIMIT 50, "
+            f"Executed the query with a 10 second timeout and outer LIMIT 100, "
             f"returning {row_count} row(s)."
         )
     elif sql is not None:

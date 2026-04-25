@@ -140,7 +140,7 @@ Current pipeline:
 | sqlglot AST DDL/DML reject | `Insert`, `Update`, `Delete`, `Drop`, `Create`, `Alter`, `TruncateTable`, `Merge`, `Copy`, `Command` nodes are rejected before execution |
 | Legacy regex fallback | Mutating keyword regex runs as a second pass |
 | Identifier whitelist | `describe_table` / `sample_table` reject any table not present in `list_tables()` output |
-| Outer row cap | Execution is wrapped in an outer `LIMIT 50` |
+| Outer row cap | Execution is wrapped in an outer `LIMIT 100` |
 | Time limit | Every DB session sets `statement_timeout` to 10 seconds |
 | Bounded iterations | Primary agent capped by `AGENT_MAX_TOOL_ITERATIONS` (default 8); repair pass capped at half that |
 
@@ -160,8 +160,8 @@ Current pipeline:
 
 | Variable | Contents | Consumer |
 | --- | --- | --- |
-| `preview` | Up to 10 executed rows as JSON | Second LLM call |
-| `data_preview` | All executed rows up to the `LIMIT 50` cap | HTTP JSON response and SSE `meta` event |
+| `preview` | Up to 20 executed rows as JSON | Second LLM call |
+| `data_preview` | First 20 executed rows from a result set capped at `LIMIT 100` | HTTP JSON response and SSE `meta` event |
 
 ## Leaderboard scoring (current v1)
 
@@ -203,10 +203,10 @@ Every log line carries a short **request ID** (`[req_id]`) that is generated per
 2026-04-24 21:30:04,501 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — Tool call start: list_tables | args={}
 2026-04-24 21:30:04,508 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — Tool call end: list_tables — 7 ms | output=[{"name":…
 2026-04-24 21:30:10,200 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — Tool call start: execute_select | args={"sql": "SELECT…
-2026-04-24 21:30:10,320 INFO  [a3f1c2d8] frontend_app.sql_agent.tools — execute_select done: 50 rows, 120 ms
+2026-04-24 21:30:10,320 INFO  [a3f1c2d8] frontend_app.sql_agent.tools — execute_select done: 100 rows, 120 ms
 2026-04-24 21:30:10,321 INFO  [a3f1c2d8] frontend_app.sql_agent.observability — Tool call end: execute_select — 121 ms | output={"rows"…
 2026-04-24 21:30:12,000 INFO  [a3f1c2d8] frontend_app.sql_agent.graph — Stage primary done: 10875 ms, 9 messages
-2026-04-24 21:30:12,001 INFO  [a3f1c2d8] frontend_app.sql_agent.graph — run_ask done: repaired=False rows=50
+2026-04-24 21:30:12,001 INFO  [a3f1c2d8] frontend_app.sql_agent.graph — run_ask done: repaired=False rows=100
 2026-04-24 21:30:12,002 DEBUG [a3f1c2d8] frontend_app.app — SSE event: meta
 2026-04-24 21:30:12,003 DEBUG [a3f1c2d8] frontend_app.app — SSE event: answer_delta
 2026-04-24 21:30:12,004 DEBUG [a3f1c2d8] frontend_app.app — SSE event: done

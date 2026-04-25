@@ -343,7 +343,7 @@ def execute_select(sql: str) -> str:
 
     The SQL is sanitized (markdown fences stripped, dbt layer prefixes
     rewritten to ``dbt_dev.<table>``) and validated with sqlglot before
-    execution. The query is wrapped in an outer ``LIMIT 50`` and runs with a
+    execution. The query is wrapped in an outer ``LIMIT 100`` and runs with a
     10s ``statement_timeout`` as the ``llm_reader`` Postgres role.
 
     Args:

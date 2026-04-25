@@ -281,7 +281,7 @@ def _final_assistant_text(messages: list[BaseMessage]) -> str:
 
 
 def _result_to_data_preview(
-    rows: list[dict[str, Any]], cap: int = 10
+    rows: list[dict[str, Any]], cap: int = 20
 ) -> list[dict[str, Any]]:
     if not rows:
         return []

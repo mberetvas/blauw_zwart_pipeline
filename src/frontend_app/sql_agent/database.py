@@ -63,5 +63,5 @@ def _run_read_query(
 
 def _execute_sql(sql: str) -> list[dict[str, Any]]:
     """Wrap sql in a LIMIT guard and execute it as the llm_reader role."""
-    wrapped = f"SELECT * FROM (\n{sql}\n) AS llm_query LIMIT 50"
+    wrapped = f"SELECT * FROM (\n{sql}\n) AS llm_query LIMIT 100"
     return _run_read_query(wrapped)

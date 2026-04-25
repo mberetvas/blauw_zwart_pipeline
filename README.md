@@ -36,6 +36,78 @@ This is for people who want to run the local stack once, work on one package wit
 5. `dbt` builds analytics models such as `mart_fan_loyalty`.
 6. `frontend_app` keeps `python -m frontend_app.app` as the entrypoint; `app.py` serves the browser UI and JSON API while `sql_agent/` handles the Text-to-SQL / LLM pipeline over the dbt marts plus player stats.
 
+### Architecture diagram
+
+```mermaid
+flowchart TD
+    %% ── external actors ──────────────────────────────────────────
+    user((User<br/>Browser))
+    proleague_site[(proleague.be)]
+    openrouter[OpenRouter<br/>LLM API]
+
+    %% ── data generation layer ────────────────────────────────────
+    subgraph gen ["Data Generation"]
+        producer["producer<br/><i>fan_events CLI</i>"]
+        scheduler["proleague-scheduler<br/><i>daily scrape</i>"]
+    end
+
+    %% ── message broker ───────────────────────────────────────────
+    subgraph kafka ["Kafka Broker · KRaft"]
+        fan_topic[/"fan_events"/]
+        player_topic[/"player_stats"/]
+    end
+
+    %% ── ingestion layer ──────────────────────────────────────────
+    subgraph consumers ["Ingestion"]
+        ingest["fan-ingest<br/><i>Kafka → Postgres</i>"]
+        pl_ingest["proleague-ingest<br/><i>Kafka → Postgres</i>"]
+    end
+
+    %% ── storage + analytics ──────────────────────────────────────
+    subgraph storage ["Storage & Analytics"]
+        postgres[("Postgres<br/><code>raw_data.*</code>")]
+        dbt["dbt-scheduler<br/><i>marts every DBT_RUN_INTERVAL_MINUTES</i>"]
+        marts[("dbt_dev<br/><code>mart_fan_loyalty</code><br/><code>mart_player_season_summary</code>")]
+    end
+
+    %% ── presentation layer ───────────────────────────────────────
+    subgraph ui ["Presentation"]
+        frontend["frontend-app<br/><i>Flask · :8080</i>"]
+        scraper["proleague-scraper<br/><i>HTTP API · :8001</i>"]
+        pgadmin["pgAdmin<br/><i>:5050</i>"]
+    end
+
+    %% ── flows ────────────────────────────────────────────────────
+    producer -- "publish" --> fan_topic
+    scheduler -. "HTTP scrape" .-> proleague_site
+    scheduler -- "publish" --> player_topic
+
+    fan_topic -- "consume" --> ingest
+    player_topic -- "consume" --> pl_ingest
+
+    ingest -- "INSERT<br/>fan_events_ingested" --> postgres
+    pl_ingest -- "UPSERT<br/>player_stats" --> postgres
+
+    postgres -- "SELECT raw" --> dbt
+    dbt -- "build marts" --> marts
+
+    marts -- "Text-to-SQL<br/>read-only" --> frontend
+    postgres -- "SELECT raw_data.player_stats<br/>(squad listing)" --> frontend
+    postgres -- "SELECT raw_data.player_stats<br/>(scraper /squad)" --> scraper
+    frontend -. "single-player detail<br/>+ image proxy" .-> scraper
+    frontend <-. "generate SQL ↔ answer" .-> openrouter
+
+    user -- ":8080" --> frontend
+    user -. ":5050" .-> pgadmin
+    pgadmin -- "admin" --> postgres
+```
+
+**Legend:** solid arrows = primary data flow; dashed arrows = supporting / on-demand calls.
+
+### SQL agent flow (Text-to-SQL chat)
+
+See [`src/frontend_app/sql_agent/README.md`](src/frontend_app/sql_agent/README.md) for the full Mermaid diagram and details of the two-stage Text-to-SQL pipeline.
+
 ## Prerequisites
 
 | Requirement | Why it matters |
