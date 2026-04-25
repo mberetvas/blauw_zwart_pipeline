@@ -1,0 +1,42 @@
+---
+description: Use uv for Python commands and dependency management in this project
+alwaysApply: true
+---
+
+# uv package manager
+
+Use **uv** for this project. Do not use bare `python`, `pip`, or `pytest` when the intent is to run project tooling or install dependencies.
+
+## Running commands
+
+Prefix runnable tools with `uv run` so they use the project environment:
+
+```bash
+# ❌ BAD
+pytest
+python -m pytest
+ruff check .
+
+# ✅ GOOD
+uv run pytest
+uv run python -m pytest
+uv run ruff check .
+```
+
+Use `uv run <tool>` for any CLI installed as a project dependency (pytest, ruff, mypy, black, etc.).
+
+## Adding or updating packages
+
+```bash
+# ❌ BAD
+pip install requests
+
+# ✅ GOOD
+uv add requests
+```
+
+For dev-only dependencies: `uv add --dev <package>`.
+
+## Syncing the environment
+
+When dependencies changed (e.g. after pulling `pyproject.toml` / `uv.lock`): `uv sync` (or `uv sync --dev` if the project uses dev groups).

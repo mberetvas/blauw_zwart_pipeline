@@ -149,7 +149,7 @@ tailwind.config = {
     <div class="mb-12 md:mb-14">
       <p class="text-xs font-bold tracking-[0.25em] text-primary uppercase mb-2 font-headline">Infrastructure</p>
       <h1 class="font-headline text-4xl md:text-5xl font-black italic tracking-tighter text-on-surface leading-tight">Club Settings</h1>
-      <p class="text-sm text-on-surface-variant mt-3 max-w-[60ch] leading-relaxed">Configure Ollama and OpenRouter for the Text-to-SQL assistant. Values are stored on the server and apply immediately after save.</p>
+      <p class="text-sm text-on-surface-variant mt-3 max-w-[60ch] leading-relaxed">Configure OpenRouter for the Text-to-SQL assistant. Values are stored on the server and apply immediately after save.</p>
       <p id="precedence-note" class="text-xs text-outline mt-4 max-w-[65ch] leading-relaxed"></p>
     </div>
 
@@ -157,50 +157,10 @@ tailwind.config = {
 
     <form id="settings-form" class="flex flex-col gap-10">
       <div class="bg-surface-container-high rounded-3xl p-6 md:p-8 flex flex-col gap-5">
-        <div>
-          <h2 class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary">Default provider</h2>
-          <p class="text-sm text-on-surface-variant mt-1">Used when the chat UI leaves the provider unchanged and for API calls without a provider field.</p>
-        </div>
-        <div>
-          <label class="field-label" for="default_provider">Provider</label>
-          <select id="default_provider" name="default_provider" class="field-input mt-2 cursor-pointer">
-            <option value="ollama">Ollama</option>
-            <option value="openrouter">OpenRouter</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="bg-surface-container-high rounded-3xl p-6 md:p-8 flex flex-col gap-5">
-        <h2 class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary">Ollama</h2>
-        <div>
-          <label class="field-label" for="ollama_url">Base URL</label>
-          <input id="ollama_url" name="ollama_url" type="url" class="field-input" required autocomplete="off" placeholder="http://localhost:11434"/>
-        </div>
-        <div>
-          <label class="field-label" for="ollama_model">Default model</label>
-          <input id="ollama_model" name="ollama_model" type="text" class="field-input" required autocomplete="off" placeholder="gemma4:e2b"/>
-        </div>
-        <div>
-          <label class="field-label" for="ollama_timeout">Timeout (seconds)</label>
-          <input id="ollama_timeout" name="ollama_timeout" type="number" min="1" max="600" class="field-input" required/>
-        </div>
-      </div>
-
-      <div class="bg-surface-container-high rounded-3xl p-6 md:p-8 flex flex-col gap-5">
         <h2 class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary">OpenRouter</h2>
         <div>
           <label class="field-label" for="openrouter_base_url">API base URL</label>
           <input id="openrouter_base_url" name="openrouter_base_url" type="url" class="field-input" required autocomplete="off"/>
-        </div>
-        <div>
-          <label class="field-label" for="openrouter_model">Default model</label>
-          <input id="openrouter_model" name="openrouter_model" type="text" class="field-input" required autocomplete="off" list="openrouter-model-suggestions"/>
-          <datalist id="openrouter-model-suggestions">
-            <option value="deepseek/deepseek-v3.2">
-            <option value="google/gemini-3.1-flash-lite-preview">
-            <option value="minimax/minimax-m2.5">
-            <option value="x-ai/grok-4.1-fast">
-          </datalist>
         </div>
         <div>
           <label class="field-label" for="openrouter_timeout">Timeout (seconds)</label>
@@ -215,6 +175,42 @@ tailwind.config = {
           <input id="clear_openrouter_key" type="checkbox" class="rounded border-0 bg-surface-container-highest text-primary-container focus:ring-primary/30"/>
           <span class="text-sm text-on-surface-variant">Remove stored OpenRouter API key from the server</span>
         </label>
+      </div>
+
+      <div class="bg-surface-container-high rounded-3xl p-6 md:p-8 flex flex-col gap-5">
+        <div>
+          <h2 class="font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary">Model strategy</h2>
+          <p class="text-sm text-on-surface-variant mt-1">Choose which model drives the main agent and which one handles SQL repair retries.</p>
+        </div>
+        <div>
+          <label class="field-label" for="agent_model">Agent model</label>
+          <input id="agent_model" name="agent_model" type="text" class="field-input" required autocomplete="off" list="openrouter-model-suggestions" placeholder="google/gemini-3.1-flash-lite-preview"/>
+        </div>
+        <div>
+          <label class="field-label" for="repair_model">Repair model (optional)</label>
+          <input id="repair_model" name="repair_model" type="text" class="field-input" autocomplete="off" list="openrouter-model-suggestions" placeholder="Leave empty to reuse Agent model"/>
+        </div>
+        <div>
+          <label class="field-label" for="openrouter_models">Model catalog</label>
+          <p class="text-xs text-on-surface-variant mt-1 mb-1">Comma-separated list used for suggestions in the UI. Keep this focused on your preferred models.</p>
+          <textarea id="openrouter_models" name="openrouter_models" class="field-input min-h-28 resize-y" autocomplete="off" placeholder="google/gemini-3.1-flash-lite-preview, openai/gpt-4.1-mini, anthropic/claude-3.5-sonnet"></textarea>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-on-surface-variant">
+          <div class="bg-surface-container-highest rounded-2xl px-4 py-3">
+            <span class="field-label block mb-1">Resolved agent model</span>
+            <p id="resolved-agent-model">-</p>
+          </div>
+          <div class="bg-surface-container-highest rounded-2xl px-4 py-3">
+            <span class="field-label block mb-1">Resolved repair model</span>
+            <p id="resolved-repair-model">-</p>
+          </div>
+        </div>
+        <datalist id="openrouter-model-suggestions">
+          <option value="deepseek/deepseek-v3.2">
+          <option value="google/gemini-3.1-flash-lite-preview">
+          <option value="minimax/minimax-m2.5">
+          <option value="x-ai/grok-4.1-fast">
+        </datalist>
       </div>
 
       <div class="flex flex-wrap items-center gap-4">
@@ -255,6 +251,8 @@ tailwind.config = {
   const keyStatus = document.getElementById("key-status");
   const keyInput = document.getElementById("openrouter_api_key");
   const clearKey = document.getElementById("clear_openrouter_key");
+  const resolvedAgentEl = document.getElementById("resolved-agent-model");
+  const resolvedRepairEl = document.getElementById("resolved-repair-model");
 
   function fillOpenrouterDatalist(models) {
     const dl = document.getElementById("openrouter-model-suggestions");
@@ -264,6 +262,23 @@ tailwind.config = {
       const opt = document.createElement("option");
       opt.value = m;
       dl.appendChild(opt);
+    }
+  }
+
+  function parseModelCatalog(raw) {
+    const parts = String(raw || "")
+      .split(/[\n,]/)
+      .map(function (v) { return v.trim(); })
+      .filter(function (v) { return v.length > 0; });
+    return Array.from(new Set(parts));
+  }
+
+  function setResolvedModels(c) {
+    if (resolvedAgentEl) {
+      resolvedAgentEl.textContent = c.resolved_agent_model || c.agent_model || c.openrouter_model || "-";
+    }
+    if (resolvedRepairEl) {
+      resolvedRepairEl.textContent = c.resolved_repair_model || c.repair_model || c.resolved_agent_model || "-";
     }
   }
 
@@ -287,15 +302,16 @@ tailwind.config = {
     const res = await fetch("/api/llm-config");
     if (!res.ok) throw new Error("Failed to load settings");
     const c = await res.json();
-    document.getElementById("default_provider").value = c.default_provider || "ollama";
-    document.getElementById("ollama_url").value = c.ollama_url || "";
-    document.getElementById("ollama_model").value = c.ollama_model || "";
-    document.getElementById("ollama_timeout").value = String(c.ollama_timeout ?? 120);
     document.getElementById("openrouter_base_url").value = c.openrouter_base_url || "";
     fillOpenrouterDatalist(c.openrouter_models);
-    document.getElementById("openrouter_model").value = c.openrouter_model || "";
+    document.getElementById("agent_model").value = c.agent_model || c.openrouter_model || "";
+    document.getElementById("repair_model").value = c.repair_model || "";
+    document.getElementById("openrouter_models").value = Array.isArray(c.openrouter_models)
+      ? c.openrouter_models.join(", ")
+      : "";
     document.getElementById("openrouter_timeout").value = String(c.openrouter_timeout ?? 120);
     keyInput.value = "";
+    setResolvedModels(c);
     if (c.precedence) precedenceEl.textContent = c.precedence;
     if (c.config_file) {
       document.getElementById("save-hint").textContent = "Config file: " + c.config_file;
@@ -311,13 +327,20 @@ tailwind.config = {
     e.preventDefault();
     btnSave.disabled = true;
     flash.classList.add("hidden");
+    const modelCatalog = parseModelCatalog(document.getElementById("openrouter_models").value);
+    if (!modelCatalog.length) {
+      showFlash("Model catalog must contain at least one model id.", false);
+      btnSave.disabled = false;
+      return;
+    }
+    const agentModel = document.getElementById("agent_model").value.trim();
+    const repairModel = document.getElementById("repair_model").value.trim();
     const payload = {
-      default_provider: document.getElementById("default_provider").value,
-      ollama_url: document.getElementById("ollama_url").value.trim(),
-      ollama_model: document.getElementById("ollama_model").value.trim(),
-      ollama_timeout: parseInt(document.getElementById("ollama_timeout").value, 10),
       openrouter_base_url: document.getElementById("openrouter_base_url").value.trim(),
-      openrouter_model: document.getElementById("openrouter_model").value.trim(),
+      openrouter_model: agentModel,
+      agent_model: agentModel,
+      repair_model: repairModel,
+      openrouter_models: modelCatalog,
       openrouter_timeout: parseInt(document.getElementById("openrouter_timeout").value, 10),
     };
     const newKey = keyInput.value.trim();
@@ -340,6 +363,17 @@ tailwind.config = {
       showFlash("Settings saved. They apply immediately for new requests.", true);
       clearKey.checked = false;
       keyInput.value = "";
+      if (Array.isArray(data.openrouter_models)) {
+        document.getElementById("openrouter_models").value = data.openrouter_models.join(", ");
+        fillOpenrouterDatalist(data.openrouter_models);
+      }
+      if (typeof data.agent_model === "string") {
+        document.getElementById("agent_model").value = data.agent_model;
+      }
+      if (typeof data.repair_model === "string") {
+        document.getElementById("repair_model").value = data.repair_model;
+      }
+      setResolvedModels(data);
       if (data.openrouter_api_key_configured) {
         keyStatus.textContent = "A key is stored (" + (data.openrouter_api_key_masked || "****") + "). Enter a new value to replace it.";
       } else {
