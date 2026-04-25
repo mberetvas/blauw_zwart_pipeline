@@ -22,18 +22,28 @@ subjects:
   - name: proleague_player
     primary_mart: mart_player_season_summary
     description: >
-      One row per Pro League player from the scraper (raw_data.player_stats →
-      dbt staging and marts). Prefer mart_player_season_summary for analysis:
-      flattened profile fields, pivoted season statistics, and derived rates
-      (per 90, pass accuracy, duel win %). Use int_player_stat_lines only when a
-      stat key is needed that is not on the mart. Not for synthetic fan events.
+      One row per Pro League player from the scraper (raw_data.player_stats via
+      dbt staging, int_player_stats_pivoted, and the mart). Prefer
+      mart_player_season_summary for analysis: flattened profile fields, 85+
+      pivoted season statistics (goals, assists, passing, duels, defensive,
+      goalkeeper, crossing, discipline, territory) and derived rates (per 90,
+      pass accuracy, duel win %, shot on target %). All stat columns default to
+      0 (no NULLs) — coalesce/derivation lives in int_player_stats_pivoted, the
+      mart is a thin join with int_player_profile. Use int_player_stat_lines
+      only for rare stat keys not on the mart. Not for synthetic fan events.
     prefer_mart_when: >
       Player-level KPIs and comparisons: goals, assists, minutes, appearances,
-      passing and duel metrics, goalkeeper saves when present, competition,
-      nationality, pass_accuracy_pct, goals_per_90, assists_per_90, scraped_at.
+      passing (short/long/backward/forward/own-half/opposition-half), duels
+      (aerial/ground, won/lost), tackles, clearances, blocks, blocked shots,
+      crosses (corners/open play), goalkeeper metrics (catches, punches, drops,
+      penalties faced/saved), discipline (yellow/red/straight red), attacking
+      detail (headed/left/right foot goals, inside/outside box, penalty goals,
+      winning goals), territory (passes own/opposition half), derived rates
+      (pass_accuracy_pct, goals_per_90, assists_per_90, duel_win_pct,
+      shot_on_target_pct), competition, nationality, scraped_at.
     prefer_event_tables_when: >
-      Long-format stat lines, rare or GK-only keys not pivoted on the mart, or
-      raw JSON inspection — use int_player_stat_lines or stg_player_stats
+      Long-format stat lines or rare keys not pivoted on the mart — use
+      int_player_stat_lines. For raw JSON inspection use stg_player_stats
       (profile/stats JSONB).
 
 # ---------------------------------------------------------------------------
@@ -133,7 +143,147 @@ metrics:
     column: goals_per_90
     aggregation: avg
     unit: goals_per_90_minutes
-    description: Goals per 90 minutes played (derived on the mart).
+    description: Goals per 90 minutes played (derived in int_player_stats_pivoted).
+
+  - name: player_assists_per_90
+    table: mart_player_season_summary
+    column: assists_per_90
+    aggregation: avg
+    unit: assists_per_90_minutes
+    description: Assists per 90 minutes played (derived).
+
+  - name: player_duel_win_pct
+    table: mart_player_season_summary
+    column: duel_win_pct
+    aggregation: avg
+    unit: percent
+    description: Duels won / total duels (0–100). Derived; 0 when duels = 0.
+
+  - name: player_shot_on_target_pct
+    table: mart_player_season_summary
+    column: shot_on_target_pct
+    aggregation: avg
+    unit: percent
+    description: Shots on target / total shots (0–100). Derived; 0 when total_shots = 0.
+
+  - name: player_headed_goals
+    table: mart_player_season_summary
+    column: headed_goals
+    aggregation: sum
+    unit: goals
+    description: Goals scored with the head.
+
+  - name: player_left_foot_goals
+    table: mart_player_season_summary
+    column: left_foot_goals
+    aggregation: sum
+    unit: goals
+    description: Goals scored with the left foot.
+
+  - name: player_right_foot_goals
+    table: mart_player_season_summary
+    column: right_foot_goals
+    aggregation: sum
+    unit: goals
+    description: Goals scored with the right foot.
+
+  - name: player_penalty_goals
+    table: mart_player_season_summary
+    column: penalty_goals
+    aggregation: sum
+    unit: goals
+    description: Goals from penalty kicks.
+
+  - name: player_winning_goals
+    table: mart_player_season_summary
+    column: winning_goal
+    aggregation: sum
+    unit: goals
+    description: Match-winning goals scored.
+
+  - name: player_goals_inside_box
+    table: mart_player_season_summary
+    column: goals_from_inside_box
+    aggregation: sum
+    unit: goals
+    description: Goals scored from inside the penalty box.
+
+  - name: player_goals_outside_box
+    table: mart_player_season_summary
+    column: goals_from_outside_box
+    aggregation: sum
+    unit: goals
+    description: Goals scored from outside the penalty box.
+
+  - name: player_through_balls
+    table: mart_player_season_summary
+    column: through_balls
+    aggregation: sum
+    unit: passes
+    description: Through-balls played.
+
+  - name: player_successful_long_passes
+    table: mart_player_season_summary
+    column: successful_long_passes
+    aggregation: sum
+    unit: passes
+    description: Successful long passes.
+
+  - name: player_successful_short_passes
+    table: mart_player_season_summary
+    column: successful_short_passes
+    aggregation: sum
+    unit: passes
+    description: Successful short passes.
+
+  - name: player_blocked_shots
+    table: mart_player_season_summary
+    column: blocked_shots
+    aggregation: sum
+    unit: shots
+    description: Opposition shots blocked by this player.
+
+  - name: player_corners_won
+    table: mart_player_season_summary
+    column: corners_won
+    aggregation: sum
+    unit: corners
+    description: Corners won (the player drew the corner).
+
+  - name: player_corners_taken
+    table: mart_player_season_summary
+    column: corners_taken
+    aggregation: sum
+    unit: corners
+    description: Corner kicks delivered by this player.
+
+  - name: player_straight_red_cards
+    table: mart_player_season_summary
+    column: straight_red_cards
+    aggregation: sum
+    unit: cards
+    description: Straight red cards (excludes second-yellow reds).
+
+  - name: player_catches
+    table: mart_player_season_summary
+    column: catches
+    aggregation: sum
+    unit: catches
+    description: Goalkeeper catches.
+
+  - name: player_punches
+    table: mart_player_season_summary
+    column: punches
+    aggregation: sum
+    unit: punches
+    description: Goalkeeper punches.
+
+  - name: player_penalties_faced
+    table: mart_player_season_summary
+    column: penalties_faced
+    aggregation: sum
+    unit: penalties
+    description: Penalties faced by the goalkeeper.
 
 # ---------------------------------------------------------------------------
 # Dimensions: filter/group-by fields and which tables carry them.
@@ -180,6 +330,7 @@ dimensions:
     tables:
       - mart_player_season_summary
       - int_player_profile
+      - int_player_stats_pivoted
       - int_player_stat_lines
       - stg_player_stats
     description: >
@@ -258,6 +409,18 @@ join_paths:
     on: "int_player_stat_lines.player_id = mart_player_season_summary.player_id"
     note: Long-format stats to one-row-per-player mart.
 
+  - from_table: int_player_stats_pivoted
+    to_table: mart_player_season_summary
+    on: "int_player_stats_pivoted.player_id = mart_player_season_summary.player_id"
+    note: Wide pivoted stats (already on the mart via thin join); join only when
+      querying the intermediate directly.
+
+  - from_table: int_player_profile
+    to_table: int_player_stats_pivoted
+    on: "int_player_profile.player_id = int_player_stats_pivoted.player_id"
+    note: Roster/biographical fields to wide pivoted stats; this is what the mart
+      already does.
+
 # ---------------------------------------------------------------------------
 # Layering rules: data-driven guidance on which layer to use for each intent.
 # ---------------------------------------------------------------------------
@@ -283,11 +446,15 @@ layering_rules:
   - id: proleague_player_mart_first
     description: >
       For Pro League squad or player statistics, prefer
-      mart_player_season_summary: one row per player with pivoted metrics and
-      derived rates. Use int_player_stat_lines for long-format analysis or stat
-      keys not on the mart; use stg_player_stats only for raw JSONB (profile,
-      stats). Do not join to fan commerce tables unless the question explicitly
-      links domains.
+      mart_player_season_summary: one row per player with 85+ pivoted metrics
+      and derived rates (pass_accuracy_pct, goals_per_90, assists_per_90,
+      duel_win_pct, shot_on_target_pct). All stat columns are 0-filled (no
+      NULLs) — the pivot/coalesce/derivation logic lives in
+      int_player_stats_pivoted and the mart is a thin join with
+      int_player_profile. Use int_player_stat_lines for long-format analysis or
+      rare stat keys not on the mart; use stg_player_stats only for raw JSONB
+      (profile, stats). Do not join to fan commerce tables unless the question
+      explicitly links domains.
 
   - id: fan_leaderboard_and_points
     description: >

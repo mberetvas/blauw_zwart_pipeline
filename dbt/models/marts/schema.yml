@@ -120,12 +120,14 @@ models:
   - name: mart_player_season_summary
     description: >
       Pro League player season summary mart: one row per player with flattened
-      profile fields, pivoted competition statistics (goals, assists, minutes,
-      passing, duels, defensive and goalkeeper metrics where present), and
-      derived rates (per 90, pass accuracy, duel win %). Built from
-      int_player_profile and int_player_stat_lines. Prefer this table over raw
-      JSON staging for rankings, filters, and aggregates. Refreshed as a table
-      on each dbt run.
+      profile fields, 85+ pivoted competition statistics (goals, assists,
+      minutes, passing, duels, defensive, goalkeeper, crossing, discipline,
+      territory) and derived rates (pass_accuracy_pct, goals_per_90,
+      assists_per_90, duel_win_pct, shot_on_target_pct). All stat columns are
+      coalesced to 0 (no NULLs). Built as a thin join between int_player_profile
+      and int_player_stats_pivoted, where the pivot, null-handling, and rate
+      derivation live. Prefer this table over raw JSON staging for rankings,
+      filters, and aggregates. Refreshed as a table on each dbt run.
     config:
       tags: [ mart, player_stats, proleague ]
     columns:
