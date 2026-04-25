@@ -1,0 +1,18 @@
+---
+description: After code changes, run pytest and ruff via uv before finishing
+alwaysApply: true
+---
+
+# Validate changes before finishing
+
+After **adding, updating, or removing** code (not for trivial comment-only edits unless requested), run both checks from the repo root and fix failures before considering the task done:
+
+```bash
+uv run pytest
+uv run ruff check
+```
+
+- **pytest**: all tests must pass.
+- **ruff**: no lint errors or warnings in the scope Ruff is configured for.
+
+If either command fails, address the failures and re-run until both succeed. Do not skip these runs to save time when the change could affect behavior or style.
