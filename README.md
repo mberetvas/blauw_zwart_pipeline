@@ -43,7 +43,7 @@ This is for people who want to run the local stack once, work on one package wit
 | Python 3.12+ | Needed for **`fan_events`** on the host, tests, and other **development** workflows |
 | [uv](https://docs.astral.sh/uv/) | Lockfile and toolchain for the **`fan_events`** CLI on the host, plus **development** commands (`uv run pytest`, `uv run dbt`, …) |
 | Docker + Docker Compose | **Recommended** way to run the **full MVP stack** (all long-running services) |
-| [Ollama](https://ollama.com/) | Needed only for the default local LLM provider used by `frontend_app` |
+| [Ollama](https://ollama.com/) | _No longer used._ The SQL agent uses OpenRouter exclusively. |
 | [just](https://just.systems/) | Optional convenience wrapper around common stack and CLI commands |
 
 ## Run the full MVP stack (recommended)
@@ -61,10 +61,9 @@ This is for people who want to run the local stack once, work on one package wit
      - `LLM_READER_PASSWORD` and matching password inside `LLM_READER_DATABASE_URL`
    - **Change only if needed**
      - `POSTGRES_PORT`, `PGADMIN_PORT`, `LLM_API_PORT` (if host ports are already in use)
-     - `OLLAMA_URL` (if Ollama is not running on the host default)
-     - `OPENROUTER_API_KEY` and `LLM_PROVIDER=openrouter` (only when using OpenRouter instead of Ollama)
+     - `OPENROUTER_API_KEY` (required for the Data Q&A chat)
 3. Start **everything** from the repo root with `docker compose up -d` (not `uv run` for services).
-4. If you want the default Data Q&A flow, make sure Ollama is running on the host and pull `gemma4:e2b`.
+4. Set `OPENROUTER_API_KEY` in `.env` — required for the Data Q&A flow.
 5. Open <http://localhost:8080>.
 
 That path starts Kafka, Postgres, pgAdmin, the fan-event producer/consumer pair, the player-stats scraper/consumer pair, the dbt scheduler, and `frontend-app`. For service-by-service notes, ports, env vars, and operator commands, use [`docker/README.md`](docker/README.md).

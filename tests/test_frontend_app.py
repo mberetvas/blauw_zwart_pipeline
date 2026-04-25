@@ -22,6 +22,7 @@ def llm_app_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-fixture-key")
     monkeypatch.delenv("OPENROUTER_AGENT_MODEL", raising=False)
     monkeypatch.delenv("OPENROUTER_REPAIR_MODEL", raising=False)
+    monkeypatch.delenv("OPENROUTER_MODELS_BY_PROVIDER", raising=False)
     monkeypatch.delenv("OLLAMA_URL", raising=False)
     monkeypatch.delenv("OLLAMA_MODEL", raising=False)
     monkeypatch.delenv("OLLAMA_TIMEOUT", raising=False)
@@ -384,6 +385,100 @@ def test_ask_route_rejects_ollama_provider(llm_app_module) -> None:
     assert response.status_code == 400
     body = response.get_json()
     assert "Ollama is no longer supported" in body["error"]
+
+
+# ---------------------------------------------------------------------------
+# Provider-grouped model catalog tests
+# ---------------------------------------------------------------------------
+
+
+def test_public_config_contains_models_by_provider(llm_app_module) -> None:
+    """GET /api/llm-config must include a models_by_provider dict with all
+    five required provider keys, each mapping to a non-empty list of model ids."""
+    client = llm_app_module.app.test_client()
+    body = client.get("/api/llm-config").get_json()
+
+    assert "models_by_provider" in body
+    mbp = body["models_by_provider"]
+    for key in ("google", "gpt", "grok", "mistral", "claude"):
+        assert key in mbp, f"missing provider key: {key}"
+        assert isinstance(mbp[key], list) and len(mbp[key]) >= 1
+
+    assert "ui_default_provider" in body
+    assert body["ui_default_provider"] == "" or body["ui_default_provider"] in mbp
+    assert "ui_default_model" in body
+
+
+def test_public_config_env_models_by_provider(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OPENROUTER_MODELS_BY_PROVIDER env var is parsed and exposed in the
+    public config, with missing keys filled from defaults."""
+    from frontend_app.sql_agent import llm_runtime_config as rc
+
+    custom = json.dumps({
+        "google": ["google/gemini-2.0-flash"],
+        "gpt": ["openai/gpt-4.1"],
+    })
+    monkeypatch.setenv("OPENROUTER_MODELS_BY_PROVIDER", custom)
+    rc.init_llm_config()
+
+    body = llm_app_module.app.test_client().get("/api/llm-config").get_json()
+    mbp = body["models_by_provider"]
+    assert mbp["google"] == ["google/gemini-2.0-flash"]
+    assert mbp["gpt"] == ["openai/gpt-4.1"]
+    # Missing keys filled from defaults
+    assert len(mbp["grok"]) >= 1
+    assert len(mbp["mistral"]) >= 1
+    assert len(mbp["claude"]) >= 1
+
+
+def test_public_config_ui_defaults_server_default_for_uncatalogued_model(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the configured agent model is outside the provider catalog (e.g.
+    deepseek/...), ui_default_provider and ui_default_model must be empty
+    strings so the UI defaults to 'Server default' and does not accidentally
+    override the server's configured model on the first request."""
+    from frontend_app.sql_agent import llm_runtime_config as rc
+
+    monkeypatch.setenv("OPENROUTER_AGENT_MODEL", "deepseek/deepseek-v3.2")
+    rc.init_llm_config()
+
+    body = llm_app_module.app.test_client().get("/api/llm-config").get_json()
+    assert body["ui_default_provider"] == "", (
+        "expected empty string (Server default) for uncatalogued model prefix"
+    )
+    assert body["ui_default_model"] == "", (
+        "expected empty string (Server default) for uncatalogued model prefix"
+    )
+
+
+def test_chat_payload_only_sets_agent_model_not_repair(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the chat UI sends only 'model', it sets agent_model but leaves
+    repair_model as None (not overridden from UI)."""
+    captured: dict[str, object] = {}
+
+    def fake_run_ask(req):
+        captured["request"] = req
+        return _stub_agent_result(llm_app_module)
+
+    monkeypatch.setattr(llm_app_module, "run_ask", fake_run_ask)
+
+    llm_app_module.app.test_client().post(
+        "/api/ask",
+        json={
+            "question": "Q",
+            "provider": "openrouter",
+            "model": "google/gemini-3.1-flash-lite-preview",
+        },
+    )
+
+    req = captured["request"]
+    assert req.agent_model == "google/gemini-3.1-flash-lite-preview"
+    assert req.repair_model is None
 
 
 # ---------------------------------------------------------------------------

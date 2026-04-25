@@ -129,9 +129,8 @@ tailwind.config = {
   /* ── LLM provider row ───────────────────────────────── */
   #provider-sel{font-family:inherit;font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;background:#222a3d;color:#c2c6d8;border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.22rem .65rem;outline:none;cursor:pointer;transition:border-color .15s}
   #provider-sel:focus-visible{border-color:rgba(176,198,255,.4)}
-  #model-input{font-family:'Consolas','Menlo',monospace;font-size:.75rem;background:#222a3d;color:#dae2fd;border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.22rem .75rem;width:13rem;outline:none;transition:border-color .15s}
-  #model-input:focus-visible{border-color:rgba(176,198,255,.4)}
-  #model-input::placeholder{color:#414655}
+  #model-sel{font-family:'Consolas','Menlo',monospace;font-size:.75rem;background:#222a3d;color:#dae2fd;border:1px solid rgba(255,255,255,.08);border-radius:9999px;padding:.22rem .75rem;outline:none;cursor:pointer;transition:border-color .15s}
+  #model-sel:focus-visible{border-color:rgba(176,198,255,.4)}
   /* ── No-line rule ───────────────────────────────────── */
   .no-line-rule{border:none!important}
   /* ── Markdown answer (assistant bubble) ───────────── */
@@ -274,26 +273,16 @@ tailwind.config = {
 
         <!-- LLM provider / model row -->
         <div id="llm-settings" class="flex items-center gap-3 flex-wrap mb-4">
-          <span class="text-xs text-outline-variant font-medium tracking-widest uppercase select-none">via</span>
-          <select id="provider-sel" aria-label="LLM provider">
-            <option value="ollama">Ollama</option>
-            <option value="openrouter">OpenRouter</option>
+          <span class="text-xs text-outline-variant font-medium tracking-widest uppercase select-none">model</span>
+          <select id="provider-sel" aria-label="Model provider">
+            <option value="">Server default</option>
+            <option value="google">Google</option>
+            <option value="gpt">GPT</option>
+            <option value="grok">Grok</option>
+            <option value="mistral">Mistral</option>
+            <option value="claude">Claude</option>
           </select>
-          <input id="model-input" type="text" list="ollama-models"
-            placeholder="model…" autocomplete="off" spellcheck="false"
-            aria-label="Model override (leave blank for server default)">
-          <datalist id="ollama-models">
-            <option value="gemma4:e2b">
-            <option value="llama3.2">
-            <option value="qwen2.5-coder:7b">
-            <option value="mistral">
-          </datalist>
-          <datalist id="openrouter-models">
-            <option value="deepseek/deepseek-v3.2">
-            <option value="google/gemini-3.1-flash-lite-preview">
-            <option value="minimax/minimax-m2.5">
-            <option value="x-ai/grok-4.1-fast">
-          </datalist>
+          <select id="model-sel" aria-label="Model selection"></select>
         </div>
 
         <!-- Input form -->
@@ -359,7 +348,7 @@ tailwind.config = {
   const cancelBtn  = document.getElementById("cancel");
   const clearBtn   = document.getElementById("btn-clear");
   const providerEl = document.getElementById("provider-sel");
-  const modelEl    = document.getElementById("model-input");
+  const modelEl    = document.getElementById("model-sel");
   const statusEl   = document.getElementById("status");
   const form       = document.getElementById("composer");
   const bottomChips = document.getElementById("bottom-chips");
@@ -369,50 +358,72 @@ tailwind.config = {
   let cancelTimer = null;
   const conversationTurns = [];
   const TIMEOUT_MS = 120_000;
+  let _providerCatalog = {};
 
   if (typeof marked !== "undefined" && typeof marked.use === "function") {
     marked.use({ gfm: true, breaks: true });
   }
 
-  function fillOpenrouterDatalist(models) {
-    const dl = document.getElementById("openrouter-models");
-    if (!dl || !Array.isArray(models) || !models.length) return;
-    dl.innerHTML = "";
+  function populateModelDropdown(provider) {
+    modelEl.innerHTML = "";
+    if (!provider) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "Server default";
+      modelEl.appendChild(opt);
+      return;
+    }
+    const models = _providerCatalog[provider] || [];
     for (const m of models) {
       const opt = document.createElement("option");
       opt.value = m;
-      dl.appendChild(opt);
+      opt.textContent = m;
+      modelEl.appendChild(opt);
     }
   }
 
   // ── Defaults from server if no local preference; else localStorage ──
   async function initLlmUiDefaults() {
-    const raw = localStorage.getItem("llm_pref");
-    if (raw) {
-      try {
-        const p = JSON.parse(raw);
-        if (p.provider) providerEl.value = p.provider;
-        if (p.model) modelEl.value = p.model;
-      } catch (_) {}
-    } else {
-      try {
-        const r = await fetch("/api/llm-config");
-        if (r.ok) {
-          const c = await r.json();
-          if (c.default_provider) providerEl.value = c.default_provider;
-          fillOpenrouterDatalist(c.openrouter_models);
-          const dm =
-            providerEl.value === "openrouter"
-              ? c.openrouter_model
-              : c.ollama_model;
-          if (dm) modelEl.value = dm;
+    try {
+      const r = await fetch("/api/llm-config");
+      if (r.ok) {
+        const c = await r.json();
+        if (c.models_by_provider) _providerCatalog = c.models_by_provider;
+
+        const raw = localStorage.getItem("llm_pref");
+        if (raw) {
+          try {
+            const p = JSON.parse(raw);
+            const savedProvider = p.provider || "";
+            const savedModel = p.model || "";
+            if (savedProvider in _providerCatalog) {
+              providerEl.value = savedProvider;
+              populateModelDropdown(savedProvider);
+              const models = _providerCatalog[savedProvider] || [];
+              if (models.includes(savedModel)) {
+                modelEl.value = savedModel;
+              }
+            } else {
+              if (c.ui_default_provider) providerEl.value = c.ui_default_provider;
+              populateModelDropdown(providerEl.value);
+              if (c.ui_default_model) modelEl.value = c.ui_default_model;
+            }
+          } catch (_) {
+            if (c.ui_default_provider) providerEl.value = c.ui_default_provider;
+            populateModelDropdown(providerEl.value);
+            if (c.ui_default_model) modelEl.value = c.ui_default_model;
+          }
+        } else {
+          if (c.ui_default_provider) providerEl.value = c.ui_default_provider;
+          populateModelDropdown(providerEl.value);
+          if (c.ui_default_model) modelEl.value = c.ui_default_model;
         }
-      } catch (_) {}
+      } else {
+        populateModelDropdown(providerEl.value);
+      }
+    } catch (_) {
+      populateModelDropdown(providerEl.value);
     }
-    modelEl.setAttribute(
-      "list",
-      providerEl.value === "openrouter" ? "openrouter-models" : "ollama-models"
-    );
   }
   void initLlmUiDefaults();
 
@@ -423,7 +434,7 @@ tailwind.config = {
   }
 
   providerEl.addEventListener("change", () => {
-    modelEl.setAttribute("list", providerEl.value === "openrouter" ? "openrouter-models" : "ollama-models");
+    populateModelDropdown(providerEl.value);
     savePrefs();
   });
   modelEl.addEventListener("change", savePrefs);
@@ -522,8 +533,8 @@ tailwind.config = {
         },
         body: JSON.stringify({
           question: q,
-          provider: providerEl.value,
-          model: modelEl.value.trim(),
+          provider: "openrouter",
+          model: modelEl.value,
           history: buildHistoryPayload(),
         }),
         signal: abortCtrl.signal,
@@ -672,8 +683,7 @@ tailwind.config = {
       clearTimeout(timeoutId);
       thinking.remove();
       if (err.name === "AbortError") {
-        const pLabel = providerEl.value === "openrouter" ? "OpenRouter" : "Ollama";
-        showError({ error: "Request cancelled or timed out. Try a shorter question, or check that " + pLabel + " is reachable." });
+        showError({ error: "Request cancelled or timed out. Try a shorter question, or check that the LLM provider is reachable." });
         announce("Request cancelled.");
       } else {
         showError({ error: "Network error \u2014 is the server running? " + err.message });
