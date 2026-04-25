@@ -32,6 +32,20 @@ api = [
     "requests>=2.31",
     "pyyaml>=6.0",
 ]
+# Pro League scraper service: `uv sync --extra scraper`
+scraper = [
+    "beautifulsoup4>=4.12",
+    "confluent-kafka>=2.3",
+    "flask>=3.0",
+    "lxml>=5.0",
+    "psycopg2-binary>=2.9",
+    "requests>=2.31",
+]
+# Pro League Kafka→Postgres ingest consumer: `uv sync --extra proleague-ingest`
+proleague-ingest = [
+    "confluent-kafka>=2.3",
+    "psycopg2-binary>=2.9",
+]
 
 [project.scripts]
 fan_events = "fan_events.cli:main"

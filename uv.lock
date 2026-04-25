@@ -271,6 +271,18 @@ ingest = [
 kafka = [
     { name = "confluent-kafka" },
 ]
+proleague-ingest = [
+    { name = "confluent-kafka" },
+    { name = "psycopg2-binary" },
+]
+scraper = [
+    { name = "beautifulsoup4" },
+    { name = "confluent-kafka" },
+    { name = "flask" },
+    { name = "lxml" },
+    { name = "psycopg2-binary" },
+    { name = "requests" },
+]
 
 [package.dev-dependencies]
 dbt = [
@@ -306,10 +318,18 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "pyyaml", marker = "extra == 'api'", specifier = ">=6.0" },
     { name = "requests", marker = "extra == 'api'", specifier = ">=2.31" },
+    { name = "beautifulsoup4", marker = "extra == 'scraper'", specifier = ">=4.12" },
+    { name = "confluent-kafka", marker = "extra == 'scraper'", specifier = ">=2.3" },
+    { name = "flask", marker = "extra == 'scraper'", specifier = ">=3.0" },
+    { name = "lxml", marker = "extra == 'scraper'", specifier = ">=5.0" },
+    { name = "psycopg2-binary", marker = "extra == 'scraper'", specifier = ">=2.9" },
+    { name = "requests", marker = "extra == 'scraper'", specifier = ">=2.31" },
+    { name = "confluent-kafka", marker = "extra == 'proleague-ingest'", specifier = ">=2.3" },
+    { name = "psycopg2-binary", marker = "extra == 'proleague-ingest'", specifier = ">=2.9" },
     { name = "sqlglot", extras = ["c"], specifier = ">=30.6.0" },
     { name = "tzdata", specifier = ">=2024.1" },
 ]
-provides-extras = ["kafka", "ingest", "api"]
+provides-extras = ["kafka", "ingest", "api", "scraper", "proleague-ingest"]
 
 [package.metadata.requires-dev]
 dbt = [

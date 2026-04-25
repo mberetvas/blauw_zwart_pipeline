@@ -1,17 +1,19 @@
-# Lightweight image for the Pro League scraper microservice.
-# Uses pip directly (no uv/pyproject overhead) with a dedicated requirements file
-# so this image stays decoupled from the main project's dependency graph.
+# UV-based image for the Pro League scraper microservice.
+# Installs the full project package so shared modules (e.g. common) are always importable.
 FROM python:3.12-slim-bookworm
 
+# Pin uv to the same version used by other service images for consistency.
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
+
 WORKDIR /app
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 
-# Install scraper dependencies first for layer caching.
-COPY docker/requirements.scraper.txt /tmp/requirements.scraper.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.scraper.txt
+# Install Python dependencies first (layer-cached until pyproject/lock change).
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+RUN uv sync --frozen --no-dev --extra scraper
 
-# Copy only the scraper package (not the full monorepo).
-COPY src/proleague_scraper ./proleague_scraper
-
+ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8001
