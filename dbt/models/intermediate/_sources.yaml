@@ -9,7 +9,7 @@ sources:
       Raw relational data produced by the fan-event ingest service (Kafka → Postgres).
       Schema matches docker/postgres/init and ingestion-persistence-v1.
       Owner: pipeline; layer: raw.
-    schema: public
+    schema: raw_data
     tables:
       - name: fan_events_ingested
         description: >
@@ -50,7 +50,7 @@ sources:
       Raw relational data produced by the proleague-scraper service (proleague.be → Postgres).
       Schema matches docker/postgres/init/003_player_stats.sql.
       Owner: proleague_scraper; layer: raw.
-    schema: public
+    schema: raw_data
     tables:
       - name: player_stats
         description: >

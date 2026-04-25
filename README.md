@@ -32,7 +32,7 @@ This is for people who want to run the local stack once, work on one package wit
 1. `fan_events` generates synthetic fan events and can publish them to Kafka topic `fan_events`.
 2. `fan_ingest` consumes `fan_events` and writes raw rows to Postgres.
 3. `proleague_scraper` scrapes Club Brugge squad data, publishes `player_stats`, and serves a small internal HTTP read layer.
-4. `proleague_ingest` consumes `player_stats` and upserts `public.player_stats`.
+4. `proleague_ingest` consumes `player_stats` and upserts `raw_data.player_stats`.
 5. `dbt` builds analytics models such as `mart_fan_loyalty`.
 6. `frontend_app` keeps `python -m frontend_app.app` as the entrypoint; `app.py` serves the browser UI and JSON API while `sql_agent/` handles the Text-to-SQL / LLM pipeline over the dbt marts plus player stats.
 

@@ -68,7 +68,7 @@ def run_consumer(
     consumer_group: str,
     database_url: str,
 ) -> None:
-    """Poll *topic* and upsert each player into ``public.player_stats``.
+    """Poll *topic* and upsert each player into ``raw_data.player_stats``.
 
     Runs until SIGINT/SIGTERM; commits offsets only after a successful upsert.
     DB reconnects automatically on connection loss.

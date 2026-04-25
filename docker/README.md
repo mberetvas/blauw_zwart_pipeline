@@ -23,7 +23,7 @@ The full acceptance-style walkthrough still lives in [`specs/005-compose-kafka-p
 | `producer` | Runs `fan_events stream` inside Compose |
 | `ingest` | Runs `fan_ingest` and writes `fan_events_ingested` |
 | `proleague-scheduler` | Daily scrape loop that publishes `player_stats` |
-| `proleague-ingest` | Consumes `player_stats` and upserts `public.player_stats` |
+| `proleague-ingest` | Consumes `player_stats` and upserts `raw_data.player_stats` |
 | `proleague-scraper` | Internal HTTP read layer for player data |
 | `dbt-scheduler` | Periodic dbt runner for analytics marts |
 | `frontend-app` | Host-facing UI + API over fan and player data |

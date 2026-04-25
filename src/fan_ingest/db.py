@@ -11,7 +11,7 @@ import asyncpg
 logger = logging.getLogger("fan_ingest.db")
 
 INSERT_FAN_EVENT_SQL = """
-INSERT INTO fan_events_ingested (
+INSERT INTO raw_data.fan_events_ingested (
     kafka_topic, kafka_partition, kafka_offset, event_type, event_time, payload_json
 ) VALUES ($1, $2, $3, $4, $5, $6::jsonb)
 ON CONFLICT (kafka_topic, kafka_partition, kafka_offset) DO NOTHING

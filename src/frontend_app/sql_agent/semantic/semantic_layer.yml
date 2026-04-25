@@ -22,7 +22,7 @@ subjects:
   - name: proleague_player
     primary_mart: mart_player_season_summary
     description: >
-      One row per Pro League player from the scraper (public.player_stats → dbt staging and marts).
+      One row per Pro League player from the scraper (raw_data.player_stats → dbt staging and marts).
       Prefer mart_player_season_summary for analysis: flattened profile fields, pivoted season
       statistics, and derived rates (per 90, pass accuracy, duel win %). Use int_player_stat_lines
       only when a stat key is needed that is not on the mart. Not for synthetic fan events.

@@ -265,7 +265,7 @@ tailwind.config = {
 <script>
 // ── Player Stats — DB-backed daily snapshot from /api/player-stats/squad ────
 // Data is ingested once per day via proleague-scheduler → Kafka → proleague-ingest.
-// The API reads public.player_stats from Postgres; no synchronous scraping occurs
+// The API reads raw_data.player_stats from Postgres; no synchronous scraping occurs
 // on page load.  Three distinct states: loading, empty-pipeline (0 rows), error.
 
 let squadData = null;

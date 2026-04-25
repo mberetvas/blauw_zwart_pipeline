@@ -841,7 +841,7 @@ def test_squad_route_returns_players_when_data_exists(
 def test_squad_route_returns_200_with_empty_list_when_table_is_empty(
     llm_app_module, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Empty public.player_stats → HTTP 200 empty-pipeline state (not an error)."""
+    """Empty raw_data.player_stats → HTTP 200 empty-pipeline state (not an error)."""
     monkeypatch.setattr(llm_app_module, "_fetch_players_from_db", lambda: [])
 
     response = llm_app_module.app.test_client().get("/api/player-stats/squad")
@@ -878,7 +878,7 @@ def test_squad_route_returns_500_on_db_query_error(
     import psycopg2
 
     def raise_db_error() -> list:
-        raise psycopg2.ProgrammingError("relation \"public.player_stats\" does not exist")
+        raise psycopg2.ProgrammingError("relation \"raw_data.player_stats\" does not exist")
 
     monkeypatch.setattr(llm_app_module, "_fetch_players_from_db", raise_db_error)
 
