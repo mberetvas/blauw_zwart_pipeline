@@ -45,8 +45,27 @@ DEFAULT_OPENROUTER_MODELS: tuple[str, ...] = (
     "x-ai/grok-4.1-fast",
 )
 
+REQUIRED_PROVIDER_KEYS: tuple[str, ...] = ("google", "gpt", "grok", "mistral", "claude")
+
+DEFAULT_MODELS_BY_PROVIDER: dict[str, list[str]] = {
+    "google": ["google/gemini-3.1-flash-lite-preview"],
+    "gpt": ["openai/gpt-4.1-mini"],
+    "grok": ["x-ai/grok-4.1-fast"],
+    "mistral": ["mistralai/mistral-7b-instruct:free"],
+    "claude": ["anthropic/claude-3.5-sonnet"],
+}
+
+_PREFIX_TO_GROUP: dict[str, str] = {
+    "google": "google",
+    "openai": "gpt",
+    "x-ai": "grok",
+    "mistralai": "mistral",
+    "anthropic": "claude",
+}
+
 _lock = threading.RLock()
 _state: dict[str, Any] = {}
+_models_by_provider: dict[str, list[str]] = {}
 _CONFIG_PATH: Path | None = None
 _DEPRECATION_LOGGED = False
 
@@ -83,6 +102,44 @@ def _openrouter_models_from_env() -> list[str]:
         return list(DEFAULT_OPENROUTER_MODELS)
     items = [p.strip() for p in raw.split(",") if p.strip()]
     return items if items else list(DEFAULT_OPENROUTER_MODELS)
+
+
+def _models_by_provider_from_env() -> dict[str, list[str]]:
+    """Parse ``OPENROUTER_MODELS_BY_PROVIDER`` env var (JSON object).
+
+    Falls back to :data:`DEFAULT_MODELS_BY_PROVIDER` when unset or invalid.
+    Missing provider keys are filled from the defaults so that all
+    :data:`REQUIRED_PROVIDER_KEYS` are always present.
+    """
+    raw = os.environ.get("OPENROUTER_MODELS_BY_PROVIDER", "").strip()
+    if not raw:
+        return {k: list(v) for k, v in DEFAULT_MODELS_BY_PROVIDER.items()}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        log.warning("Invalid JSON in OPENROUTER_MODELS_BY_PROVIDER; using defaults")
+        return {k: list(v) for k, v in DEFAULT_MODELS_BY_PROVIDER.items()}
+    if not isinstance(data, dict):
+        log.warning("OPENROUTER_MODELS_BY_PROVIDER must be a JSON object; using defaults")
+        return {k: list(v) for k, v in DEFAULT_MODELS_BY_PROVIDER.items()}
+
+    result: dict[str, list[str]] = {}
+    for key in REQUIRED_PROVIDER_KEYS:
+        models = data.get(key)
+        if isinstance(models, str):
+            parsed = [m.strip() for m in models.split(",") if m.strip()]
+        elif isinstance(models, list):
+            parsed = [str(m).strip() for m in models if str(m).strip()]
+        else:
+            parsed = []
+        result[key] = parsed if parsed else list(DEFAULT_MODELS_BY_PROVIDER.get(key, []))
+    return result
+
+
+def _infer_provider_group(model_id: str) -> str | None:
+    """Map an OpenRouter model id to a provider group key, or ``None``."""
+    prefix = model_id.split("/")[0].lower() if "/" in model_id else ""
+    return _PREFIX_TO_GROUP.get(prefix)
 
 
 def coerce_openrouter_models(raw: Any) -> list[str]:
@@ -222,7 +279,7 @@ def _overlay_file(base: dict[str, Any], path: Path) -> dict[str, Any]:
 
 def init_llm_config() -> None:
     """Load env defaults, overlay persisted file if present. Call once at app startup."""
-    global _state
+    global _state, _models_by_provider
     base = _defaults_from_env()
     path = config_path()
     merged = _overlay_file(base, path) if path.is_file() else base
@@ -238,6 +295,7 @@ def init_llm_config() -> None:
         _validate_state(merged)
     with _lock:
         _state = merged
+        _models_by_provider = _models_by_provider_from_env()
 
 
 def get_llm_settings() -> dict[str, Any]:
@@ -282,9 +340,22 @@ def _mask_key(key: str) -> tuple[bool, str]:
 
 
 def to_public_config() -> dict[str, Any]:
-    """Safe dict for JSON responses (masked API key)."""
+    """Safe dict for JSON responses (masked API key, provider-grouped catalog)."""
     s = get_llm_settings()
     configured, masked = _mask_key(s.get("openrouter_api_key", ""))
+
+    with _lock:
+        mbp = {k: list(v) for k, v in _models_by_provider.items()}
+
+    resolved = resolve_agent_model()
+    group = _infer_provider_group(resolved)
+    if group and group in mbp:
+        ui_provider = group
+        ui_model = resolved if resolved in mbp[group] else mbp[group][0]
+    else:
+        ui_provider = REQUIRED_PROVIDER_KEYS[0]
+        ui_model = mbp[ui_provider][0] if mbp.get(ui_provider) else ""
+
     return {
         "openrouter_base_url": s["openrouter_base_url"],
         "openrouter_model": s["openrouter_model"],
@@ -301,6 +372,9 @@ def to_public_config() -> dict[str, Any]:
             "Environment variables seed defaults. If config_file exists, its values "
             "override env on startup. PUT /api/llm-config updates memory and config_file."
         ),
+        "models_by_provider": mbp,
+        "ui_default_provider": ui_provider,
+        "ui_default_model": ui_model,
     }
 
 

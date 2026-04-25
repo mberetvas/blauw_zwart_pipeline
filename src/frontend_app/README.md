@@ -34,7 +34,7 @@ Current package split:
 
 | Surface | What it does |
 | --- | --- |
-| Data Q&A (`/`) | Natural-language question -> SQL -> answer flow over Postgres |
+| Data Q&A (`/`) | Natural-language question -> SQL -> answer flow over Postgres. The chat model dropdown groups models by provider (Google, GPT, Grok, Mistral, Claude) and only affects the SQL agent model — the repair model is controlled independently via config/env. |
 | Leaderboard (`/leaderboard`) | Reads `mart_fan_loyalty` and ranks fans |
 | Player stats (`/player-stats`) | Compares cached squad data and can fetch individual player details |
 | Settings (`/settings`) | Persists runtime OpenRouter settings |
@@ -80,6 +80,7 @@ When the API runs on your machine against the Compose Postgres instance, use hos
 | `OPENROUTER_AGENT_MODEL` | unset | Default model for the primary tool-calling agent (falls back to `OPENROUTER_MODEL`) |
 | `OPENROUTER_REPAIR_MODEL` | unset | Default model for the one-shot SQL repair pass (falls back to `OPENROUTER_AGENT_MODEL`) |
 | `OPENROUTER_MODELS` | built-in defaults | Comma-separated suggestion list for the settings UI |
+| `OPENROUTER_MODELS_BY_PROVIDER` | built-in defaults | JSON object mapping provider group keys (`google`, `gpt`, `grok`, `mistral`, `claude`) to lists of OpenRouter model ids for the chat UI model dropdown |
 | `OPENROUTER_TIMEOUT` | `120` | OpenRouter request timeout in seconds |
 | `AGENT_MAX_TOOL_ITERATIONS` | `8` | Max tool-call iterations the primary agent may run before triggering the repair pass |
 | `LLM_CONFIG_PATH` | `src/frontend_app/llm_config.json` or `/data/llm_config.json` in Compose | JSON file for persisted runtime config |
@@ -123,7 +124,7 @@ In one sentence: English question -> tool-calling agent discovers the schema and
 
 Current pipeline:
 
-1. The browser sends a question, optional `agent_model` / `repair_model` overrides, and a small slice of recent conversation.
+1. The browser sends a question, an `agent_model` override (selected from the provider-grouped model dropdown), and a small slice of recent conversation. The `repair_model` is never overridden from the chat UI.
 2. `app.py` builds an `AgentRequest` (question + conversation context + model overrides) and hands it to `sql_agent.graph.run_ask` (or `run_ask_stream`).
 3. The **primary agent** (LangGraph `create_react_agent` over OpenRouter) discovers schema and semantic-layer hints by calling read-only tools — `list_tables`, `describe_table`, `search_columns`, `sample_table`, `get_semantic_layer` — and finally calls `execute_select` with one PostgreSQL `SELECT` or `WITH ... SELECT` statement.
 4. `execute_select` strips fences, rewrites `marts.x` / `staging.x` / `intermediate.x` to the dbt schema, runs **sqlglot** (single-statement check + AST DDL/DML rejection + legacy regex), then executes the SQL as the `llm_reader` role.
