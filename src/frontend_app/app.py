@@ -10,7 +10,8 @@ Flow
 6. Prompt the LLM again with the result rows -> natural language answer.
 7. Return {"answer", "sql", "data_preview"}.
 
-POST /api/ask/stream — same steps 1–5, then streams the answer via SSE (meta, answer_delta, done).
+POST /api/ask/stream — same steps 1–5, emits progress updates, then streams
+the answer via SSE (progress, meta, answer_delta, done).
 GET /api/leaderboard — read-only fan leaderboard from mart_fan_loyalty (all-time)
     or time-windowed rollups from match_events / merch_purchase / retail_purchase (month, season).
 """
@@ -18,18 +19,19 @@ GET /api/leaderboard — read-only fan leaderboard from mart_fan_loyalty (all-ti
 from __future__ import annotations
 
 import json
-import logging
 import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Iterator
+from urllib.parse import urlparse
 
 import psycopg2
 import requests
 from flask import Flask, Response, jsonify, request, send_from_directory, stream_with_context
 
-from .sql_agent.observability import RequestIdFilter, new_request_id, reset_request_id, set_request_id
+from common.logging_setup import configure_logging, get_logger
+
 from .sql_agent.database import (
     DATABASE_URL,
     _execute_sql,  # noqa: F401  (re-exported for tests)
@@ -54,6 +56,7 @@ from .sql_agent.llm_runtime_config import (
     init_llm_config,
     to_public_config,
 )
+from .sql_agent.observability import new_request_id, reset_request_id, set_request_id
 from .sql_agent.providers import (
     _PROVIDER_DISPLAY,
     KNOWN_PROVIDERS,
@@ -110,19 +113,8 @@ app = Flask(__name__, static_folder="static", static_url_path="/static")
 # Logging setup (before init_llm_config so early startup logs are formatted)
 # ---------------------------------------------------------------------------
 
-_log_level_name = os.environ.get("LOG_LEVEL", "INFO").upper()
-_log_level = getattr(logging, _log_level_name, logging.INFO)
-_log_handler = logging.StreamHandler()
-_log_handler.addFilter(RequestIdFilter())
-_log_handler.setFormatter(
-    logging.Formatter(
-        "%(asctime)s %(levelname)-5s [%(req_id)s] %(name)s — %(message)s",
-        defaults={"req_id": "-"},
-    )
-)
-logging.basicConfig(level=_log_level, handlers=[_log_handler], force=True)
-
-log = logging.getLogger(__name__)
+configure_logging(level=os.environ.get("LOG_LEVEL", "INFO"))
+log = get_logger(__name__)
 init_llm_config()
 
 
@@ -1048,10 +1040,10 @@ def player_stats_squad() -> Any:
     try:
         players = _fetch_players_from_db()
     except psycopg2.OperationalError as exc:
-        log.error("player_stats_squad: DB unavailable: %s", exc)
+        log.info("player_stats_squad_unavailable error={}", exc)
         return jsonify({"error": f"Database unavailable: {exc}"}), 503
     except psycopg2.Error as exc:
-        log.exception("player_stats_squad: DB query failed")
+        log.info("player_stats_squad_failed error={}", exc)
         return jsonify({"error": f"Database query failed: {exc}"}), 500
     latest = max(
         (p["scraped_at"] for p in players if p.get("scraped_at")),
@@ -1097,7 +1089,7 @@ def player_stats_player() -> Any:
     except requests.exceptions.Timeout:
         return jsonify({"error": "proleague-scraper timed out."}), 504
     except requests.exceptions.RequestException as exc:
-        log.exception("Player stats player proxy failed")
+        log.info("player_stats_player_proxy_failed error={}", exc)
         return jsonify({"error": f"Scraper request failed: {exc}"}), 502
 
 
@@ -1110,13 +1102,11 @@ def player_stats_image() -> Any:
     (legacy ``*.proleague.be`` URLs and ``statics-maker.llt-services.com`` from
     the current Pro League image pipeline).
     """
-    from urllib.parse import urlparse as _urlparse
-
     image_url = request.args.get("url", "").strip()
     if not image_url:
         return jsonify({"error": "url parameter is required"}), 400
 
-    parsed = _urlparse(image_url)
+    parsed = urlparse(image_url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         return jsonify({"error": "Invalid image URL"}), 400
 
@@ -1139,7 +1129,7 @@ def player_stats_image() -> Any:
         )
         img_resp.raise_for_status()
     except requests.exceptions.RequestException as exc:
-        log.warning("Image proxy failed for %s: %s", image_url, exc)
+        log.info("player_stats_image_proxy_failed url={} error={}", image_url, exc)
         return jsonify({"error": f"Failed to fetch image: {exc}"}), 502
 
     content_type = img_resp.headers.get("Content-Type", "image/jpeg")
@@ -1156,10 +1146,10 @@ def leaderboard_api() -> Any:
     except psycopg2.OperationalError as exc:
         if not DATABASE_URL:
             return jsonify({"error": "No database URL configured"}), 503
-        log.exception("Leaderboard query failed")
+        log.info("leaderboard_query_failed error={}", exc)
         return jsonify({"error": f"Leaderboard query failed: {exc}"}), 500
     except psycopg2.Error as exc:
-        log.exception("Leaderboard query failed")
+        log.info("leaderboard_query_failed error={}", exc)
         return jsonify({"error": f"Leaderboard query failed: {exc}"}), 500
 
     return jsonify(json.loads(json.dumps(payload, default=_json_default)))
@@ -1176,16 +1166,22 @@ def ask() -> Any:
             payload, status = parsed
             return jsonify(payload), status
 
-        log.info("POST /api/ask question=%.80s", parsed.question)
+        log.info("api_ask_received")
+        log.debug(
+            "task=ask_route previous=request_validated next=run_primary_agent question_preview={}",
+            parsed.question[:80],
+        )
         try:
             outcome = run_ask(parsed)
         except Exception as exc:  # noqa: BLE001
-            log.exception("Agent invocation failed")
+            log.info("api_ask_failed error={}", exc)
             return jsonify({"error": f"Agent invocation failed: {exc}"}), 500
 
         if isinstance(outcome, AgentFailure):
-            log.warning(
-                "POST /api/ask failed: phase=%s error=%.200s", outcome.phase, outcome.error
+            log.info(
+                "api_ask_agent_failure phase={} error={}",
+                outcome.phase,
+                outcome.error[:200],
             )
             payload, status = _agent_failure_to_response(
                 outcome, parsed.conversation_turn_count
@@ -1193,7 +1189,7 @@ def ask() -> Any:
             return jsonify(payload), status
 
         log.info(
-            "POST /api/ask completed: repaired=%s rows=%d",
+            "api_ask_completed repaired={} rows={}",
             outcome.repaired,
             len(outcome.rows),
         )
@@ -1218,15 +1214,23 @@ def ask_stream() -> Any:
         # ID.  The route handler must not reset the ContextVar before this runs.
         token = set_request_id(req_id)
         try:
-            log.info("POST /api/ask/stream question=%.80s", parsed.question)
+            log.info("api_ask_stream_received")
+            log.debug(
+                "task=stream_route previous=request_validated "
+                "next=run_stream_pipeline question_preview={}",
+                parsed.question[:80],
+            )
             for evt in run_ask_stream(parsed):
-                log.debug("SSE event: %s", evt.name)
+                log.debug(
+                    "task=sse_emit previous=stream_pipeline_running next=send_sse_frame event={}",
+                    evt.name,
+                )
                 yield _format_sse(evt.name, evt.data)
         except Exception as exc:  # noqa: BLE001
-            log.exception("Agent stream failed")
+            log.info("api_ask_stream_failed error={}", exc)
             yield _format_sse("error", {"message": f"Agent stream failed: {exc}"})
         finally:
-            log.info("stream closed")
+            log.info("api_ask_stream_closed")
             reset_request_id(token)
 
     headers = {

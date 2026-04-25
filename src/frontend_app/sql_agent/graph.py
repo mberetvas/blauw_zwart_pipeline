@@ -28,19 +28,22 @@ Public API
 
 ``run_ask_stream(request) -> Iterator[StreamEvent]``
     Streaming entrypoint used by ``POST /api/ask/stream``. Runs the agent
-    pipeline to completion (synchronously), then emits one ``meta`` event with
-    the SQL + data preview, the answer text as ``answer_delta`` event(s), and
-    a final ``done`` event. Errors mid-pipeline are surfaced as ``error``.
+    pipeline and emits ``progress`` events while it is running, then emits one
+    ``meta`` event with the SQL + data preview, the answer text as
+    ``answer_delta`` event(s), and a final ``done`` event. Errors mid-pipeline
+    are surfaced as ``error``.
 """
 
 from __future__ import annotations
 
 import json
-import logging
 import os
+import queue
+import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Iterator
+from datetime import datetime, timezone
+from typing import Any, Callable, Iterator
 
 from langchain.agents import create_agent
 from langchain_core.messages import (
@@ -51,9 +54,16 @@ from langchain_core.messages import (
 )
 from langgraph.errors import GraphRecursionError
 
+from common.logging_setup import get_logger
+
 from .database import _json_default
 from .llm_runtime_config import resolve_agent_model, resolve_repair_model
-from .observability import AgentObservabilityHandler
+from .observability import (
+    AgentObservabilityHandler,
+    get_request_id,
+    reset_request_id,
+    set_request_id,
+)
 from .prompts import (
     AGENT_SYSTEM_PROMPT,
     REPAIR_SYSTEM_PROMPT,
@@ -64,7 +74,7 @@ from .providers import _PROVIDER_DISPLAY, build_chat_model
 from .semantic_layer import build_answer_semantic_context, load_semantic_layer
 from .tools import ALL_TOOLS, REPAIR_TOOLS, execute_select
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def _max_iterations() -> int:
@@ -119,6 +129,110 @@ class StreamEvent:
 
     name: str
     data: dict[str, Any]
+
+
+ProgressSink = Callable[[dict[str, Any]], None]
+
+
+def _safe_emit_progress(
+    on_progress: ProgressSink | None,
+    *,
+    step_key: str,
+    phase: str,
+    model: str | None = None,
+    tool: str | None = None,
+    elapsed_ms: int | None = None,
+    error: str | None = None,
+) -> None:
+    if on_progress is None:
+        return
+    payload: dict[str, Any] = {
+        "step_key": step_key,
+        "phase": phase,
+        "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    if model:
+        payload["model"] = model
+    if tool:
+        payload["tool"] = tool
+    if elapsed_ms is not None:
+        payload["elapsed_ms"] = elapsed_ms
+    if error:
+        payload["error"] = error
+    try:
+        on_progress(payload)
+    except Exception:
+        # Never break answer generation because of progress telemetry.
+        return
+
+
+def _user_progress(raw: dict[str, Any]) -> dict[str, Any]:
+    step = str(raw.get("step_key") or "progress")
+    phase = str(raw.get("phase") or "primary")
+    tool = str(raw.get("tool") or "")
+    model = str(raw.get("model") or "")
+    elapsed_ms = raw.get("elapsed_ms")
+
+    title = "Working on your question"
+    detail = "Running the analysis pipeline."
+
+    if step == "run_start":
+        title = "Warming up the clubhouse"
+        detail = "Preparing the model and semantic context."
+    elif step == "llm_start":
+        title = "Thinking through the strategy"
+        detail = (
+            f"Consulting the language model ({model})."
+            if model
+            else "Consulting the language model."
+        )
+    elif step == "llm_done":
+        title = "Got a planning update"
+        detail = (
+            f"Model response received in {elapsed_ms} ms."
+            if isinstance(elapsed_ms, int)
+            else "Model response received."
+        )
+    elif step == "tool_start":
+        if tool == "list_tables":
+            title = "Cleaning the attic"
+            detail = "Reviewing available tables."
+        elif tool == "describe_table":
+            title = "Opening labeled boxes"
+            detail = "Inspecting table columns."
+        elif tool == "sample_table":
+            title = "Peeking inside the cupboard"
+            detail = "Sampling rows to validate assumptions."
+        elif tool == "execute_select":
+            title = "Checking the records"
+            detail = "Running a read-only SQL query."
+        else:
+            title = "Using a data tool"
+            detail = f"Executing tool: {tool or 'unknown'}."
+    elif step == "tool_done":
+        title = "Tool step completed"
+        detail = (
+            f"{tool or 'Tool'} finished in {elapsed_ms} ms."
+            if isinstance(elapsed_ms, int)
+            else f"{tool or 'Tool'} finished."
+        )
+    elif step == "repair_start":
+        title = "Calling in a second opinion"
+        detail = "Switching to the repair pass to recover from a failed SQL attempt."
+    elif step == "finalizing":
+        title = "Putting the answer together"
+        detail = "Formatting the final response for streaming."
+    elif step in {"llm_error", "tool_error", "run_error"}:
+        title = "Hit a snag"
+        detail = str(raw.get("error") or "A step failed while processing your request.")
+
+    return {
+        "step_key": step,
+        "title": title,
+        "detail": detail,
+        "phase": phase,
+        "ts": raw.get("ts") or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -187,20 +301,22 @@ def _run_stage(
     user_prompt: str,
     max_iterations: int,
     stage_name: str = "primary",
+    on_progress: ProgressSink | None = None,
 ) -> list[BaseMessage]:
     """Invoke a create_agent stage and return its full message history."""
     recursion_limit = max_iterations * 2 + 5
     model_name = getattr(chat_model, "model", None) or getattr(
         chat_model, "model_name", "unknown"
     )
-    log.info(
-        "Stage start: stage=%s model=%s tools=%d max_iter=%d",
+    log.debug(
+        "task=stage_invoke previous=model_resolved next=agent_invoke "
+        "stage={} model={} tools={} max_iter={}",
         stage_name,
         model_name,
         len(tools),
         max_iterations,
     )
-    handler = AgentObservabilityHandler()
+    handler = AgentObservabilityHandler(progress_sink=on_progress, phase=stage_name)
     agent = create_agent(model=chat_model, tools=tools, system_prompt=system_prompt)
     t0 = time.perf_counter()
     try:
@@ -210,8 +326,8 @@ def _run_stage(
         )
     except GraphRecursionError:
         elapsed_ms = (time.perf_counter() - t0) * 1000
-        log.warning(
-            "Stage %s: iteration cap hit (recursion_limit=%d) after %.0f ms",
+        log.info(
+            "stage_iteration_cap stage={} recursion_limit={} elapsed_ms={:.0f}",
             stage_name,
             recursion_limit,
             elapsed_ms,
@@ -220,9 +336,14 @@ def _run_stage(
     elapsed_ms = (time.perf_counter() - t0) * 1000
     msgs = state.get("messages") if isinstance(state, dict) else None
     if not isinstance(msgs, list):
-        log.info("Stage %s done: %.0f ms, 0 messages", stage_name, elapsed_ms)
+        log.info("stage_complete stage={} elapsed_ms={:.0f} messages=0", stage_name, elapsed_ms)
         return []
-    log.info("Stage %s done: %.0f ms, %d messages", stage_name, elapsed_ms, len(msgs))
+    log.info(
+        "stage_complete stage={} elapsed_ms={:.0f} messages={}",
+        stage_name,
+        elapsed_ms,
+        len(msgs),
+    )
     return msgs
 
 
@@ -247,9 +368,15 @@ def _classify_outcome(
     return False, "no_sql", "execute_select returned an unexpected payload."
 
 
-def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
+def run_ask(
+    request: AgentRequest, *, on_progress: ProgressSink | None = None
+) -> AgentResult | AgentFailure:
     """Run the primary agent + (if needed) one-shot repair. Synchronous."""
-    log.info("run_ask start: question=%.80s", request.question)
+    log.debug(
+        "task=run_ask_start previous=request_received next=resolve_models question_preview={}",
+        request.question[:80],
+    )
+    _safe_emit_progress(on_progress, step_key="run_start", phase="primary")
     agent_model_id = resolve_agent_model(request.agent_model)
     repair_model_id = resolve_repair_model(request.repair_model)
 
@@ -257,7 +384,7 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
     try:
         layer = load_semantic_layer()
     except Exception as exc:
-        log.warning("semantic layer load failed (non-fatal): %s", exc)
+        log.info("semantic_layer_load_failed_non_fatal error={}", exc)
     answer_style_rules = (
         ((layer.get("answer_style") or {}).get("rules") or []) if isinstance(layer, dict) else []
     )
@@ -281,11 +408,10 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
             user_prompt=user_prompt,
             max_iterations=max_iter,
             stage_name="primary",
+            on_progress=on_progress,
         )
     except GraphRecursionError:
-        log.warning(
-            "run_ask failed: primary stage hit iteration cap (max_iter=%d)", max_iter
-        )
+        log.info("run_ask_primary_iteration_cap max_iter={}", max_iter)
         return AgentFailure(
             error=f"Primary agent exceeded iteration cap ({max_iter} iterations).",
             phase="iteration_cap",
@@ -295,7 +421,7 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
             notes=notes,
         )
     except Exception as exc:  # noqa: BLE001
-        log.exception("Primary agent invocation failed")
+        log.info("run_ask_primary_failed error={}", exc)
         return AgentFailure(
             error=str(exc),
             phase="execution",
@@ -307,7 +433,7 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
 
     parsed, raw_sql = _last_execute_select_result(primary_msgs)
     success, phase, err = _classify_outcome(parsed, raw_sql)
-    log.info("Primary stage complete: success=%s phase=%s", success, phase)
+    log.info("run_ask_primary_complete success={} phase={}", success, phase)
 
     if success:
         rows = list(parsed["rows"])  # type: ignore[index]
@@ -315,7 +441,7 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
         answer = _final_assistant_text(primary_msgs).strip()
         if not answer:
             answer = "_(The agent did not produce a natural-language answer.)_"
-        log.info("run_ask done: repaired=False rows=%d", len(rows))
+        log.info("run_ask_complete repaired={} rows={}", False, len(rows))
         return AgentResult(
             answer=answer,
             sql=sql_used,
@@ -328,7 +454,13 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
         )
 
     # --- Repair pass ----------------------------------------------------
-    log.info("Repair pass triggered: phase=%s", phase)
+    log.info("run_ask_repair_triggered phase={}", phase)
+    _safe_emit_progress(
+        on_progress,
+        step_key="repair_start",
+        phase="repair",
+        error=err,
+    )
     notes.append(
         f"Primary agent failed ({phase}); invoking repair pass with model {repair_model_id}."
     )
@@ -349,11 +481,10 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
             user_prompt=repair_user,
             max_iterations=repair_max_iter,
             stage_name="repair",
+            on_progress=on_progress,
         )
     except GraphRecursionError:
-        log.warning(
-            "run_ask failed: repair stage hit iteration cap (max_iter=%d)", repair_max_iter
-        )
+        log.info("run_ask_repair_iteration_cap max_iter={}", repair_max_iter)
         return AgentFailure(
             error=f"Repair agent exceeded iteration cap ({repair_max_iter} iterations).",
             phase="iteration_cap",
@@ -363,7 +494,7 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
             notes=notes,
         )
     except Exception as exc:  # noqa: BLE001
-        log.exception("Repair agent invocation failed")
+        log.info("run_ask_repair_failed error={}", exc)
         return AgentFailure(
             error=f"Repair pass failed: {exc}",
             phase="execution",
@@ -382,7 +513,7 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
             primary_msgs
         ).strip() or "_(No natural-language answer was produced.)_"
         notes.append("Repair pass succeeded.")
-        log.info("run_ask done: repaired=True rows=%d", len(rows))
+        log.info("run_ask_complete repaired={} rows={}", True, len(rows))
         return AgentResult(
             answer=answer,
             sql=sql_used,
@@ -395,7 +526,7 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
         )
 
     notes.append(f"Repair pass also failed ({phase_r}).")
-    log.error("run_ask failed: phase=%s error=%.200s", phase_r, err_r or "(none)")
+    log.info("run_ask_failed phase={} error={}", phase_r, (err_r or "(none)")[:200])
     return AgentFailure(
         error=err_r or "Repair pass produced no usable SQL.",
         phase=phase_r,
@@ -407,10 +538,11 @@ def run_ask(request: AgentRequest) -> AgentResult | AgentFailure:
 
 
 def run_ask_stream(request: AgentRequest) -> Iterator[StreamEvent]:
-    """Streaming entrypoint. Runs the agent synchronously then emits SSE events.
+    """Streaming entrypoint. Emits progress while the agent is running.
 
     Emits, in order:
 
+    - ``progress`` — ``{step_key, title, detail, phase, ts}``
     - ``meta`` — ``{sql, data_preview, trace_notes, repaired}``
     - one or more ``answer_delta`` — ``{text}`` (the answer split on paragraph
       boundaries to give a streaming feel without re-invoking the LLM)
@@ -418,7 +550,102 @@ def run_ask_stream(request: AgentRequest) -> Iterator[StreamEvent]:
 
     On failure: emits ``error`` and stops.
     """
-    outcome = run_ask(request)
+    progress_q: queue.Queue[dict[str, Any]] = queue.Queue()
+    outcome_box: dict[str, Any] = {}
+    done_evt = threading.Event()
+    req_id = get_request_id()
+
+    def on_progress(payload: dict[str, Any]) -> None:
+        progress_q.put(payload)
+
+    def _worker() -> None:
+        token = set_request_id(req_id)
+        try:
+            outcome_box["outcome"] = run_ask(request, on_progress=on_progress)
+        except Exception as exc:  # noqa: BLE001
+            outcome_box["error"] = exc
+            _safe_emit_progress(
+                on_progress,
+                step_key="run_error",
+                phase="final",
+                error=str(exc),
+            )
+        finally:
+            done_evt.set()
+            reset_request_id(token)
+
+    worker = threading.Thread(target=_worker, name="ask-stream-worker", daemon=True)
+    worker.start()
+
+    last_progress_sig: tuple[str, str, str, str] | None = None
+    last_progress_at = 0.0
+    throttle_seconds = 0.25
+
+    while True:
+        try:
+            raw = progress_q.get(timeout=0.1)
+            mapped = _user_progress(raw)
+            sig = (
+                str(mapped.get("step_key") or ""),
+                str(mapped.get("phase") or ""),
+                str(mapped.get("title") or ""),
+                str(mapped.get("detail") or ""),
+            )
+            now = time.monotonic()
+            if sig == last_progress_sig and (now - last_progress_at) < throttle_seconds:
+                continue
+            last_progress_sig = sig
+            last_progress_at = now
+            yield StreamEvent("progress", mapped)
+        except queue.Empty:
+            if done_evt.is_set():
+                break
+
+    while True:
+        try:
+            raw = progress_q.get_nowait()
+        except queue.Empty:
+            break
+        mapped = _user_progress(raw)
+        sig = (
+            str(mapped.get("step_key") or ""),
+            str(mapped.get("phase") or ""),
+            str(mapped.get("title") or ""),
+            str(mapped.get("detail") or ""),
+        )
+        if sig == last_progress_sig:
+            continue
+        last_progress_sig = sig
+        yield StreamEvent("progress", mapped)
+
+    if "error" in outcome_box:
+        exc = outcome_box["error"]
+        yield StreamEvent("error", {"message": f"Agent stream failed: {exc}"})
+        return
+
+    outcome = outcome_box.get("outcome")
+    if outcome is None:
+        yield StreamEvent("error", {"message": "Agent stream failed: missing outcome."})
+        return
+
+    _safe_emit_progress(on_progress, step_key="finalizing", phase="final")
+    while True:
+        try:
+            raw = progress_q.get_nowait()
+        except queue.Empty:
+            break
+        mapped = _user_progress(raw)
+        sig = (
+            str(mapped.get("step_key") or ""),
+            str(mapped.get("phase") or ""),
+            str(mapped.get("title") or ""),
+            str(mapped.get("detail") or ""),
+        )
+        if sig == last_progress_sig:
+            continue
+        last_progress_sig = sig
+        yield StreamEvent("progress", mapped)
+
     if isinstance(outcome, AgentFailure):
         yield StreamEvent(
             "error",

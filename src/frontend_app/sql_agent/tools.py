@@ -21,12 +21,14 @@ Read-only by construction
 from __future__ import annotations
 
 import json
-import logging
 import os
+import re
 import time
 from typing import Any
 
 from langchain_core.tools import tool
+
+from common.logging_setup import get_logger
 
 from .database import _execute_sql, _json_default, _run_read_query
 from .guardrails import _rewrite_layer_schema_qualifiers, _strip_fences, _validate_sql
@@ -38,14 +40,14 @@ try:
 except ImportError:  # pragma: no cover — yaml comes with the api extra
     yaml = None  # type: ignore[assignment]
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _MAX_TABLES_RETURNED = 200
 _MAX_COLUMNS_RETURNED = 300
 _MAX_SEARCH_RESULTS = 100
 _MAX_SAMPLE_ROWS = 10
 _DEFAULT_SAMPLE_ROWS = 5
-_VALID_IDENT = __import__("re").compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_VALID_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _dbt_schema() -> str:
@@ -164,7 +166,9 @@ def list_tables() -> str:
     layer is one of ``staging``, ``intermediate``, ``marts``, ``unspecified``.
     Always call this first when you need to discover what data is available.
     """
-    log.debug("list_tables called")
+    log.debug(
+        "task=list_tables previous=agent_requested_schema next=query_information_schema"
+    )
     try:
         rows = _list_relations()
     except Exception as exc:
@@ -183,7 +187,10 @@ def describe_table(table: str) -> str:
 
     Returns a JSON object with keys ``name``, ``description``, ``columns``.
     """
-    log.debug("describe_table called: table=%s", table)
+    log.debug(
+        "task=describe_table previous=table_selected next=query_column_metadata table={}",
+        table,
+    )
     try:
         validated = _ensure_known_table(table)
     except ValueError as exc:
@@ -236,7 +243,12 @@ def search_columns(pattern: str, limit: int = 20) -> str:
 
     Returns a JSON array of ``{table, column, data_type, description}``.
     """
-    log.debug("search_columns called: pattern=%s limit=%s", pattern, limit)
+    log.debug(
+        "task=search_columns previous=search_requested "
+        "next=query_information_schema pattern={} limit={}",
+        pattern,
+        limit,
+    )
     if not isinstance(pattern, str) or not pattern.strip():
         return json.dumps({"error": "pattern must be a non-empty string"})
     schema = _dbt_schema()
@@ -283,7 +295,11 @@ def sample_table(table: str, limit: int = _DEFAULT_SAMPLE_ROWS) -> str:
 
     Returns a JSON array of row objects.
     """
-    log.debug("sample_table called: table=%s limit=%s", table, limit)
+    log.debug(
+        "task=sample_table previous=table_selected next=fetch_preview_rows table={} limit={}",
+        table,
+        limit,
+    )
     try:
         validated = _ensure_known_table(table)
     except ValueError as exc:
@@ -311,7 +327,9 @@ def get_semantic_layer() -> str:
     Returns a JSON object (the parsed semantic layer YAML), or ``{}`` when no
     semantic layer file is configured.
     """
-    log.debug("get_semantic_layer called")
+    log.debug(
+        "task=get_semantic_layer previous=agent_requested_domain_rules next=load_semantic_yaml"
+    )
     try:
         data = load_semantic_layer()
     except Exception as exc:
@@ -342,25 +360,31 @@ def execute_select(sql: str) -> str:
             {"error": "sql must be a non-empty string", "phase": "validation"}
         )
     cleaned = _rewrite_layer_schema_qualifiers(_strip_fences(sql))
-    log.debug("execute_select: sql=%.200s", cleaned)
+    log.debug(
+        "task=execute_select_validate previous=sql_received next=run_guardrails sql_preview={}",
+        cleaned[:200],
+    )
     try:
         _validate_sql(cleaned)
     except ValueError as exc:
-        log.warning("execute_select validation failed: %s", exc)
+        log.info("execute_select_validation_failed error={}", exc)
         return json.dumps(
             {"error": str(exc), "phase": "validation", "sql": cleaned}
         )
-    log.debug("execute_select: validation passed")
+    log.debug(
+        "task=execute_select_run previous=validation_passed next=query_database sql_preview={}",
+        cleaned[:200],
+    )
     t0 = time.perf_counter()
     try:
         rows = _execute_sql(cleaned)
     except Exception as exc:
-        log.exception("execute_select runtime failure")
+        log.info("execute_select_runtime_failed error={}", exc)
         return json.dumps(
             {"error": str(exc), "phase": "execution", "sql": cleaned}
         )
     elapsed_ms = (time.perf_counter() - t0) * 1000
-    log.info("execute_select done: %d rows, %.0f ms", len(rows), elapsed_ms)
+    log.info("execute_select_complete rows={} elapsed_ms={:.0f}", len(rows), elapsed_ms)
     return json.dumps(
         {"rows": rows, "row_count": len(rows), "sql": cleaned},
         default=_json_default,
