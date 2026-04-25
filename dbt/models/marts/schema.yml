@@ -5,22 +5,22 @@ models:
     description: >
       Fan loyalty mart: one row per fan with lifetime spend and match-attendance
       metrics aggregated from all three event streams (merch_purchase,
-      retail_purchase, ticket_scan). Materialised as an incremental table:
-      on each dbt run only fans with new source events (ingested after
-      last_updated_at) are reprocessed; use `dbt run --full-refresh` to
-      rebuild from scratch. Use this table to answer questions such as
-      "Who are the top spenders?", "Which fans attend the most matches?",
-      "What is the most popular merchandise item?", or
-      "Which retail shop generates the most revenue?".
-      All monetary amounts are in euros (EUR).
+      retail_purchase, ticket_scan). Materialised as an incremental table: on
+      each dbt run only fans with new source events (ingested after
+      last_updated_at) are reprocessed; use `dbt run --full-refresh` to rebuild
+      from scratch. Use this table to answer questions such as "Who are the top
+      spenders?", "Which fans attend the most matches?", "What is the most
+      popular merchandise item?", or "Which retail shop generates the most
+      revenue?". All monetary amounts are in euros (EUR).
     config:
       materialized: table
-      tags: [mart, fan_loyalty]
+      tags: [ mart, fan_loyalty ]
     columns:
       - name: fan_id
         description: >
-          Unique synthetic fan identifier (e.g. "fan_00042"). Primary key of this
-          mart. Use this to count fans, rank them, or filter to a specific fan.
+          Unique synthetic fan identifier (e.g. "fan_00042"). Primary key of
+          this mart. Use this to count fans, rank them, or filter to a specific
+          fan.
         data_type: text
         tests:
           - not_null
@@ -36,8 +36,8 @@ models:
 
       - name: merch_total_spend
         description: >
-          Total euros spent on stadium merchandise across all matches.
-          Includes all items: scarves, shirts, posters, etc.
+          Total euros spent on stadium merchandise across all matches. Includes
+          all items: scarves, shirts, posters, etc.
         data_type: numeric
         tests:
           - not_null
@@ -72,15 +72,17 @@ models:
 
       - name: favourite_shop
         description: >
-          The retail shop where the fan shops most often: "jan_breydel_fan_shop",
-          "webshop", or "bruges_city_shop". NULL if no retail purchases.
+          The retail shop where the fan shops most often:
+          "jan_breydel_fan_shop", "webshop", or "bruges_city_shop". NULL if no
+          retail purchases.
         data_type: text
 
       - name: total_spend
         description: >
-          Combined lifetime spend in euros: merch_total_spend + retail_total_spend.
-          This is the best column for ranking fans by overall value or identifying
-          the biggest spenders. A higher value means a more engaged, high-value fan.
+          Combined lifetime spend in euros: merch_total_spend +
+          retail_total_spend. This is the best column for ranking fans by
+          overall value or identifying the biggest spenders. A higher value
+          means a more engaged, high-value fan.
         data_type: numeric
         tests:
           - not_null
@@ -110,20 +112,22 @@ models:
       - name: last_updated_at
         description: >
           Watermark: the maximum ingested_at timestamp across all source records
-          (merch_purchase, retail_purchase, match_events) for this fan.
-          Used internally by dbt to identify which fans need reprocessing on the
-          next incremental run. Not directly useful for end-user Q&A.
+          (merch_purchase, retail_purchase, match_events) for this fan. Used
+          internally by dbt to identify which fans need reprocessing on the next
+          incremental run. Not directly useful for end-user Q&A.
         data_type: timestamp with time zone
 
   - name: mart_player_season_summary
     description: >
-      Pro League player season summary mart: one row per player with flattened profile fields,
-      pivoted competition statistics (goals, assists, minutes, passing, duels, defensive and
-      goalkeeper metrics where present), and derived rates (per 90, pass accuracy, duel win %).
-      Built from int_player_profile and int_player_stat_lines. Prefer this table over raw JSON
-      staging for rankings, filters, and aggregates. Refreshed as a table on each dbt run.
+      Pro League player season summary mart: one row per player with flattened
+      profile fields, pivoted competition statistics (goals, assists, minutes,
+      passing, duels, defensive and goalkeeper metrics where present), and
+      derived rates (per 90, pass accuracy, duel win %). Built from
+      int_player_profile and int_player_stat_lines. Prefer this table over raw
+      JSON staging for rankings, filters, and aggregates. Refreshed as a table
+      on each dbt run.
     config:
-      tags: [mart, player_stats, proleague]
+      tags: [ mart, player_stats, proleague ]
     columns:
       - name: player_id
         description: Pro League site player identifier (primary key of this mart).
@@ -155,3 +159,79 @@ models:
         data_type: timestamp with time zone
         tests:
           - not_null
+      - name: games_over_45_minutes
+        data_type: numeric
+      - name: games_under_45_minutes
+        data_type: numeric
+      - name: goals_conceded_inside_box
+        data_type: numeric
+      - name: goals_conceded_outside_box
+        data_type: numeric
+      - name: times_tackled
+        data_type: numeric
+      - name: catches
+        data_type: numeric
+      - name: punches
+        data_type: numeric
+      - name: drops
+        data_type: numeric
+      - name: penalties_faced
+        data_type: numeric
+      - name: goals_from_inside_box
+        data_type: numeric
+      - name: goals_from_outside_box
+        data_type: numeric
+      - name: headed_goals
+        data_type: numeric
+      - name: left_foot_goals
+        data_type: numeric
+      - name: right_foot_goals
+        data_type: numeric
+      - name: penalty_goals
+        data_type: numeric
+      - name: winning_goal
+        data_type: numeric
+      - name: backward_passes
+        data_type: numeric
+      - name: through_balls
+        data_type: numeric
+      - name: successful_long_passes
+        data_type: numeric
+      - name: unsuccessful_long_passes
+        data_type: numeric
+      - name: successful_short_passes
+        data_type: numeric
+      - name: unsuccessful_short_passes
+        data_type: numeric
+      - name: total_losses_of_possession
+        data_type: numeric
+      - name: aerial_duels_lost
+        data_type: numeric
+      - name: ground_duels_lost
+        data_type: numeric
+      - name: straight_red_cards
+        data_type: numeric
+      - name: foul_attempted_tackle
+        data_type: numeric
+      - name: corners_won
+        data_type: numeric
+      - name: corners_taken
+        data_type: numeric
+      - name: successful_crosses_corners
+        data_type: numeric
+      - name: unsuccessful_crosses_corners
+        data_type: numeric
+      - name: successful_crosses_open_play
+        data_type: numeric
+      - name: unsuccessful_crosses_open_play
+        data_type: numeric
+      - name: blocked_shots
+        data_type: numeric
+      - name: successful_passes_own_half
+        data_type: numeric
+      - name: unsuccessful_passes_own_half
+        data_type: numeric
+      - name: successful_passes_opposition_half
+        data_type: numeric
+      - name: unsuccessful_passes_opposition_half
+        data_type: numeric

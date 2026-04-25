@@ -3,11 +3,11 @@ version: 2
 models:
   - name: int_player_profile
     description: >
-      One row per scraped player: roster metadata plus flattened biographical fields from the
-      profile JSON (height, weight, birth date, nationality, preferred foot). Feeds
-      mart_player_season_summary.
+      One row per scraped player: roster metadata plus flattened biographical
+      fields from the profile JSON (height, weight, birth date, nationality,
+      preferred foot). Feeds mart_player_season_summary.
     config:
-      tags: [intermediate, proleague, player_stats]
+      tags: [ intermediate, proleague, player_stats ]
     columns:
       - name: player_id
         data_type: text
@@ -29,10 +29,11 @@ models:
 
   - name: int_player_stat_lines
     description: >
-      Long-format competition stats: one row per player and stat key (from the stats JSON array).
-      Use for custom pivots, rare metrics, or goalkeeper-specific keys not present on the mart.
+      Long-format competition stats: one row per player and stat key (from the
+      stats JSON array). Use for custom pivots, rare metrics, or
+      goalkeeper-specific keys not present on the mart.
     config:
-      tags: [intermediate, proleague, player_stats]
+      tags: [ intermediate, proleague, player_stats ]
     columns:
       - name: player_id
         data_type: text
@@ -44,3 +45,18 @@ models:
           - not_null
       - name: stat_value
         data_type: numeric
+
+  - name: int_player_stats_pivoted
+    description: >
+      One row per player: wide pivot of every tracked stat key from
+      int_player_stat_lines. All stat columns are coalesced to 0 (no NULLs) and
+      derived rates (per-90, accuracy %) are computed here, returning 0 when the
+      denominator is 0. Feeds mart_player_season_summary.
+    config:
+      tags: [ intermediate, proleague, player_stats ]
+    columns:
+      - name: player_id
+        data_type: text
+        tests:
+          - not_null
+          - unique
