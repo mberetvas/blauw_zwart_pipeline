@@ -148,6 +148,9 @@ kafka-consume topic="fan_events":
 # Grant llm_reader SELECT on raw_data.player_stats.
 # Run once after `docker compose up -d` when the postgres-data volume pre-dates
 # 003_player_stats.sql (init scripts only execute on a fresh/empty volume).
+# NOTE: The raw_data schema and player_stats table are created by `proleague-scraper`
+# at startup via ensure_player_stats_table(). That service must have run at least once
+# before this recipe will succeed.
 # Safe to re-run — GRANT is idempotent.
 db-grant-player-stats:
     docker compose exec postgres psql -U postgres -d fan_pipeline -c "GRANT USAGE ON SCHEMA raw_data TO llm_reader; GRANT SELECT ON raw_data.player_stats TO llm_reader;"

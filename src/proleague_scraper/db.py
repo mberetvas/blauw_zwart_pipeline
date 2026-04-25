@@ -198,5 +198,5 @@ def count_players(conn: psycopg2.extensions.connection) -> int:
     """Return the number of rows currently in ``player_stats``."""
     _ensure_player_stats_once(conn)
     with conn.cursor() as cur:
-        cur.execute("SELECT COUNT(*) FROM player_stats")
+        cur.execute("SELECT COUNT(*) FROM raw_data.player_stats")
         return cur.fetchone()[0]

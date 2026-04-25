@@ -10,6 +10,23 @@ import asyncpg
 
 logger = logging.getLogger("fan_ingest.db")
 
+# Same DDL as docker/postgres/init/001_fan_events_ingested.sql — run at runtime so
+# existing DB volumes (created before raw_data schema) get the table without a manual migration.
+_ENSURE_FAN_EVENTS_SQL = """
+CREATE SCHEMA IF NOT EXISTS raw_data;
+CREATE TABLE IF NOT EXISTS raw_data.fan_events_ingested (
+    id               BIGSERIAL   PRIMARY KEY,
+    ingested_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    kafka_topic      TEXT        NOT NULL,
+    kafka_partition  INTEGER     NOT NULL CHECK (kafka_partition >= 0),
+    kafka_offset     BIGINT      NOT NULL,
+    event_type       TEXT        NOT NULL,
+    event_time       TIMESTAMPTZ,
+    payload_json     JSONB       NOT NULL,
+    CONSTRAINT fan_events_ingested_kafka_coord_uniq UNIQUE (kafka_topic, kafka_partition, kafka_offset)
+);
+"""
+
 INSERT_FAN_EVENT_SQL = """
 INSERT INTO raw_data.fan_events_ingested (
     kafka_topic, kafka_partition, kafka_offset, event_type, event_time, payload_json
@@ -20,7 +37,20 @@ RETURNING id
 
 
 async def create_pool(dsn: str, *, min_size: int = 1, max_size: int = 10) -> asyncpg.Pool:
-    return await asyncpg.create_pool(dsn, min_size=min_size, max_size=max_size)
+    pool = await asyncpg.create_pool(dsn, min_size=min_size, max_size=max_size)
+    await ensure_fan_events_table(pool)
+    return pool
+
+
+async def ensure_fan_events_table(pool: asyncpg.Pool) -> None:
+    """Create ``raw_data.fan_events_ingested`` if missing (idempotent).
+
+    Docker init only runs on an empty data directory; this covers upgraded volumes
+    that pre-date the ``raw_data`` schema move.
+    """
+    async with pool.acquire() as conn:
+        await conn.execute(_ENSURE_FAN_EVENTS_SQL)
+    logger.debug("ensure_fan_events_table: raw_data.fan_events_ingested ready")
 
 
 async def insert_fan_event_row(pool: asyncpg.Pool, row: dict[str, Any]) -> bool:

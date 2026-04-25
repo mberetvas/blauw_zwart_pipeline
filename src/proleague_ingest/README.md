@@ -22,7 +22,7 @@ Verify rows landed in Postgres:
 
 ```bash
 docker compose exec postgres sh -lc \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT player_id, name, scraped_at FROM player_stats ORDER BY name LIMIT 5;"'
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT player_id, name, scraped_at FROM raw_data.player_stats ORDER BY name LIMIT 5;"'
 ```
 
 ## Environment variables
