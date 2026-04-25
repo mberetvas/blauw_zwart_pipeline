@@ -15,24 +15,26 @@ subjects:
       Fan-level aggregates: total spend, merchandise spend, retail spend,
       matches attended, purchase counts, favourite merch item, favourite shop.
     prefer_event_tables_when: >
-      Event-level or row-level detail: individual transaction rows,
-      per-event timestamps, Kafka metadata (topic, partition, offset),
-      or match-level breakdown not available in the mart.
+      Event-level or row-level detail: individual transaction rows, per-event
+      timestamps, Kafka metadata (topic, partition, offset), or match-level
+      breakdown not available in the mart.
 
   - name: proleague_player
     primary_mart: mart_player_season_summary
     description: >
-      One row per Pro League player from the scraper (raw_data.player_stats → dbt staging and marts).
-      Prefer mart_player_season_summary for analysis: flattened profile fields, pivoted season
-      statistics, and derived rates (per 90, pass accuracy, duel win %). Use int_player_stat_lines
-      only when a stat key is needed that is not on the mart. Not for synthetic fan events.
+      One row per Pro League player from the scraper (raw_data.player_stats →
+      dbt staging and marts). Prefer mart_player_season_summary for analysis:
+      flattened profile fields, pivoted season statistics, and derived rates
+      (per 90, pass accuracy, duel win %). Use int_player_stat_lines only when a
+      stat key is needed that is not on the mart. Not for synthetic fan events.
     prefer_mart_when: >
-      Player-level KPIs and comparisons: goals, assists, minutes, appearances, passing and duel
-      metrics, goalkeeper saves when present, competition, nationality, pass_accuracy_pct,
-      goals_per_90, assists_per_90, scraped_at.
+      Player-level KPIs and comparisons: goals, assists, minutes, appearances,
+      passing and duel metrics, goalkeeper saves when present, competition,
+      nationality, pass_accuracy_pct, goals_per_90, assists_per_90, scraped_at.
     prefer_event_tables_when: >
-      Long-format stat lines, rare or GK-only keys not pivoted on the mart, or raw JSON inspection
-      — use int_player_stat_lines or stg_player_stats (profile/stats JSONB).
+      Long-format stat lines, rare or GK-only keys not pivoted on the mart, or
+      raw JSON inspection — use int_player_stat_lines or stg_player_stats
+      (profile/stats JSONB).
 
 # ---------------------------------------------------------------------------
 # Metrics: named, typed, with units — the canonical list for the LLM.
@@ -44,8 +46,8 @@ metrics:
     aggregation: sum
     unit: EUR
     description: >
-      Combined lifetime spend (merch_total_spend + retail_total_spend).
-      Best column for ranking fans by overall commercial value.
+      Combined lifetime spend (merch_total_spend + retail_total_spend). Best
+      column for ranking fans by overall commercial value.
 
   - name: merch_total_spend
     table: mart_fan_loyalty
@@ -69,7 +71,8 @@ metrics:
     aggregation: sum
     unit: matches
     description: >
-      Number of distinct matches the fan physically attended (ticket_scan events).
+      Number of distinct matches the fan physically attended (ticket_scan
+      events).
 
   - name: merch_purchase_count
     table: mart_fan_loyalty
@@ -91,7 +94,8 @@ metrics:
     aggregation: sum
     unit: goals
     description: >
-      Season goals per player row; sum across players for squad totals or filters (e.g. by competition).
+      Season goals per player row; sum across players for squad totals or
+      filters (e.g. by competition).
 
   - name: player_assists
     table: mart_player_season_summary
@@ -120,8 +124,9 @@ metrics:
     aggregation: avg
     unit: percent
     description: >
-      Derived successful passes divided by total passes (0–100). Average for group summaries;
-      for single players the row value is already the season rate.
+      Derived successful passes divided by total passes (0–100). Average for
+      group summaries; for single players the row value is already the season
+      rate.
 
   - name: player_goals_per_90
     table: mart_player_season_summary
@@ -153,16 +158,16 @@ dimensions:
       - retail_purchase
       - mart_fan_loyalty
     description: >
-      Retail shop name: jan_breydel_fan_shop, webshop, or bruges_city_shop.
-      In mart_fan_loyalty, see favourite_shop.
+      Retail shop name: jan_breydel_fan_shop, webshop, or bruges_city_shop. In
+      mart_fan_loyalty, see favourite_shop.
 
   - name: item
     tables:
       - merch_purchase
       - retail_purchase
     description: >
-      Purchased item (e.g. scarf, shirt, poster).
-      In mart_fan_loyalty, see favourite_merch_item and favourite_retail_item.
+      Purchased item (e.g. scarf, shirt, poster). In mart_fan_loyalty, see
+      favourite_merch_item and favourite_retail_item.
 
   - name: event_type
     tables:
@@ -204,7 +209,8 @@ dimensions:
       - int_player_profile
       - stg_player_stats
     description: >
-      Playing position labels from the scraper (columns position, field_position).
+      Playing position labels from the scraper (columns position,
+      field_position).
 
   - name: player_competition
     tables:
@@ -213,7 +219,8 @@ dimensions:
       - int_player_stat_lines
       - stg_player_stats
     description: >
-      Competition label for the stat row (e.g. Jupiler Pro League, Challenger Pro League). Column competition.
+      Competition label for the stat row (e.g. Jupiler Pro League, Challenger
+      Pro League). Column competition.
 
   - name: player_nationality
     tables:
@@ -224,7 +231,8 @@ dimensions:
     tables:
       - int_player_stat_lines
     description: >
-      Machine stat key from the scraper JSON (e.g. goals, totalPasses). Use with int_player_stat_lines.stat_value.
+      Machine stat key from the scraper JSON (e.g. goals, totalPasses). Use with
+      int_player_stat_lines.stat_value.
 
 # ---------------------------------------------------------------------------
 # Join paths: only pairs safe for llm_reader (same schema, FK relationship).
@@ -268,26 +276,28 @@ layering_rules:
 
   - id: staging_is_raw
     description: >
-      stg_fan_events_ingested is a raw staging pass-through. Avoid it
-      unless the question explicitly needs unparsed JSONB payload or Kafka
-      infrastructure fields (topic, partition, offset).
+      stg_fan_events_ingested is a raw staging pass-through. Avoid it unless the
+      question explicitly needs unparsed JSONB payload or Kafka infrastructure
+      fields (topic, partition, offset).
 
   - id: proleague_player_mart_first
     description: >
-      For Pro League squad or player statistics, prefer mart_player_season_summary: one row per
-      player with pivoted metrics and derived rates. Use int_player_stat_lines for long-format
-      analysis or stat keys not on the mart; use stg_player_stats only for raw JSONB (profile, stats).
-      Do not join to fan commerce tables unless the question explicitly links domains.
+      For Pro League squad or player statistics, prefer
+      mart_player_season_summary: one row per player with pivoted metrics and
+      derived rates. Use int_player_stat_lines for long-format analysis or stat
+      keys not on the mart; use stg_player_stats only for raw JSONB (profile,
+      stats). Do not join to fan commerce tables unless the question explicitly
+      links domains.
 
   - id: fan_leaderboard_and_points
     description: >
-      The public fan leaderboard (UI and GET /api/leaderboard) orders fans by
-      a composite score built from mart_fan_loyalty. It is not a stored column:
-      points = ROUND(1000 * matches_attended + total_spend + 5 * merch_purchase_count + 5 *
-      retail_purchase_count). Sort by points descending; ties break by
-      matches_attended DESC, then total_spend DESC,
-      then fan_id ASC. To reproduce rankings in SQL, compute that expression
-      per fan_id and apply the same ORDER BY.
+      The public fan leaderboard (UI and GET /api/leaderboard) orders fans by a
+      composite score built from mart_fan_loyalty. It is not a stored column:
+      points = ROUND(1000 * matches_attended + total_spend + 5 *
+      merch_purchase_count + 5 * retail_purchase_count). Sort by points
+      descending; ties break by matches_attended DESC, then total_spend DESC,
+      then fan_id ASC. To reproduce rankings in SQL, compute that expression per
+      fan_id and apply the same ORDER BY.
 
 # ---------------------------------------------------------------------------
 # Answer style: rules for the second-stage (NL answer) prompt.
@@ -298,10 +308,18 @@ answer_style:
   rules:
     - "State monetary values with the EUR unit, e.g. €42.50, not just 42.5."
     - "Round monetary values to 2 decimal places."
-    - "Fan leaderboard / loyalty points are not a mart column: each fan's score is ROUND(1000 * matches_attended + total_spend + 5 * merch_purchase_count + 5 * retail_purchase_count). Ranking tie-breakers: higher points, then more matches_attended, then higher total_spend, then lower fan_id."
+    - "Fan leaderboard / loyalty points are not a mart column: each fan's score
+      is ROUND(1000 * matches_attended + total_spend + 5 * merch_purchase_count
+      + 5 * retail_purchase_count). Ranking tie-breakers: higher points, then
+      more matches_attended, then higher total_spend, then lower fan_id."
     - "State count metrics (matches, transactions) as whole numbers."
-    - "If the query returned zero rows, say 'No data was found' — do not guess or hallucinate values."
+    - "If the query returned zero rows, say 'No data was found' — do not guess
+      or hallucinate values."
     - "Do not invent values not present in the data rows."
     - "Reference specific fan IDs or item names from the result when relevant."
-    - "Keep the answer to 1–3 sentences unless the question explicitly asks for a list."
-    - "Pro League player analytics: prefer mart_player_season_summary; cite player_id or name from results. For int_player_stat_lines, report stat_key and stat_value from rows returned. Do not invent stat lines or metrics not in the query output."
+    - "Keep the answer to 1–3 sentences unless the question explicitly asks for
+      a list."
+    - "Pro League player analytics: prefer mart_player_season_summary; cite
+      player_id or name from results. For int_player_stat_lines, report stat_key
+      and stat_value from rows returned. Do not invent stat lines or metrics not
+      in the query output."

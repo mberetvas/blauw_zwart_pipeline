@@ -1,312 +1,393 @@
 <!DOCTYPE html>
 <html class="dark" lang="en">
+
 <head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Player Stats Comparison — Club Brugge AI</title>
-<link href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,400;0,500;0,600;0,700;0,900;1,400&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<script id="tailwind-config">
-tailwind.config = {
-  darkMode: "class",
-  theme: {
-    extend: {
-      colors: {
-        "surface-container-low":     "#131b2e",
-        "surface-container":         "#171f33",
-        "surface-container-high":    "#222a3d",
-        "surface-container-highest": "#2d3449",
-        "surface-container-lowest":  "#060e20",
-        "surface-bright":            "#31394d",
-        "surface":                   "#0b1326",
-        "background":                "#0b1326",
-        "primary":                   "#b0c6ff",
-        "primary-container":         "#548dff",
-        "on-primary":                "#002d6e",
-        "on-primary-container":      "#002761",
-        "secondary-container":       "#3f465c",
-        "on-secondary-container":    "#adb4ce",
-        "on-surface":                "#dae2fd",
-        "on-surface-variant":        "#c2c6d8",
-        "outline":                   "#8c90a1",
-        "outline-variant":           "#414655",
-        "error":                     "#ffb4ab",
-        "surface-variant":           "#2d3449",
-        "secondary":                 "#bec6e0"
-      },
-      borderRadius: {
-        "DEFAULT": "0.125rem",
-        "lg": "0.25rem",
-        "xl": "0.5rem",
-        "2xl": "0.75rem",
-        "full": "9999px"
-      },
-      fontFamily: {
-        "headline": ["Chivo", "system-ui", "sans-serif"],
-        "body":     ["Source Sans 3", "system-ui", "sans-serif"],
-        "label":    ["Source Sans 3", "system-ui", "sans-serif"]
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Player Stats Comparison — Club Brugge AI</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Chivo:ital,wght@0,400;0,500;0,600;0,700;0,900;1,400&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700&display=swap"
+    rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+    rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface-container-low": "#131b2e",
+            "surface-container": "#171f33",
+            "surface-container-high": "#222a3d",
+            "surface-container-highest": "#2d3449",
+            "surface-container-lowest": "#060e20",
+            "surface-bright": "#31394d",
+            "surface": "#0b1326",
+            "background": "#0b1326",
+            "primary": "#b0c6ff",
+            "primary-container": "#548dff",
+            "on-primary": "#002d6e",
+            "on-primary-container": "#002761",
+            "secondary-container": "#3f465c",
+            "on-secondary-container": "#adb4ce",
+            "on-surface": "#dae2fd",
+            "on-surface-variant": "#c2c6d8",
+            "outline": "#8c90a1",
+            "outline-variant": "#414655",
+            "error": "#ffb4ab",
+            "surface-variant": "#2d3449",
+            "secondary": "#bec6e0"
+          },
+          borderRadius: {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "2xl": "0.75rem",
+            "full": "9999px"
+          },
+          fontFamily: {
+            "headline": ["Chivo", "system-ui", "sans-serif"],
+            "body": ["Source Sans 3", "system-ui", "sans-serif"],
+            "label": ["Source Sans 3", "system-ui", "sans-serif"]
+          }
+        }
       }
     }
-  }
-}
-</script>
-<style>
-  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #2d3449; border-radius: 10px; }
-  /* Stadium gradient for hero section */
-  .stadium-gradient {
-    background: linear-gradient(180deg, transparent 0%, #0b1326 100%);
-  }
-  /* Player image hover effect */
-  .player-img { filter: grayscale(30%) saturate(1.2); transition: filter .3s; }
-  .player-img:hover { filter: grayscale(0%) saturate(1.6); }
-  /* Stat bar container */
-  .stat-bar-track { height: 6px; background: #222a3d; border-radius: 9999px; overflow: hidden; }
-  .stat-bar-fill  { height: 100%; border-radius: 9999px; transition: width .8s cubic-bezier(.22,1,.36,1); }
-  /* Form badge */
-  .form-W { background: #166534; color: #86efac; }
-  .form-D { background: #854d0e; color: #fde68a; }
-  .form-L { background: #7f1d1d; color: #fca5a5; }
-  @media (prefers-reduced-motion: reduce) { .stat-bar-fill { transition: none; } }
-</style>
-<link rel="stylesheet" href="/static/sidebar-layout.css"/>
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+
+    ::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #2d3449;
+      border-radius: 10px;
+    }
+
+    /* Stadium gradient for hero section */
+    .stadium-gradient {
+      background: linear-gradient(180deg, transparent 0%, #0b1326 100%);
+    }
+
+    /* Player image hover effect */
+    .player-img {
+      filter: grayscale(30%) saturate(1.2);
+      transition: filter .3s;
+    }
+
+    .player-img:hover {
+      filter: grayscale(0%) saturate(1.6);
+    }
+
+    /* Stat bar container */
+    .stat-bar-track {
+      height: 6px;
+      background: #222a3d;
+      border-radius: 9999px;
+      overflow: hidden;
+    }
+
+    .stat-bar-fill {
+      height: 100%;
+      border-radius: 9999px;
+      transition: width .8s cubic-bezier(.22, 1, .36, 1);
+    }
+
+    /* Form badge */
+    .form-W {
+      background: #166534;
+      color: #86efac;
+    }
+
+    .form-D {
+      background: #854d0e;
+      color: #fde68a;
+    }
+
+    .form-L {
+      background: #7f1d1d;
+      color: #fca5a5;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .stat-bar-fill {
+        transition: none;
+      }
+    }
+  </style>
+  <link rel="stylesheet" href="/static/sidebar-layout.css" />
 </head>
+
 <body class="bg-surface text-on-surface font-body overflow-x-hidden min-h-screen">
 
-<!-- ── Top Navigation ─────────────────────────────────────────── -->
-<header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 bg-surface-container-low">
-  <div class="flex items-center gap-2 min-w-0">
-    <button type="button" id="sidebar-toggle"
-      class="hidden md:inline-flex shrink-0 items-center justify-center w-10 h-10 rounded-xl text-primary hover:bg-surface-container-highest transition-colors"
-      aria-controls="app-sidebar" aria-expanded="true" aria-label="Collapse navigation sidebar">
-      <span class="material-symbols-outlined text-2xl" id="sidebar-toggle-icon" aria-hidden="true">chevron_left</span>
-    </button>
-    <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline truncate">CLUB BRUGGE AI</div>
-  </div>
-  <nav class="hidden md:flex gap-8">
-    <a href="/" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Data Q&amp;A</a>
-    <a href="/player-stats" class="font-headline tracking-wide uppercase font-bold text-primary border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors" aria-current="page">Player Stats</a>
-    <a href="/leaderboard" class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Fan Leaderboard</a>
-  </nav>
-  <button class="material-symbols-outlined text-[#0572FF]" aria-label="Account">account_circle</button>
-</header>
-
-<div id="shell" data-sidebar="expanded">
-<script>
-(function () {
-  var sh = document.getElementById("shell");
-  if (!sh) return;
-  try {
-    if (localStorage.getItem("cb_chat_sidebar_collapsed") === "1") {
-      sh.setAttribute("data-sidebar", "collapsed");
-    }
-  } catch (_) {}
-})();
-</script>
-
-<!-- ── Sidebar (desktop) ──────────────────────────────────────── -->
-<aside id="app-sidebar"
-  class="fixed left-0 top-0 h-full w-64 bg-surface-container-low hidden md:flex flex-col py-8 px-4 gap-6 z-40 md:translate-x-0"
-  aria-label="Primary navigation">
-  <div class="mt-16 flex items-center gap-4 px-2">
-    <div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-primary">
-      <span class="material-symbols-outlined text-2xl" style="font-variation-settings:'FILL' 1">stadium</span>
-    </div>
-    <div>
-      <div class="font-headline font-bold text-on-surface text-base leading-tight">Jan Breydel</div>
-      <div class="text-xs text-primary opacity-80 uppercase tracking-widest">Player Analytics</div>
-    </div>
-  </div>
-  <nav class="flex flex-col gap-1 flex-1">
-    <a href="/" class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
-      <span class="material-symbols-outlined">chat</span>Chat with AI
-    </a>
-  </nav>
-  <div class="flex flex-col gap-1 mt-6 pt-1">
-    <a href="/settings" class="flex items-center gap-3 text-on-surface opacity-40 px-4 py-2 hover:opacity-80 transition-opacity text-xs font-medium">
-      <span class="material-symbols-outlined text-sm">settings</span>Club Settings
-    </a>
-    <a href="#" class="flex items-center gap-3 text-on-surface opacity-40 px-4 py-2 hover:opacity-80 transition-opacity text-xs font-medium">
-      <span class="material-symbols-outlined text-sm">help</span>Help
-    </a>
-  </div>
-</aside>
-
-<!-- ── Main Content ───────────────────────────────────────────── -->
-<div class="shell-main ml-0 md:ml-64 pt-[72px] min-h-screen pb-20 md:pb-8 transition-[margin-left] duration-200 ease-out">
-  <main class="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-14">
-
-    <!-- ── Page header ─────────────────────────────────────────── -->
-    <div class="mb-12 md:mb-14 flex flex-col sm:flex-row sm:items-end gap-5 sm:gap-6">
-      <div>
-        <p class="text-xs font-bold tracking-[0.25em] text-primary uppercase mb-2 font-headline">Performance Center</p>
-        <h1 class="font-headline text-5xl md:text-6xl font-black italic tracking-tighter uppercase text-on-surface leading-none">
-          Player<br>Stats
-        </h1>
-      </div>
-      <div class="sm:ml-auto flex gap-3 items-center flex-wrap">
-        <span id="live-badge" class="hidden items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-xs font-bold uppercase tracking-widest text-primary">
-          <span class="material-symbols-outlined text-sm">calendar_today</span>
-          Daily Snapshot
-        </span>
-        <span id="offline-badge" class="hidden items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-xs font-bold uppercase tracking-widest text-error">
-          <span class="material-symbols-outlined text-sm">wifi_off</span>Data Unavailable
-        </span>
-        <a href="/" class="px-4 py-2 rounded-2xl bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors">Ask AI</a>
-      </div>
-    </div>
-
-    <div id="loading-state" class="py-24 flex flex-col items-center gap-4 text-on-surface-variant">
-      <span class="material-symbols-outlined text-5xl animate-spin" style="animation-duration:1.2s">autorenew</span>
-      <p class="text-sm font-medium uppercase tracking-widest">Loading squad data…</p>
-      <p class="text-xs opacity-60">Reading latest data from database</p>
-    </div>
-
-    <!-- ── HTTP / DB error state ──────────────────────────────── -->
-    <div id="error-state" class="hidden py-16 flex flex-col items-center gap-4 text-center">
-      <div class="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center">
-        <span class="material-symbols-outlined text-3xl text-error">error_outline</span>
-      </div>
-      <div>
-        <p class="font-headline font-bold text-on-surface text-lg">Data Unavailable</p>
-        <p id="error-msg" class="text-sm text-on-surface-variant mt-2 max-w-md mx-auto"></p>
-      </div>
-      <p class="text-xs text-outline max-w-sm">The player stats API or database could not be reached. Check <code class="bg-surface-container-highest px-1.5 py-0.5 rounded text-primary">docker compose logs frontend-app</code> for details.</p>
-      <button onclick="loadSquad()" class="mt-2 px-5 py-2.5 rounded-2xl bg-primary-container text-on-primary text-xs font-bold uppercase tracking-widest hover:bg-primary transition-colors">
-        Retry
+  <!-- ── Top Navigation ─────────────────────────────────────────── -->
+  <header class="fixed top-0 w-full z-50 flex justify-between items-center px-6 py-4 bg-surface-container-low">
+    <div class="flex items-center gap-2 min-w-0">
+      <button type="button" id="sidebar-toggle"
+        class="hidden md:inline-flex shrink-0 items-center justify-center w-10 h-10 rounded-xl text-primary hover:bg-surface-container-highest transition-colors"
+        aria-controls="app-sidebar" aria-expanded="true" aria-label="Collapse navigation sidebar">
+        <span class="material-symbols-outlined text-2xl" id="sidebar-toggle-icon" aria-hidden="true">chevron_left</span>
       </button>
+      <div class="text-xl font-black italic text-[#0572FF] tracking-tighter font-headline truncate">CLUB BRUGGE AI</div>
     </div>
+    <nav class="hidden md:flex gap-8">
+      <a href="/"
+        class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Data
+        Q&amp;A</a>
+      <a href="/player-stats"
+        class="font-headline tracking-wide uppercase font-bold text-primary border-b-2 border-[#0572FF] pb-1 hover:text-[#0572FF] transition-colors"
+        aria-current="page">Player Stats</a>
+      <a href="/leaderboard"
+        class="font-headline tracking-wide uppercase font-bold text-on-surface opacity-50 hover:opacity-100 hover:text-[#0572FF] transition-all">Fan
+        Leaderboard</a>
+    </nav>
+    <button class="material-symbols-outlined text-[#0572FF]" aria-label="Account">account_circle</button>
+  </header>
 
-    <!-- ── Empty pipeline state (API ok, no rows yet) ─────────── -->
-    <div id="empty-state" class="hidden py-16 flex flex-col items-center gap-4 text-center">
-      <div class="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center">
-        <span class="material-symbols-outlined text-3xl text-primary">schedule</span>
-      </div>
-      <div>
-        <p class="font-headline font-bold text-on-surface text-lg">Waiting for first daily run</p>
-        <p class="text-sm text-on-surface-variant mt-2 max-w-md mx-auto">
-          Player stats are ingested once per day via the scheduled pipeline.<br>
-          The database is empty until the first scrape cycle completes.
-        </p>
-      </div>
-      <p class="text-xs text-outline max-w-sm">
-        To trigger an immediate scrape, restart the scheduler:<br>
-        <code class="bg-surface-container-highest px-1.5 py-0.5 rounded text-primary">docker compose restart proleague-scheduler</code>
-      </p>
-      <button onclick="loadSquad()" class="mt-2 px-5 py-2.5 rounded-2xl bg-surface-container-high text-on-surface-variant text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors">
-        Check again
-      </button>
-    </div>
+  <div id="shell" data-sidebar="expanded">
+    <script>
+        (function () {
+          var sh = document.getElementById("shell");
+          if (!sh) return;
+          try {
+            if (localStorage.getItem("cb_chat_sidebar_collapsed") === "1") {
+              sh.setAttribute("data-sidebar", "collapsed");
+            }
+          } catch (_) { }
+        })();
+    </script>
 
-    <!-- ── Content (hidden until data loaded from DB) ───────── -->
-    <div id="live-content" class="hidden">
-
-      <!-- ── Player selector row ──────────────────────────────── -->
-      <div class="mb-8 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-        <div class="flex-1 flex flex-col gap-1">
-          <label class="text-xs font-bold uppercase tracking-widest text-primary font-headline">Player 1</label>
-          <select id="player1-select" class="bg-surface-container-high border border-outline-variant rounded-xl px-4 py-3 text-on-surface text-sm font-medium focus:outline-none focus:border-primary transition-colors"></select>
+    <!-- ── Sidebar (desktop) ──────────────────────────────────────── -->
+    <aside id="app-sidebar"
+      class="fixed left-0 top-0 h-full w-64 bg-surface-container-low hidden md:flex flex-col py-8 px-4 gap-6 z-40 md:translate-x-0"
+      aria-label="Primary navigation">
+      <div class="mt-16 flex items-center gap-4 px-2">
+        <div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-primary">
+          <span class="material-symbols-outlined text-2xl" style="font-variation-settings:'FILL' 1">stadium</span>
         </div>
-        <div class="sm:pt-6 text-outline font-bold text-xl">VS</div>
-        <div class="flex-1 flex flex-col gap-1">
-          <label class="text-xs font-bold uppercase tracking-widest text-secondary font-headline">Player 2</label>
-          <select id="player2-select" class="bg-surface-container-high border border-outline-variant rounded-xl px-4 py-3 text-on-surface text-sm font-medium focus:outline-none focus:border-primary transition-colors"></select>
+        <div>
+          <div class="font-headline font-bold text-on-surface text-base leading-tight">Jan Breydel</div>
+          <div class="text-xs text-primary opacity-80 uppercase tracking-widest">Player Analytics</div>
         </div>
       </div>
+      <nav class="flex flex-col gap-1 flex-1">
+        <a href="/"
+          class="flex items-center gap-3 text-on-surface opacity-50 px-4 py-3 hover:bg-surface-container-highest hover:opacity-100 transition-all rounded-2xl text-sm font-medium">
+          <span class="material-symbols-outlined">chat</span>Chat with AI
+        </a>
+      </nav>
+      <div class="flex flex-col gap-1 mt-6 pt-1">
+        <a href="/settings"
+          class="flex items-center gap-3 text-on-surface opacity-40 px-4 py-2 hover:opacity-80 transition-opacity text-xs font-medium">
+          <span class="material-symbols-outlined text-sm">settings</span>Club Settings
+        </a>
+        <a href="#"
+          class="flex items-center gap-3 text-on-surface opacity-40 px-4 py-2 hover:opacity-80 transition-opacity text-xs font-medium">
+          <span class="material-symbols-outlined text-sm">help</span>Help
+        </a>
+      </div>
+    </aside>
 
-      <!-- ── 3-col grid: Player 1 | Stat Duel | Player 2 ──────── -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+    <!-- ── Main Content ───────────────────────────────────────────── -->
+    <div
+      class="shell-main ml-0 md:ml-64 pt-[72px] min-h-screen pb-20 md:pb-8 transition-[margin-left] duration-200 ease-out">
+      <main class="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-14">
 
-        <!-- Player 1 card -->
-        <div class="lg:col-span-4" id="p1-card"></div>
-
-        <!-- Stat Duel -->
-        <div class="lg:col-span-4 flex flex-col gap-4">
-          <div class="bg-surface-container-high rounded-3xl p-6 flex-1">
-            <p class="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-6 font-headline text-center">Stat Comparison</p>
-            <div id="duel-rows" class="flex flex-col gap-5"></div>
-            <div id="duel-legend" class="flex justify-between mt-6 text-xs font-bold uppercase tracking-widest"></div>
+        <!-- ── Page header ─────────────────────────────────────────── -->
+        <div class="mb-12 md:mb-14 flex flex-col sm:flex-row sm:items-end gap-5 sm:gap-6">
+          <div>
+            <p class="text-xs font-bold tracking-[0.25em] text-primary uppercase mb-2 font-headline">Performance Center
+            </p>
+            <h1
+              class="font-headline text-5xl md:text-6xl font-black italic tracking-tighter uppercase text-on-surface leading-none">
+              Player<br>Stats
+            </h1>
+          </div>
+          <div class="sm:ml-auto flex gap-3 items-center flex-wrap">
+            <span id="live-badge"
+              class="hidden items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-xs font-bold uppercase tracking-widest text-primary">
+              <span class="material-symbols-outlined text-sm">calendar_today</span>
+              Daily Snapshot
+            </span>
+            <span id="offline-badge"
+              class="hidden items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-xs font-bold uppercase tracking-widest text-error">
+              <span class="material-symbols-outlined text-sm">wifi_off</span>Data Unavailable
+            </span>
+            <a href="/"
+              class="px-4 py-2 rounded-2xl bg-secondary-container text-on-secondary-container text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors">Ask
+              AI</a>
           </div>
         </div>
 
-        <!-- Player 2 card -->
-        <div class="lg:col-span-4" id="p2-card"></div>
-      </div><!-- /3-col grid -->
-
-      <!-- ── Full stats tables ──────────────────────────────────── -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div class="bg-surface-container-high rounded-3xl p-6">
-          <p id="p1-stats-title" class="text-xs font-bold uppercase tracking-widest text-primary font-headline mb-4">Player 1 Stats</p>
-          <div id="p1-stats-table" class="flex flex-col gap-2"></div>
+        <div id="loading-state" class="py-24 flex flex-col items-center gap-4 text-on-surface-variant">
+          <span class="material-symbols-outlined text-5xl animate-spin" style="animation-duration:1.2s">autorenew</span>
+          <p class="text-sm font-medium uppercase tracking-widest">Loading squad data…</p>
+          <p class="text-xs opacity-60">Reading latest data from database</p>
         </div>
-        <div class="bg-surface-container-high rounded-3xl p-6">
-          <p id="p2-stats-title" class="text-xs font-bold uppercase tracking-widest text-secondary font-headline mb-4">Player 2 Stats</p>
-          <div id="p2-stats-table" class="flex flex-col gap-2"></div>
+
+        <!-- ── HTTP / DB error state ──────────────────────────────── -->
+        <div id="error-state" class="hidden py-16 flex flex-col items-center gap-4 text-center">
+          <div class="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center">
+            <span class="material-symbols-outlined text-3xl text-error">error_outline</span>
+          </div>
+          <div>
+            <p class="font-headline font-bold text-on-surface text-lg">Data Unavailable</p>
+            <p id="error-msg" class="text-sm text-on-surface-variant mt-2 max-w-md mx-auto"></p>
+          </div>
+          <p class="text-xs text-outline max-w-sm">The player stats API or database could not be reached. Check <code
+              class="bg-surface-container-highest px-1.5 py-0.5 rounded text-primary">docker compose logs frontend-app</code>
+            for details.</p>
+          <button onclick="loadSquad()"
+            class="mt-2 px-5 py-2.5 rounded-2xl bg-primary-container text-on-primary text-xs font-bold uppercase tracking-widest hover:bg-primary transition-colors">
+            Retry
+          </button>
         </div>
-      </div>
 
-      <!-- ── Data attribution ───────────────────────────────────── -->
-      <p class="text-xs text-outline text-center pb-4">
-        Stats sourced from
-        <a href="https://www.proleague.be" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline">proleague.be</a>
-        · Daily snapshot · <span id="fetched-at"></span>
-      </p>
+        <!-- ── Empty pipeline state (API ok, no rows yet) ─────────── -->
+        <div id="empty-state" class="hidden py-16 flex flex-col items-center gap-4 text-center">
+          <div class="w-16 h-16 rounded-2xl bg-surface-container-high flex items-center justify-center">
+            <span class="material-symbols-outlined text-3xl text-primary">schedule</span>
+          </div>
+          <div>
+            <p class="font-headline font-bold text-on-surface text-lg">Waiting for first daily run</p>
+            <p class="text-sm text-on-surface-variant mt-2 max-w-md mx-auto">
+              Player stats are ingested once per day via the scheduled pipeline.<br>
+              The database is empty until the first scrape cycle completes.
+            </p>
+          </div>
+          <p class="text-xs text-outline max-w-sm">
+            To trigger an immediate scrape, restart the scheduler:<br>
+            <code
+              class="bg-surface-container-highest px-1.5 py-0.5 rounded text-primary">docker compose restart proleague-scheduler</code>
+          </p>
+          <button onclick="loadSquad()"
+            class="mt-2 px-5 py-2.5 rounded-2xl bg-surface-container-high text-on-surface-variant text-xs font-bold uppercase tracking-widest hover:bg-primary-container hover:text-on-primary transition-colors">
+            Check again
+          </button>
+        </div>
 
-    </div><!-- /live-content -->
+        <!-- ── Content (hidden until data loaded from DB) ───────── -->
+        <div id="live-content" class="hidden">
 
-  </main>
-</div>
-</div>
+          <!-- ── Player selector row ──────────────────────────────── -->
+          <div class="mb-8 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+            <div class="flex-1 flex flex-col gap-1">
+              <label class="text-xs font-bold uppercase tracking-widest text-primary font-headline">Player 1</label>
+              <select id="player1-select"
+                class="bg-surface-container-high border border-outline-variant rounded-xl px-4 py-3 text-on-surface text-sm font-medium focus:outline-none focus:border-primary transition-colors"></select>
+            </div>
+            <div class="sm:pt-6 text-outline font-bold text-xl">VS</div>
+            <div class="flex-1 flex flex-col gap-1">
+              <label class="text-xs font-bold uppercase tracking-widest text-secondary font-headline">Player 2</label>
+              <select id="player2-select"
+                class="bg-surface-container-high border border-outline-variant rounded-xl px-4 py-3 text-on-surface text-sm font-medium focus:outline-none focus:border-primary transition-colors"></select>
+            </div>
+          </div>
 
-<script src="/static/sidebar-layout.js" defer></script>
-<script>
-// ── Player Stats — DB-backed daily snapshot from /api/player-stats/squad ────
-// Data is ingested once per day via proleague-scheduler → Kafka → proleague-ingest.
-// The API reads raw_data.player_stats from Postgres; no synchronous scraping occurs
-// on page load.  Three distinct states: loading, empty-pipeline (0 rows), error.
+          <!-- ── 3-col grid: Player 1 | Stat Duel | Player 2 ──────── -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
 
-let squadData = null;
+            <!-- Player 1 card -->
+            <div class="lg:col-span-4" id="p1-card"></div>
 
-// Ordered list of stat keys shown in the duel comparison panel.
-// These keys are present for most outfield positions; goalkeeper-specific
-// keys (savesMade, cleansheets) are included and silently skipped when 0.
-const DUEL_STAT_KEYS = [
-  { key: 'goals',                    label: 'Goals' },
-  { key: 'assists',                  label: 'Assists' },
-  { key: 'gamesPlayed',              label: 'Games' },
-  { key: 'timePlayed',               label: 'Minutes' },
-  { key: 'totalSuccessfulPasses',    label: 'Passes' },
-  { key: 'savesMade',                label: 'Saves' },
-];
+            <!-- Stat Duel -->
+            <div class="lg:col-span-4 flex flex-col gap-4">
+              <div class="bg-surface-container-high rounded-3xl p-6 flex-1">
+                <p class="text-xs font-bold tracking-[0.2em] text-primary uppercase mb-6 font-headline text-center">Stat
+                  Comparison</p>
+                <div id="duel-rows" class="flex flex-col gap-5"></div>
+                <div id="duel-legend" class="flex justify-between mt-6 text-xs font-bold uppercase tracking-widest">
+                </div>
+              </div>
+            </div>
 
-function getStatValue(player, key) {
-  if (!player || !player.stats) return 0;
-  const entry = player.stats.find(s => s.key === key);
-  return entry ? (entry.value || 0) : 0;
-}
+            <!-- Player 2 card -->
+            <div class="lg:col-span-4" id="p2-card"></div>
+          </div><!-- /3-col grid -->
 
-function buildPlayerCard(player, accentClass, badgeClass) {
-  if (!player) return '<div class="rounded-3xl bg-surface-container-high p-8 text-center text-outline">No player selected</div>';
-  const nameParts = (player.name || '').split(' ');
-  const firstName = nameParts.slice(0, -1).join(' ') || nameParts[0] || '';
-  const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
-  const pos = player.position || player.field_position || '—';
-  const shirt = player.shirt_number != null ? `#${player.shirt_number}` : '';
-  const goals = getStatValue(player, 'goals');
-  const assists = getStatValue(player, 'assists');
-  const passes = getStatValue(player, 'totalSuccessfulPasses');
-  const games = getStatValue(player, 'gamesPlayed');
-  const imgUrl = player.image_url || '';
-  // Route through server-side proxy to avoid hotlink/CORS blocking by proleague.be CDN.
-  const imgSrc = imgUrl ? `/api/player-stats/image?url=${encodeURIComponent(imgUrl)}` : '';
-  const imgTag = imgSrc
-    ? `<img src="${imgSrc}" alt="${player.name}" class="player-img w-full h-full object-cover object-top" onerror="this.parentElement.style.background='#222a3d'"/>`
-    : '';
+          <!-- ── Full stats tables ──────────────────────────────────── -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-surface-container-high rounded-3xl p-6">
+              <p id="p1-stats-title"
+                class="text-xs font-bold uppercase tracking-widest text-primary font-headline mb-4">Player 1 Stats</p>
+              <div id="p1-stats-table" class="flex flex-col gap-2"></div>
+            </div>
+            <div class="bg-surface-container-high rounded-3xl p-6">
+              <p id="p2-stats-title"
+                class="text-xs font-bold uppercase tracking-widest text-secondary font-headline mb-4">Player 2 Stats</p>
+              <div id="p2-stats-table" class="flex flex-col gap-2"></div>
+            </div>
+          </div>
 
-  return `
+          <!-- ── Data attribution ───────────────────────────────────── -->
+          <p class="text-xs text-outline text-center pb-4">
+            Stats sourced from
+            <a href="https://www.proleague.be" target="_blank" rel="noopener noreferrer"
+              class="text-primary hover:underline">proleague.be</a>
+            · Daily snapshot · <span id="fetched-at"></span>
+          </p>
+
+        </div><!-- /live-content -->
+
+      </main>
+    </div>
+  </div>
+
+  <script src="/static/sidebar-layout.js" defer></script>
+  <script>
+    // ── Player Stats — DB-backed daily snapshot from /api/player-stats/squad ────
+    // Data is ingested once per day via proleague-scheduler → Kafka → proleague-ingest.
+    // The API reads raw_data.player_stats from Postgres; no synchronous scraping occurs
+    // on page load.  Three distinct states: loading, empty-pipeline (0 rows), error.
+
+    let squadData = null;
+
+    // Ordered list of stat keys shown in the duel comparison panel.
+    // These keys are present for most outfield positions; goalkeeper-specific
+    // keys (savesMade, cleansheets) are included and silently skipped when 0.
+    const DUEL_STAT_KEYS = [
+      { key: 'goals', label: 'Goals' },
+      { key: 'assists', label: 'Assists' },
+      { key: 'gamesPlayed', label: 'Games' },
+      { key: 'timePlayed', label: 'Minutes' },
+      { key: 'totalSuccessfulPasses', label: 'Passes' },
+      { key: 'savesMade', label: 'Saves' },
+    ];
+
+    function getStatValue(player, key) {
+      if (!player || !player.stats) return 0;
+      const entry = player.stats.find(s => s.key === key);
+      return entry ? (entry.value || 0) : 0;
+    }
+
+    function buildPlayerCard(player, accentClass, badgeClass) {
+      if (!player) return '<div class="rounded-3xl bg-surface-container-high p-8 text-center text-outline">No player selected</div>';
+      const nameParts = (player.name || '').split(' ');
+      const firstName = nameParts.slice(0, -1).join(' ') || nameParts[0] || '';
+      const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
+      const pos = player.position || player.field_position || '—';
+      const shirt = player.shirt_number != null ? `#${player.shirt_number}` : '';
+      const goals = getStatValue(player, 'goals');
+      const assists = getStatValue(player, 'assists');
+      const passes = getStatValue(player, 'totalSuccessfulPasses');
+      const games = getStatValue(player, 'gamesPlayed');
+      const imgUrl = player.image_url || '';
+      // Route through server-side proxy to avoid hotlink/CORS blocking by proleague.be CDN.
+      const imgSrc = imgUrl ? `/api/player-stats/image?url=${encodeURIComponent(imgUrl)}` : '';
+      const imgTag = imgSrc
+        ? `<img src="${imgSrc}" alt="${player.name}" class="player-img w-full h-full object-cover object-top" onerror="this.parentElement.style.background='#222a3d'"/>`
+        : '';
+
+      return `
     <div class="rounded-3xl overflow-hidden bg-surface-container-high">
       <div class="relative aspect-[4/5] overflow-hidden bg-surface-container-highest">
         ${imgTag}
@@ -338,17 +419,17 @@ function buildPlayerCard(player, accentClass, badgeClass) {
         </div>
       </div>
     </div>`;
-}
+    }
 
-function buildDuelRows(p1, p2) {
-  if (!p1 || !p2) return '';
-  return DUEL_STAT_KEYS.map(({ key, label }) => {
-    const v1 = getStatValue(p1, key);
-    const v2 = getStatValue(p2, key);
-    const max = Math.max(v1, v2, 1);
-    const pct1 = Math.round((v1 / max) * 100);
-    const pct2 = Math.round((v2 / max) * 100);
-    return `
+    function buildDuelRows(p1, p2) {
+      if (!p1 || !p2) return '';
+      return DUEL_STAT_KEYS.map(({ key, label }) => {
+        const v1 = getStatValue(p1, key);
+        const v2 = getStatValue(p2, key);
+        const max = Math.max(v1, v2, 1);
+        const pct1 = Math.round((v1 / max) * 100);
+        const pct2 = Math.round((v2 / max) * 100);
+        return `
       <div>
         <div class="flex justify-between items-center mb-1.5">
           <span class="font-headline font-black text-on-surface text-lg leading-none">${v1}</span>
@@ -364,34 +445,34 @@ function buildDuelRows(p1, p2) {
           </div>
         </div>
       </div>`;
-  }).join('');
-}
+      }).join('');
+    }
 
-function buildStatsTable(player) {
-  if (!player || !player.stats || player.stats.length === 0) {
-    return '<p class="text-xs text-outline italic">No stats available</p>';
-  }
-  return player.stats.map(s => `
+    function buildStatsTable(player) {
+      if (!player || !player.stats || player.stats.length === 0) {
+        return '<p class="text-xs text-outline italic">No stats available</p>';
+      }
+      return player.stats.map(s => `
     <div class="flex justify-between items-center py-1.5 border-b border-outline-variant/30 last:border-0">
       <span class="text-xs text-on-surface-variant">${s.label}</span>
       <span class="font-headline font-black text-on-surface text-sm">${s.value}</span>
     </div>`).join('');
-}
+    }
 
-function renderComparison() {
-  if (!squadData) return;
-  const players = squadData.players.filter(p => !p.error);
-  const sel1 = document.getElementById('player1-select');
-  const sel2 = document.getElementById('player2-select');
-  const idx1 = parseInt(sel1.value, 10);
-  const idx2 = parseInt(sel2.value, 10);
-  const p1 = players[idx1];
-  const p2 = players[idx2];
+    function renderComparison() {
+      if (!squadData) return;
+      const players = squadData.players.filter(p => !p.error);
+      const sel1 = document.getElementById('player1-select');
+      const sel2 = document.getElementById('player2-select');
+      const idx1 = parseInt(sel1.value, 10);
+      const idx2 = parseInt(sel2.value, 10);
+      const p1 = players[idx1];
+      const p2 = players[idx2];
 
-  document.getElementById('p1-card').innerHTML = buildPlayerCard(p1, 'text-primary', 'bg-primary-container text-on-primary');
-  document.getElementById('p2-card').innerHTML = buildPlayerCard(p2, 'text-on-surface', 'bg-secondary-container text-on-secondary-container');
-  document.getElementById('duel-rows').innerHTML = buildDuelRows(p1, p2);
-  document.getElementById('duel-legend').innerHTML = `
+      document.getElementById('p1-card').innerHTML = buildPlayerCard(p1, 'text-primary', 'bg-primary-container text-on-primary');
+      document.getElementById('p2-card').innerHTML = buildPlayerCard(p2, 'text-on-surface', 'bg-secondary-container text-on-secondary-container');
+      document.getElementById('duel-rows').innerHTML = buildDuelRows(p1, p2);
+      document.getElementById('duel-legend').innerHTML = `
     <span class="flex items-center gap-1.5 text-primary">
       <span class="w-3 h-1.5 rounded-full bg-primary-container inline-block"></span>
       ${p1 ? p1.name.split(' ').pop() : '—'}
@@ -400,100 +481,105 @@ function renderComparison() {
       <span class="w-3 h-1.5 rounded-full bg-secondary-container inline-block"></span>
       ${p2 ? p2.name.split(' ').pop() : '—'}
     </span>`;
-  document.getElementById('p1-stats-title').textContent = (p1 ? p1.name : 'Player 1') + ' — All Stats';
-  document.getElementById('p2-stats-title').textContent = (p2 ? p2.name : 'Player 2') + ' — All Stats';
-  document.getElementById('p1-stats-table').innerHTML = buildStatsTable(p1);
-  document.getElementById('p2-stats-table').innerHTML = buildStatsTable(p2);
-}
-
-function populateSelectors(players) {
-  const sel1 = document.getElementById('player1-select');
-  const sel2 = document.getElementById('player2-select');
-  [sel1, sel2].forEach(sel => { sel.innerHTML = ''; });
-  players.forEach((p, i) => {
-    if (p.error) return;
-    const pos = p.position || p.field_position || '';
-    const label = `${p.name}${pos ? ' — ' + pos : ''}${p.shirt_number != null ? ' #' + p.shirt_number : ''}`;
-    [sel1, sel2].forEach(sel => {
-      const opt = document.createElement('option');
-      opt.value = i;
-      opt.textContent = label;
-      sel.appendChild(opt);
-    });
-  });
-  // Default: first two players
-  if (sel1.options.length > 1) sel2.value = sel2.options[1]?.value ?? sel2.options[0].value;
-  sel1.addEventListener('change', renderComparison);
-  sel2.addEventListener('change', renderComparison);
-}
-
-async function loadSquad() {
-  document.getElementById('loading-state').classList.remove('hidden');
-  document.getElementById('error-state').classList.add('hidden');
-  document.getElementById('empty-state').classList.add('hidden');
-  document.getElementById('live-content').classList.add('hidden');
-  document.getElementById('live-badge').classList.add('hidden');
-  document.getElementById('offline-badge').classList.add('hidden');
-
-  try {
-    const resp = await fetch('/api/player-stats/squad');
-    if (!resp.ok) {
-      const body = await resp.json().catch(() => ({}));
-      throw new Error(body.error || `HTTP ${resp.status}`);
-    }
-    squadData = await resp.json();
-    const players = (squadData.players || []).filter(p => !p.error);
-
-    if (players.length === 0) {
-      // API succeeded but the table is empty — daily pipeline hasn't run yet.
-      document.getElementById('loading-state').classList.add('hidden');
-      document.getElementById('empty-state').classList.remove('hidden');
-      document.getElementById('empty-state').classList.add('flex');
-      return;
+      document.getElementById('p1-stats-title').textContent = (p1 ? p1.name : 'Player 1') + ' — All Stats';
+      document.getElementById('p2-stats-title').textContent = (p2 ? p2.name : 'Player 2') + ' — All Stats';
+      document.getElementById('p1-stats-table').innerHTML = buildStatsTable(p1);
+      document.getElementById('p2-stats-table').innerHTML = buildStatsTable(p2);
     }
 
-    populateSelectors(players);
-    renderComparison();
-
-    if (squadData.fetched_at) {
-      const dt = new Date(squadData.fetched_at);
-      document.getElementById('fetched-at').textContent =
-        'Last updated ' + dt.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+    function populateSelectors(players) {
+      const sel1 = document.getElementById('player1-select');
+      const sel2 = document.getElementById('player2-select');
+      [sel1, sel2].forEach(sel => { sel.innerHTML = ''; });
+      players.forEach((p, i) => {
+        if (p.error) return;
+        const pos = p.position || p.field_position || '';
+        const label = `${p.name}${pos ? ' — ' + pos : ''}${p.shirt_number != null ? ' #' + p.shirt_number : ''}`;
+        [sel1, sel2].forEach(sel => {
+          const opt = document.createElement('option');
+          opt.value = i;
+          opt.textContent = label;
+          sel.appendChild(opt);
+        });
+      });
+      // Default: first two players
+      if (sel1.options.length > 1) sel2.value = sel2.options[1]?.value ?? sel2.options[0].value;
+      sel1.addEventListener('change', renderComparison);
+      sel2.addEventListener('change', renderComparison);
     }
 
-    document.getElementById('loading-state').classList.add('hidden');
-    document.getElementById('live-content').classList.remove('hidden');
-    document.getElementById('live-badge').classList.remove('hidden');
-    document.getElementById('live-badge').classList.add('flex');
-  } catch (err) {
-    console.error('Player stats fetch failed:', err);
-    document.getElementById('loading-state').classList.add('hidden');
-    document.getElementById('error-state').classList.remove('hidden');
-    document.getElementById('error-state').classList.add('flex');
-    document.getElementById('error-msg').textContent = err.message || 'Unknown error';
-    document.getElementById('offline-badge').classList.remove('hidden');
-    document.getElementById('offline-badge').classList.add('flex');
-  }
-}
+    async function loadSquad() {
+      document.getElementById('loading-state').classList.remove('hidden');
+      document.getElementById('error-state').classList.add('hidden');
+      document.getElementById('empty-state').classList.add('hidden');
+      document.getElementById('live-content').classList.add('hidden');
+      document.getElementById('live-badge').classList.add('hidden');
+      document.getElementById('offline-badge').classList.add('hidden');
 
-loadSquad();
-</script>
+      try {
+        const resp = await fetch('/api/player-stats/squad');
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => ({}));
+          throw new Error(body.error || `HTTP ${resp.status}`);
+        }
+        squadData = await resp.json();
+        const players = (squadData.players || []).filter(p => !p.error);
 
-<!-- ── Mobile Bottom Navigation ───────────────────────────────── -->
-<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-surface/80 backdrop-blur-xl z-50 md:hidden" aria-label="Mobile navigation">
-  <a href="/" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
-    <span class="material-symbols-outlined">forum</span>
-    <span class="text-xs uppercase font-bold tracking-widest">Chat</span>
-  </a>
-  <a href="/leaderboard" class="flex flex-col items-center gap-1 bg-[#0572FF] text-white rounded-xl p-2 scale-110">
-    <span class="material-symbols-outlined">leaderboard</span>
-    <span class="text-xs uppercase font-bold tracking-widest">Data</span>
-  </a>
-  <a href="/settings" class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
-    <span class="material-symbols-outlined">settings</span>
-    <span class="text-xs uppercase font-bold tracking-widest">Settings</span>
-  </a>
-</nav>
+        if (players.length === 0) {
+          // API succeeded but the table is empty — daily pipeline hasn't run yet.
+          document.getElementById('loading-state').classList.add('hidden');
+          document.getElementById('empty-state').classList.remove('hidden');
+          document.getElementById('empty-state').classList.add('flex');
+          return;
+        }
+
+        populateSelectors(players);
+        renderComparison();
+
+        if (squadData.fetched_at) {
+          const dt = new Date(squadData.fetched_at);
+          document.getElementById('fetched-at').textContent =
+            'Last updated ' + dt.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+        }
+
+        document.getElementById('loading-state').classList.add('hidden');
+        document.getElementById('live-content').classList.remove('hidden');
+        document.getElementById('live-badge').classList.remove('hidden');
+        document.getElementById('live-badge').classList.add('flex');
+      } catch (err) {
+        console.error('Player stats fetch failed:', err);
+        document.getElementById('loading-state').classList.add('hidden');
+        document.getElementById('error-state').classList.remove('hidden');
+        document.getElementById('error-state').classList.add('flex');
+        document.getElementById('error-msg').textContent = err.message || 'Unknown error';
+        document.getElementById('offline-badge').classList.remove('hidden');
+        document.getElementById('offline-badge').classList.add('flex');
+      }
+    }
+
+    loadSquad();
+  </script>
+
+  <!-- ── Mobile Bottom Navigation ───────────────────────────────── -->
+  <nav
+    class="fixed bottom-0 left-0 w-full flex justify-around items-center px-4 py-3 bg-surface/80 backdrop-blur-xl z-50 md:hidden"
+    aria-label="Mobile navigation">
+    <a href="/"
+      class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+      <span class="material-symbols-outlined">forum</span>
+      <span class="text-xs uppercase font-bold tracking-widest">Chat</span>
+    </a>
+    <a href="/leaderboard" class="flex flex-col items-center gap-1 bg-[#0572FF] text-white rounded-xl p-2 scale-110">
+      <span class="material-symbols-outlined">leaderboard</span>
+      <span class="text-xs uppercase font-bold tracking-widest">Data</span>
+    </a>
+    <a href="/settings"
+      class="flex flex-col items-center gap-1 text-on-surface opacity-40 p-2 hover:opacity-100 transition-opacity">
+      <span class="material-symbols-outlined">settings</span>
+      <span class="text-xs uppercase font-bold tracking-widest">Settings</span>
+    </a>
+  </nav>
 
 </body>
+
 </html>
