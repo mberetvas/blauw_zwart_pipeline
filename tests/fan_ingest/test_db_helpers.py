@@ -18,17 +18,20 @@ from fan_ingest import db as db_mod
 def test_create_pool_invokes_asyncpg_and_ensures_table(monkeypatch) -> None:
     pool = MagicMock()
     pool.acquire.return_value.__aenter__ = AsyncMock(
-        return_value=MagicMock(execute=AsyncMock(return_value=None))
-    )
+    conn = MagicMock()
+    conn.execute = AsyncMock(return_value=None)
+
+    pool = MagicMock()
+    pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
     pool.acquire.return_value.__aexit__ = AsyncMock(return_value=None)
 
-    async def fake_create_pool(dsn, min_size, max_size):
-        return pool
-
-    monkeypatch.setattr(db_mod.asyncpg, "create_pool", fake_create_pool)
+    create_pool_mock = AsyncMock(return_value=pool)
+    monkeypatch.setattr(db_mod.asyncpg, "create_pool", create_pool_mock)
 
     out = asyncio.run(db_mod.create_pool("postgresql://x/y", min_size=2, max_size=5))
     assert out is pool
+    create_pool_mock.assert_awaited_once_with("postgresql://x/y", min_size=2, max_size=5)
+    conn.execute.assert_awaited_once_with(db_mod._ENSURE_FAN_EVENTS_SQL)
 
 
 def test_ensure_fan_events_table_executes_ddl() -> None:
