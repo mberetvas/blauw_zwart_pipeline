@@ -349,12 +349,15 @@ def to_public_config() -> dict[str, Any]:
 
     resolved = resolve_agent_model()
     group = _infer_provider_group(resolved)
-    if group and group in mbp:
+    if group and group in mbp and mbp[group]:
         ui_provider = group
         ui_model = resolved if resolved in mbp[group] else mbp[group][0]
     else:
-        ui_provider = REQUIRED_PROVIDER_KEYS[0]
-        ui_model = mbp[ui_provider][0] if mbp.get(ui_provider) else ""
+        # Model is outside the grouped catalog (e.g. deepseek/...).
+        # Return empty strings so the UI defaults to "Server default" and does
+        # not accidentally override the server's configured model.
+        ui_provider = ""
+        ui_model = ""
 
     return {
         "openrouter_base_url": s["openrouter_base_url"],

@@ -275,6 +275,7 @@ tailwind.config = {
         <div id="llm-settings" class="flex items-center gap-3 flex-wrap mb-4">
           <span class="text-xs text-outline-variant font-medium tracking-widest uppercase select-none">model</span>
           <select id="provider-sel" aria-label="Model provider">
+            <option value="">Server default</option>
             <option value="google">Google</option>
             <option value="gpt">GPT</option>
             <option value="grok">Grok</option>
@@ -364,8 +365,15 @@ tailwind.config = {
   }
 
   function populateModelDropdown(provider) {
-    const models = _providerCatalog[provider] || [];
     modelEl.innerHTML = "";
+    if (!provider) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "Server default";
+      modelEl.appendChild(opt);
+      return;
+    }
+    const models = _providerCatalog[provider] || [];
     for (const m of models) {
       const opt = document.createElement("option");
       opt.value = m;
