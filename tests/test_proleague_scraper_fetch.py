@@ -80,7 +80,10 @@ def test_extract_next_data_returns_none_when_tag_missing() -> None:
 
 
 def test_extract_next_data_returns_none_on_invalid_json() -> None:
-    html = '<html><head><script id="__NEXT_DATA__" type="application/json">{not json}</script></head></html>'
+    html = (
+        '<html><head><script id="__NEXT_DATA__" type="application/json">'
+        "{not json}</script></head></html>"
+    )
     assert scraper_mod._extract_next_data(html) is None
 
 

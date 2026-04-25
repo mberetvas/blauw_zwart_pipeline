@@ -132,7 +132,9 @@ def _validate_optional_home_venue_metadata(doc: dict[str, Any]) -> dict[str, Any
         if not isinstance(pct, (int, float)) or isinstance(pct, bool):
             raise CalendarError("club_home_venue_metadata.reported_capacity_pct must be numeric")
         if pct < 0 or pct > 100:
-            raise CalendarError("club_home_venue_metadata.reported_capacity_pct must be between 0 and 100")
+            raise CalendarError(
+                "club_home_venue_metadata.reported_capacity_pct must be between 0 and 100"
+            )
         out[_DOC_HOME_VENUE_META_ROW_MAP["reported_capacity_pct"]] = float(pct)
 
     return out
@@ -183,7 +185,8 @@ def validate_and_parse_matches(doc: dict[str, Any]) -> list[dict[str, Any]]:
             raise CalendarError(f"match {mid!r}: home_away must be 'home' or 'away'")
         if ha == "home" and att > JAN_BREYDEL_MAX_CAPACITY:
             raise CalendarError(
-                f"match {mid!r}: home attendance {att} exceeds Jan Breydel capacity {JAN_BREYDEL_MAX_CAPACITY}"
+                f"match {mid!r}: home attendance {att} exceeds "
+                f"Jan Breydel capacity {JAN_BREYDEL_MAX_CAPACITY}"
             )
         try:
             ZoneInfo(str(row["timezone"]))
@@ -208,7 +211,8 @@ def validate_and_parse_matches(doc: dict[str, Any]) -> list[dict[str, Any]]:
         has_away_score = "away_score" in row
         if has_home_score != has_away_score:
             raise CalendarError(
-                f"match {mid!r}: home_score and away_score must either both be present or both be absent"
+                f"match {mid!r}: home_score and away_score must either "
+                "both be present or both be absent"
             )
         if has_home_score:
             _validate_non_negative_int(value=row["home_score"], field_name="home_score", mid=mid)
