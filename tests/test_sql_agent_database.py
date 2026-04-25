@@ -108,19 +108,19 @@ def test_run_read_query_with_params(db_module, monkeypatch: pytest.MonkeyPatch) 
     cur = _FakeCursor(rows=[], cols=["id"])
     conn = _FakeConn(cur)
 
-    captured: dict[str, Any] = {}
+    captured: list[tuple[str, Any]] = []
 
     def fake_execute(sql: str, params: Any = None) -> None:
         cur.executed.append(sql)
-        captured.setdefault("params", params)
+        captured.append((sql, params))
 
     cur.execute = fake_execute  # type: ignore[method-assign]
     monkeypatch.setattr(db_module.psycopg2, "connect", lambda url: conn)
 
     db_module._run_read_query("SELECT * FROM t WHERE id = %s", (5,))
-    assert captured["params"] is None or captured["params"] == (5,)
 
-
+    select_calls = [params for sql, params in captured if "SELECT * FROM t WHERE id = %s" in sql]
+    assert select_calls == [(5,)]
 def test_run_read_query_raises_when_no_url(db_module, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(db_module, "DATABASE_URL", "")
     with pytest.raises(db_module.psycopg2.OperationalError, match=r"No database URL"):
