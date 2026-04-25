@@ -203,17 +203,13 @@ class TestSlugAndId:
     def test_standard_url(self):
         from proleague_scraper.scraper import _slug_and_id_from_url
 
-        slug, pid = _slug_and_id_from_url(
-            "https://www.proleague.be/spillere/simon-mignolet-3219"
-        )
+        slug, pid = _slug_and_id_from_url("https://www.proleague.be/spillere/simon-mignolet-3219")
         assert slug == "simon-mignolet-3219"
         assert pid == "3219"
 
     def test_url_with_trailing_slash(self):
         from proleague_scraper.scraper import _slug_and_id_from_url
 
-        slug, pid = _slug_and_id_from_url(
-            "https://www.proleague.be/spillere/hans-vanaken-2959/"
-        )
+        slug, pid = _slug_and_id_from_url("https://www.proleague.be/spillere/hans-vanaken-2959/")
         assert slug == "hans-vanaken-2959"
         assert pid == "2959"

@@ -26,17 +26,11 @@ def test_dbt_models_dir_orders_staging_before_marts(tmp_path, monkeypatch) -> No
     (root / "staging").mkdir(parents=True)
     (root / "marts").mkdir(parents=True)
     (root / "staging" / "fan_schema.yaml").write_text(
-        "version: 2\n"
-        "models:\n"
-        "  - name: z_staging_last_alpha\n"
-        "    columns: []\n",
+        "version: 2\nmodels:\n  - name: z_staging_last_alpha\n    columns: []\n",
         encoding="utf-8",
     )
     (root / "marts" / "schema.yml").write_text(
-        "version: 2\n"
-        "models:\n"
-        "  - name: a_mart_first_alpha\n"
-        "    columns: []\n",
+        "version: 2\nmodels:\n  - name: a_mart_first_alpha\n    columns: []\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("DBT_MODELS_DIR", str(root))
@@ -101,10 +95,7 @@ def test_schema_context_overflow_error(tmp_path, monkeypatch) -> None:
     y = tmp_path / "marts" / "schema.yml"
     y.parent.mkdir(parents=True)
     y.write_text(
-        "version: 2\n"
-        "models:\n"
-        "  - name: x\n"
-        "    columns: []\n",
+        "version: 2\nmodels:\n  - name: x\n    columns: []\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("SCHEMA_FILE", str(y))
@@ -118,10 +109,7 @@ def test_schema_context_overflow_truncate(tmp_path, monkeypatch) -> None:
     y = tmp_path / "marts" / "schema.yml"
     y.parent.mkdir(parents=True)
     y.write_text(
-        "version: 2\n"
-        "models:\n"
-        "  - name: x\n"
-        "    columns: []\n",
+        "version: 2\nmodels:\n  - name: x\n    columns: []\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("SCHEMA_FILE", str(y))
@@ -135,11 +123,7 @@ def test_schema_context_overflow_truncate(tmp_path, monkeypatch) -> None:
 def test_single_schema_file_backward_compatible(tmp_path, monkeypatch) -> None:
     y = tmp_path / "only.yml"
     y.write_text(
-        "version: 2\n"
-        "models:\n"
-        "  - name: solo\n"
-        "    description: only\n"
-        "    columns: []\n",
+        "version: 2\nmodels:\n  - name: solo\n    description: only\n    columns: []\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("SCHEMA_FILE", str(y))

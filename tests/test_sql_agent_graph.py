@@ -31,9 +31,7 @@ def graph_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     schema_file = tmp_path / "schema.yml"
     schema_file.write_text(
-        yaml.dump(
-            {"models": [{"name": "mart_fan_loyalty", "columns": []}]}
-        ),
+        yaml.dump({"models": [{"name": "mart_fan_loyalty", "columns": []}]}),
         encoding="utf-8",
     )
     monkeypatch.setenv("SCHEMA_FILE", str(schema_file))
@@ -56,12 +54,14 @@ def graph_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SEMANTIC_LAYER_FILE", str(semantic_file))
 
     import frontend_app.sql_agent.llm_runtime_config as cfg
+
     importlib.reload(cfg)
     cfg.init_llm_config()
 
     import frontend_app.sql_agent.graph as graph
     import frontend_app.sql_agent.providers as providers
     import frontend_app.sql_agent.tools as tools
+
     importlib.reload(providers)
     importlib.reload(tools)
     importlib.reload(graph)

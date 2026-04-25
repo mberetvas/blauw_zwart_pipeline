@@ -50,9 +50,7 @@ def test_line_amount_from_jitter_matches_synthetic_for_same_draw() -> None:
             assert low == 1 and high == 99_999
             return u
 
-    assert line_amount_eur_from_jitter_int(name, u) == synthetic_line_amount_eur(
-        name, _RngOneInt()
-    )
+    assert line_amount_eur_from_jitter_int(name, u) == synthetic_line_amount_eur(name, _RngOneInt())
 
 
 def test_line_amount_from_jitter_int_rejects_out_of_range() -> None:

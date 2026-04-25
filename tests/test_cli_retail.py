@@ -32,9 +32,7 @@ def test_generate_retail_short_aliases_parse() -> None:
 
 
 def test_generate_events_short_aliases_parse() -> None:
-    ns = parse_args(
-        ["generate_events", "-c", "cal.json", "-s", "7", "-o", "out.ndjson"]
-    )
+    ns = parse_args(["generate_events", "-c", "cal.json", "-s", "7", "-o", "out.ndjson"])
     assert ns.calendar == "cal.json"
     assert ns.seed == 7
 
