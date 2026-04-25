@@ -23,7 +23,11 @@ CREATE TABLE IF NOT EXISTS raw_data.fan_events_ingested (
     event_type       TEXT        NOT NULL,
     event_time       TIMESTAMPTZ,
     payload_json     JSONB       NOT NULL,
-    CONSTRAINT fan_events_ingested_kafka_coord_uniq UNIQUE (kafka_topic, kafka_partition, kafka_offset)
+    CONSTRAINT fan_events_ingested_kafka_coord_uniq UNIQUE (
+        kafka_topic,
+        kafka_partition,
+        kafka_offset
+    )
 );
 """
 
