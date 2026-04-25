@@ -66,28 +66,18 @@ def test_run_consumer_processes_one_message_and_commits(
 
     # poll() returns: a real msg, then None to drain — but we'll trigger stop after first commit.
     poll_seq: list = [_msg(_envelope_bytes("alice"))]
+    # poll() returns the queued message once; after commit we explicitly stop
+    # the consumer by swapping poll.side_effect to raise KafkaException.
+    poll_seq: list = [_msg(_envelope_bytes("alice"))]
 
     def poll(timeout: float):
-        # Trigger graceful stop after we've consumed the queued message.
-        if not poll_seq:
-            # Re-enter the consumer's signal handler manually.
-            for call in (
-                consumer_mod.signal.signal.mock_calls
-                if hasattr(consumer_mod.signal.signal, "mock_calls")
-                else []
-            ):
-                pass
-            return None
         return poll_seq.pop(0)
 
     fake_consumer.poll.side_effect = poll
 
-    # The cleanest way to break the loop after one iteration is to flip the
-    # internal `stop` flag via a stubbed commit.
+    # Break the loop after the first successful commit by making the next poll
+    # raise, which exercises the consumer's shutdown path explicitly.
     def commit(msg, asynchronous):
-        # After committing, raise StopIteration via a sentinel that flows out
-        # cleanly: monkeypatch poll to return None forever, then trigger close
-        # by raising a KafkaException on next poll.
         from confluent_kafka import KafkaException
 
         fake_consumer.poll.side_effect = KafkaException("stop")
