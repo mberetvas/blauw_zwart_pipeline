@@ -405,7 +405,7 @@ def test_public_config_contains_models_by_provider(llm_app_module) -> None:
         assert isinstance(mbp[key], list) and len(mbp[key]) >= 1
 
     assert "ui_default_provider" in body
-    assert body["ui_default_provider"] in mbp
+    assert body["ui_default_provider"] == "" or body["ui_default_provider"] in mbp
     assert "ui_default_model" in body
 
 
@@ -431,6 +431,27 @@ def test_public_config_env_models_by_provider(
     assert len(mbp["grok"]) >= 1
     assert len(mbp["mistral"]) >= 1
     assert len(mbp["claude"]) >= 1
+
+
+def test_public_config_ui_defaults_server_default_for_uncatalogued_model(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the configured agent model is outside the provider catalog (e.g.
+    deepseek/...), ui_default_provider and ui_default_model must be empty
+    strings so the UI defaults to 'Server default' and does not accidentally
+    override the server's configured model on the first request."""
+    from frontend_app.sql_agent import llm_runtime_config as rc
+
+    monkeypatch.setenv("OPENROUTER_AGENT_MODEL", "deepseek/deepseek-v3.2")
+    rc.init_llm_config()
+
+    body = llm_app_module.app.test_client().get("/api/llm-config").get_json()
+    assert body["ui_default_provider"] == "", (
+        "expected empty string (Server default) for uncatalogued model prefix"
+    )
+    assert body["ui_default_model"] == "", (
+        "expected empty string (Server default) for uncatalogued model prefix"
+    )
 
 
 def test_chat_payload_only_sets_agent_model_not_repair(
