@@ -116,7 +116,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # ─── dbt scheduler (refresh fan + player marts with upstream parents on a fixed interval) ───
+  # ─── dbt scheduler (refresh all marts with upstream dependencies on a fixed interval) ───
   dbt-scheduler:
     build:
       context: .
@@ -132,9 +132,10 @@ services:
       # When DBT_FAIL_FAST=1 (default), the scheduler exits on dbt build failure so
       # `restart: unless-stopped` surfaces the issue instead of silently looping.
       DBT_FAIL_FAST: ${DBT_FAIL_FAST:-1}
-      # DBT_RUN_INTERVAL_MINUTES and DBT_RUN_SELECTOR are intentionally omitted here.
-      # They are injected directly from env_file (.env) to avoid Compose YAML interpolation
-      # picking up a stale host-shell value and silently overriding the .env setting.
+      # DBT_RUN_INTERVAL_MINUTES, DBT_RUN_SELECTOR, and DBT_RUN_POST_BUILD_SELECTOR
+      # are intentionally omitted here. They are injected directly from env_file (.env)
+      # to avoid Compose YAML interpolation picking up a stale host-shell value and
+      # silently overriding the .env setting.
       # See docker/dbt/run-loop.sh for defaults when the variables are unset.
     depends_on:
       postgres:

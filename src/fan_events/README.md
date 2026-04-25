@@ -1,6 +1,6 @@
 # fan_events
 
-Synthetic fan-event generator CLI for the MVP demo stack. This package owns the current event-generation surface: rolling batches (v1), calendar-driven match events (v2), retail events (v3), and the merged `stream` command.
+Synthetic fan-event generator CLI. This package owns the current event-generation surface: rolling batches (v1), calendar-driven match events (v2), retail events (v3), and the merged `stream` command.
 
 ## CLI help
 
@@ -12,8 +12,56 @@ From the repo root after `uv sync`, run **`uv run fan_events --help`** (or `uv r
 
 | | |
 | --- | --- |
-| **Full MVP** | From the repo root: **`docker compose up -d`** — the Compose **`producer`** service runs `fan_events stream` for you. See [`../../docker/README.md`](../../docker/README.md). |
+| **Full stack** | From the repo root: **`docker compose up -d`** — the Compose **`producer`** service runs `fan_events stream` for you. See [`../../docker/README.md`](../../docker/README.md). |
 | **This CLI on your machine** | **`uv run fan_events …`** (or `uv run python -m fan_events …`) after `uv sync` at the repo root — the supported **host** entrypoint for generating streams or NDJSON outside Compose. |
+
+## High-level flow
+
+```mermaid
+flowchart LR
+    %% ── inputs ───────────────────────────────────────────
+    seed(["--seed<br/><i>deterministic RNG</i>"])
+    cal[/"match_day.example.json<br/><i>--calendar</i>"/]
+
+    %% ── generators ───────────────────────────────────────
+    subgraph gen ["fan_events.generation"]
+        v1["v1<br/>rolling batch"]
+        v2["v2<br/>calendar match events"]
+        v3["v3<br/>retail events"]
+        orch["orchestrator<br/><i>merge + order by ts</i>"]
+    end
+
+    %% ── CLI subcommands ──────────────────────────────────
+    subgraph cli ["fan_events CLI"]
+        gen_events["generate_events"]
+        gen_retail["generate_retail"]
+        stream_cmd["stream"]
+    end
+
+    %% ── outputs ──────────────────────────────────────────
+    subgraph out ["Output sinks"]
+        stdout(["stdout<br/><i>NDJSON</i>"])
+        ndjson[/"NDJSON file<br/><i>-o/--output</i>"/]
+        kafka[("Kafka topic<br/><i>--kafka-topic</i>")]
+    end
+
+    %% ── wiring ───────────────────────────────────────────
+    seed --> gen_events & gen_retail & stream_cmd
+    cal --> gen_events & stream_cmd
+
+    gen_events --> v1 & v2
+    gen_retail --> v3
+    stream_cmd --> orch
+    v2 --> orch
+    v3 --> orch
+
+    v1 --> ndjson
+    v2 --> ndjson
+    v3 --> ndjson & stdout
+    orch --> stdout & ndjson & kafka
+```
+
+**Reading the diagram:** `generate_events` covers v1 rolling batches and v2 calendar batches; `generate_retail` covers v3 retail (file or `--stream` to stdout); `stream` merges v2 + v3 in timestamp order and can target stdout, a file, or Kafka (mutually exclusive with `-o/--output`).
 
 ## What lives here
 
@@ -31,11 +79,13 @@ The package is organized into layered subpackages with a strict import DAG: **co
 
 ### Subcommands
 
-| Subcommand | What it does | Deep doc |
-| --- | --- | --- |
-| `generate_events` | Rolling-window fan events (v1) or calendar-driven match events (v2) | [`specs/002-match-calendar-events/quickstart.md`](../../specs/002-match-calendar-events/quickstart.md) |
-| `generate_retail` | Retail-only NDJSON generation (v3) | [`specs/003-ndjson-v3-retail-sim/quickstart.md`](../../specs/003-ndjson-v3-retail-sim/quickstart.md) |
-| `stream` | Unified v2 + v3 stream to stdout, file, or Kafka | [`specs/004-unified-synthetic-stream/quickstart.md`](../../specs/004-unified-synthetic-stream/quickstart.md) |
+| Subcommand | What it does |
+| --- | --- |
+| `generate_events` | Rolling-window fan events (v1) or calendar-driven match events (v2) |
+| `generate_retail` | Retail-only NDJSON generation (v3) |
+| `stream` | Unified v2 + v3 stream to stdout, file, or Kafka |
+
+Run `uv run fan_events <subcommand> --help` for the full flag set and copy-paste examples.
 
 ## Install
 
@@ -80,6 +130,7 @@ If you prefer `just`, the repo already wraps the most common flows in [`justfile
 | `just stream-loop-merged` | Continuous merged loop to stdout |
 | `just stream-retail` | Retail-only stdout stream |
 | `just stream-kafka` | Host-side Kafka publishing via `fan_events stream` |
+| `just stream-kafka-live` | Host-side Kafka publishing with wall-clock pacing |
 | `just generate-events` | v1 rolling batch |
 | `just generate-calendar` | v2 calendar batch |
 | `just generate-retail` | v3 retail batch |
@@ -126,11 +177,4 @@ CLI flags override environment values when both are set.
 
 - [`../../README.md`](../../README.md) - repo-level overview and where this package fits
 - [`../../docker/README.md`](../../docker/README.md) - full local stack and operator commands
-- [`../../specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md`](../../specs/001-synthetic-fan-events/contracts/fan-events-ndjson-v1.md) - normative v1 contract
-- [`../../specs/002-match-calendar-events/quickstart.md`](../../specs/002-match-calendar-events/quickstart.md) - calendar-driven quickstart
-- [`../../specs/003-ndjson-v3-retail-sim/quickstart.md`](../../specs/003-ndjson-v3-retail-sim/quickstart.md) - retail quickstart
-- [`../../specs/004-unified-synthetic-stream/quickstart.md`](../../specs/004-unified-synthetic-stream/quickstart.md) - merged stream quickstart
-- [`../../specs/006-stream-three-event-kinds/contracts/cli-match-day-flags-006.md`](../../specs/006-stream-three-event-kinds/contracts/cli-match-day-flags-006.md) - match-day retail tuning flags
-- [`../../specs/006-stream-three-event-kinds/contracts/cli-stream-006-supplement.md`](../../specs/006-stream-three-event-kinds/contracts/cli-stream-006-supplement.md) - stream duration and `t0` semantics
-
-The historical quickstart at `specs/001-synthetic-fan-events/quickstart.md` predates the consolidated `fan_events` CLI. Use the commands in this README and the newer quickstarts above for current usage.
+- [`../fan_ingest/README.md`](../fan_ingest/README.md) - downstream Kafka → Postgres consumer for the `fan_events` topic

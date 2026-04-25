@@ -1,6 +1,6 @@
 # proleague_scraper
 
-Pro League squad scraper package for the MVP player-stats pipeline. In the local stack it is used in two ways: as the `proleague-scheduler` service that scrapes Club Brugge player data and publishes Kafka messages, and as the `proleague-scraper` service that exposes a small internal HTTP read layer.
+Pro League squad scraper package for the player-stats pipeline. In the local stack it is used in two ways: as the `proleague-scheduler` service that scrapes Club Brugge player data and publishes Kafka messages, and as the `proleague-scraper` service that exposes a small internal HTTP read layer.
 
 ## How to run (at a glance)
 
@@ -37,14 +37,46 @@ docker compose restart proleague-scheduler
 
 Normal browser users do not talk to this service directly. The host-facing entrypoint is the `frontend_app` player-stats page at <http://localhost:8080/player-stats>.
 
-## Data flow
+## High-level flow
 
-```text
-proleague-scheduler -> Kafka topic player_stats -> proleague-ingest -> Postgres raw_data.player_stats
-                                                           |
-                                                           +-> proleague-scraper /squad reads cached rows
-                                                           +-> frontend_app /api/player-stats/* serves host-facing routes
+```mermaid
+flowchart LR
+    proleague_be[("proleague.be")]
+
+    subgraph scheduler_svc ["proleague-scheduler"]
+        scheduler["Scheduler<br/><i>SCRAPER_RUN_ON_STARTUP + interval</i>"]
+        fetcher["scrape_squad()<br/><i>live HTTP fetch</i>"]
+    end
+
+    subgraph kafka ["Kafka"]
+        topic[("player_stats topic")]
+    end
+
+    ingest["proleague-ingest<br/><i>Kafka → Postgres</i>"]
+
+    subgraph pg ["Postgres"]
+        table[("raw_data.player_stats")]
+    end
+
+    subgraph scraper_svc ["proleague-scraper :8001"]
+        api_squad["GET /squad<br/><i>reads Postgres cache</i>"]
+        api_player["GET /player<br/><i>live HTTP fetch</i>"]
+    end
+
+    frontend["frontend-app<br/><i>:8080</i>"]
+
+    scheduler --> fetcher
+    fetcher -. "HTTP scrape" .-> proleague_be
+    fetcher -- "publish" --> topic
+    topic -- "consume" --> ingest
+    ingest -- "UPSERT" --> table
+    table -- "SELECT" --> api_squad
+    api_player -. "live fetch" .-> proleague_be
+    api_squad --> frontend
+    api_player -. "proxied via frontend-app" .-> frontend
 ```
+
+**Note:** `Dockerfile.scraper` defaults CMD to `python -m proleague_scraper.app` (the HTTP layer). The `proleague-scheduler` Compose service overrides this with `command: ["python", "-m", "proleague_scraper.scheduler"]`.
 
 ## Environment variables
 
@@ -57,6 +89,7 @@ proleague-scheduler -> Kafka topic player_stats -> proleague-ingest -> Postgres 
 | `SCRAPER_RUN_ON_STARTUP` | `1` | `1` runs immediately on container start; `0` waits one interval first |
 | `DATABASE_URL` | unset | HTTP read layer DB cache for `/squad` |
 | `PORT` | `8001` | Direct app port when running `python -m proleague_scraper.app` manually |
+| `LOG_LEVEL` | `INFO` | Log verbosity for both the scheduler and HTTP app (`DEBUG`, `INFO`, `WARNING`) |
 
 ## Internal routes
 
@@ -66,7 +99,7 @@ The Compose service is not published to the host by default; these are internal 
 | --- | --- |
 | `GET /health` | Basic health check |
 | `GET /squad?url=<optional>` | Reads cached squad data from Postgres; returns `players: []` until the first scrape is ingested |
-| `GET /player?url=<profile_url>` | Live fetch of one player profile page |
+| `GET /player?url=<profile_url>` | Live fetch of one player profile page (callable directly via API; not exposed in the UI) |
 
 ## Troubleshooting
 
@@ -83,4 +116,3 @@ The Compose service is not published to the host by default; these are internal 
 - [`../proleague_ingest/README.md`](../proleague_ingest/README.md) - consumer and table docs for `player_stats`
 - [`../frontend_app/README.md`](../frontend_app/README.md) - host-facing player-stats routes and UI
 - [`../../docker/README.md`](../../docker/README.md) - Compose services, env vars, and operator commands
-- [`../../specs/005-compose-kafka-pipeline/quickstart.md`](../../specs/005-compose-kafka-pipeline/quickstart.md) - full local stack walkthrough

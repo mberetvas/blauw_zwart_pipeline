@@ -2,6 +2,28 @@
 
 Kafka consumer that ingests synthetic fan events into Postgres.
 
+## High-level flow
+
+```mermaid
+flowchart LR
+    producer["fan_events producer<br/><i>NDJSON over Kafka</i>"]
+    subgraph kafka ["Kafka"]
+        topic[("fan_events topic")]
+    end
+    subgraph svc ["fan_ingest"]
+        consumer["Consumer<br/><i>group: fan-ingest-local</i>"]
+        runtime["Async runtime<br/><i>parse + insert</i>"]
+    end
+    subgraph pg ["Postgres"]
+        table[("raw_data.fan_events_ingested")]
+    end
+
+    producer -- "publish" --> topic
+    topic -- "poll" --> consumer
+    consumer --> runtime
+    runtime -- "INSERT (idempotent on Kafka coord)" --> table
+```
+
 ## How to run (at a glance)
 
 | | |
@@ -40,7 +62,7 @@ CLI flags take precedence over environment variables.
 
 ## What it writes
 
-`fan_ingest` persists the raw event stream into Postgres so downstream tools can model or inspect it. The deeper ingestion contract lives in [`specs/005-compose-kafka-pipeline/contracts/ingestion-persistence-v1.md`](../../specs/005-compose-kafka-pipeline/contracts/ingestion-persistence-v1.md).
+Rows land in **`raw_data.fan_events_ingested`** (created on startup if missing — same DDL as `docker/postgres/init/001_fan_events_ingested.sql`). Inserts are idempotent: a unique constraint on the Kafka coordinate (topic, partition, offset) means re-consumed messages are silently skipped.
 
 ## Troubleshooting
 
@@ -56,5 +78,3 @@ CLI flags take precedence over environment variables.
 - [`../../README.md`](../../README.md) - repo-level overview
 - [`../fan_events/README.md`](../fan_events/README.md) - producer-side docs for the `fan_events` topic
 - [`../../docker/README.md`](../../docker/README.md) - full stack, logs, and operator commands
-- [`../../specs/005-compose-kafka-pipeline/quickstart.md`](../../specs/005-compose-kafka-pipeline/quickstart.md) - Compose walkthrough
-- [`../../specs/005-compose-kafka-pipeline/contracts/ingestion-persistence-v1.md`](../../specs/005-compose-kafka-pipeline/contracts/ingestion-persistence-v1.md) - persistence contract

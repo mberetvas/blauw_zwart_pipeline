@@ -103,4 +103,5 @@ target-version = "py312"
 exclude = [".agents", ".cursor", ".git", ".specify", ".venv", "venv"]
 
 [tool.ruff.lint]
+exclude = ["*.ipynb"]
 select = ["E", "F", "I", "W"]

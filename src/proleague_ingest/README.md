@@ -4,6 +4,36 @@ Kafka consumer for the player-stats side of the MVP stack. It subscribes to the 
 
 This service is packaged by [`docker/Dockerfile.scraper-ingest`](../../docker/Dockerfile.scraper-ingest) with [`docker/requirements.scraper-ingest.txt`](../../docker/requirements.scraper-ingest.txt). Like `proleague_scraper`, it is Compose-first rather than part of the repo's `uv` extras.
 
+## High-level flow
+
+```mermaid
+flowchart LR
+    subgraph pl ["Pro League Pipeline"]
+        scheduler["proleague-scheduler<br/><i>daily scrape</i>"]
+        subgraph kafka ["Kafka"]
+            topic[("player_stats topic")]
+        end
+        subgraph svc ["proleague-ingest"]
+            consumer["Consumer<br/><i>group: scraper-ingest-local</i>"]
+            parse["Parse + validate<br/><i>_schema_version=1</i>"]
+            upsert["upsert_players()<br/><i>proleague_scraper.db</i>"]
+        end
+    end
+
+    subgraph pg ["Postgres"]
+        table[("raw_data.player_stats")]
+    end
+
+    downstream["frontend-app<br/><i>squad listing</i>"]
+
+    scheduler -- "publish" --> topic
+    topic -- "poll" --> consumer
+    consumer --> parse
+    parse --> upsert
+    upsert -- "UPSERT ON CONFLICT (player_id)" --> table
+    table -- "SELECT" --> downstream
+```
+
 ## How to run (at a glance)
 
 | | |
@@ -33,6 +63,7 @@ docker compose exec postgres sh -lc \
 | `SCRAPER_KAFKA_TOPIC` | `player_stats` | Topic to subscribe to |
 | `SCRAPER_KAFKA_CONSUMER_GROUP` | `scraper-ingest-local` | Consumer group id |
 | `DATABASE_URL` | unset | Required write-access Postgres DSN |
+| `LOG_LEVEL` | `INFO` | Log verbosity (`DEBUG`, `INFO`, `WARNING`) |
 
 ## Kafka message shape (v1)
 
@@ -58,6 +89,8 @@ Each message represents one player:
 ```
 
 The Kafka key is `player_id` bytes for deterministic partition routing. Duplicate deliveries are safe because the Postgres write path is an upsert.
+
+> **Note:** the upsert is performed by `proleague_scraper.db.upsert_players` (shared with the scraper package). The consumer commits Kafka offsets only after a successful upsert.
 
 ## Postgres table
 
@@ -102,4 +135,3 @@ curl -s http://localhost:8080/api/player-stats/squad
 - [`../proleague_scraper/README.md`](../proleague_scraper/README.md) - scheduler and internal HTTP layer
 - [`../frontend_app/README.md`](../frontend_app/README.md) - host-facing API that reads `player_stats`
 - [`../../docker/README.md`](../../docker/README.md) - Compose services and operator commands
-- [`../../specs/005-compose-kafka-pipeline/quickstart.md`](../../specs/005-compose-kafka-pipeline/quickstart.md) - full stack quickstart

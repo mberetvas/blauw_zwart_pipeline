@@ -16,6 +16,33 @@ Current package split:
 | **Recommended** | From the repo root: **`docker compose up -d`** — the **`frontend-app`** service serves <http://localhost:8080> (see [`../../docker/README.md`](../../docker/README.md)). |
 | **Host `uv`** | Optional **developer-only** path for debugging the Flask app (`uv run python -m frontend_app.app` after `uv sync --extra api`). **Not** the primary way to run the demo UI. |
 
+## High-level flow
+
+```mermaid
+flowchart LR
+    user((User<br/>Browser))
+
+    subgraph app ["frontend_app"]
+        flask["app.py<br/><i>Flask routes + UI</i>"]
+        agent["sql_agent<br/><i>LangGraph tool-calling agent</i>"]
+        repair["sql_agent<br/><i>one-shot repair pass</i>"]
+    end
+
+    openrouter["OpenRouter<br/><i>LLM API</i>"]
+    pg[("Postgres<br/><i>llm_reader role<br/>marts + raw_data</i>")]
+    scraper["proleague-scraper<br/><i>HTTP API :8001</i>"]
+
+    user -- "chat / leaderboard / player-stats" --> flask
+    flask -- "/api/ask" --> agent
+    agent -- "LLM calls" --> openrouter
+    agent -- "read-only tools<br/>(execute_select)" --> pg
+    agent -. "on cap / failure" .-> repair
+    repair -- "LLM calls" --> openrouter
+    repair -- "execute_select" --> pg
+    flask -- "/api/leaderboard<br/>squad listing" --> pg
+    flask -. "image proxy" .-> scraper
+```
+
 ## Screenshots
 
 ### Chat UI
@@ -84,7 +111,7 @@ When the API runs on your machine against the Compose Postgres instance, use hos
 | `OPENROUTER_TIMEOUT` | `120` | OpenRouter request timeout in seconds |
 | `AGENT_MAX_TOOL_ITERATIONS` | `8` | Max tool-call iterations the primary agent may run before triggering the repair pass |
 | `LLM_CONFIG_PATH` | `src/frontend_app/llm_config.json` or `/data/llm_config.json` in Compose | JSON file for persisted runtime config |
-| `PROLEAGUE_SCRAPER_URL` | `http://proleague-scraper:8001` | Internal scraper base URL for player lookups and image proxying |
+| `PROLEAGUE_SCRAPER_URL` | `http://proleague-scraper:8001` | Internal scraper base URL for the image proxy route |
 | `PORT` | `8080` | Direct app port when running manually |
 
 ### Schema and semantic prompt context
@@ -115,7 +142,6 @@ When the API runs on your machine against the Compose Postgres instance, use hos
 | `POST` | `/api/ask` | Non-streaming question -> SQL -> answer flow |
 | `POST` | `/api/ask/stream` | Streaming SSE version of the same pipeline |
 | `GET` | `/api/player-stats/squad` | Cached Club Brugge squad from Postgres |
-| `GET` | `/api/player-stats/player?url=<url>` | Live single-player fetch via `proleague-scraper` |
 | `GET` | `/api/player-stats/image?url=<url>` | Server-side image proxy for approved league CDNs |
 
 ## How the Data Q&A flow works
@@ -232,7 +258,7 @@ Every log line carries a short **request ID** (`[req_id]`) that is generated per
 | `GraphRecursionError` (iteration cap) | `WARNING … iteration cap hit` then `run_ask failed: phase=iteration_cap` | Increase `AGENT_MAX_TOOL_ITERATIONS`; simplify the question |
 | Slow DB connection (no connect timeout) | `DB query: sql=…` appears but `DB query done` never follows | Add `connect_timeout=5` to `DATABASE_URL` DSN parameters |
 
-
+## Troubleshooting
 
 | Problem | What to check |
 | --- | --- |
@@ -248,6 +274,6 @@ Every log line carries a short **request ID** (`[req_id]`) that is generated per
 - [`../../README.md`](../../README.md) - repo-level overview
 - [`../../docker/README.md`](../../docker/README.md) - Compose stack and operator commands
 - [`../../dbt/README.md`](../../dbt/README.md) - dbt setup and the models this API reads
+- [`./sql_agent/README.md`](sql_agent/README.md) - SQL agent internals (graph, tools, guardrails)
 - [`../proleague_scraper/README.md`](../proleague_scraper/README.md) - internal player-scraper service
 - [`../proleague_ingest/README.md`](../proleague_ingest/README.md) - cached `player_stats` ingest path
-- [`../../specs/005-compose-kafka-pipeline/quickstart.md`](../../specs/005-compose-kafka-pipeline/quickstart.md) - end-to-end local stack walkthrough

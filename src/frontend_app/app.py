@@ -166,24 +166,17 @@ def _build_trace(
         )
     if raw_sql is not None:
         if sql is not None and raw_sql.strip() != sql:
-            notes.append(
-                "Normalized the model output by removing markdown wrappers or trailing semicolons."
-            )
+            notes.append("Normalized the model output by removing markdown wrappers or trailing semicolons.")
         else:
             notes.append("The model returned SQL directly without extra formatting.")
     if sql is not None:
         notes.append("Validated the SQL as read-only before sending it to Postgres.")
     if row_count is not None:
-        notes.append(
-            f"Executed the query with a 10 second timeout and outer LIMIT 100, "
-            f"returning {row_count} row(s)."
-        )
+        notes.append(f"Executed the query with a 10 second timeout and outer LIMIT 100, returning {row_count} row(s).")
     elif sql is not None:
         notes.append("Tried to execute the validated SQL against Postgres.")
     if answered:
-        notes.append(
-            "Used the returned rows as context for the natural-language answer you see in chat."
-        )
+        notes.append("Used the returned rows as context for the natural-language answer you see in chat.")
     return {
         "provider": provider,
         "provider_label": provider_label,
@@ -211,10 +204,7 @@ def _leaderboard_points_sql(alias: str) -> str:
 
 def _leaderboard_order_sql(alias: str) -> str:
     """Return the deterministic leaderboard sort order for the given alias."""
-    return (
-        f"{alias}.points DESC, {alias}.matches_attended DESC, "
-        f"{alias}.total_spend DESC, {alias}.fan_id ASC"
-    )
+    return f"{alias}.points DESC, {alias}.matches_attended DESC, {alias}.total_spend DESC, {alias}.fan_id ASC"
 
 
 def _leaderboard_month_bounds_utc(
@@ -628,8 +618,7 @@ def _build_leaderboard_payload(window: str) -> dict[str, Any]:
     """Build the public leaderboard payload for the supported window."""
     if window not in LEADERBOARD_SUPPORTED_WINDOWS:
         raise ValueError(
-            f"Unsupported leaderboard window '{window}'. "
-            f"Valid values: {sorted(LEADERBOARD_SUPPORTED_WINDOWS)}"
+            f"Unsupported leaderboard window '{window}'. Valid values: {sorted(LEADERBOARD_SUPPORTED_WINDOWS)}"
         )
 
     if window == "all":
@@ -637,17 +626,11 @@ def _build_leaderboard_payload(window: str) -> dict[str, Any]:
         as_of_dt = _fetch_leaderboard_as_of()
     elif window == "month":
         t0, t1 = _leaderboard_month_bounds_utc()
-        rankings = [
-            _leaderboard_entry_from_row(row)
-            for row in _fetch_leaderboard_rows_bounded(t0, t1)
-        ]
+        rankings = [_leaderboard_entry_from_row(row) for row in _fetch_leaderboard_rows_bounded(t0, t1)]
         as_of_dt = _fetch_leaderboard_as_of_bounded(t0, t1)
     else:
         t0, t1 = _leaderboard_season_bounds_utc()
-        rankings = [
-            _leaderboard_entry_from_row(row)
-            for row in _fetch_leaderboard_rows_bounded(t0, t1)
-        ]
+        rankings = [_leaderboard_entry_from_row(row) for row in _fetch_leaderboard_rows_bounded(t0, t1)]
         as_of_dt = _fetch_leaderboard_as_of_bounded(t0, t1)
 
     podium = rankings[:3]
@@ -718,9 +701,7 @@ def _normalise_conversation_history(
         question = str(item.get("question") or "").strip()
         answer = str(item.get("answer") or "").strip()
         if not question or not answer:
-            raise ValueError(
-                f"history[{idx}] must include non-empty question and answer strings"
-            )
+            raise ValueError(f"history[{idx}] must include non-empty question and answer strings")
 
         sql = item.get("sql")
         if sql is not None:
@@ -731,13 +712,9 @@ def _normalise_conversation_history(
             raise ValueError(f"history[{idx}].data_preview must be a list")
 
         preview: list[dict[str, Any]] = []
-        for row_idx, row in enumerate(
-            raw_preview[:ASK_CONTEXT_MAX_PREVIEW_ROWS], start=1
-        ):
+        for row_idx, row in enumerate(raw_preview[:ASK_CONTEXT_MAX_PREVIEW_ROWS], start=1):
             if not isinstance(row, dict):
-                raise ValueError(
-                    f"history[{idx}].data_preview[{row_idx}] must be an object"
-                )
+                raise ValueError(f"history[{idx}].data_preview[{row_idx}] must be an object")
             preview.append(row)
 
         history.append(
@@ -804,22 +781,12 @@ def _build_request_or_error(
     raw_provider = (body.get("provider") or "openrouter").strip().lower()
     if raw_provider == "ollama":
         return (
-            {
-                "error": (
-                    "Ollama is no longer supported. "
-                    "Use 'openrouter' (or omit 'provider' entirely)."
-                )
-            },
+            {"error": ("Ollama is no longer supported. Use 'openrouter' (or omit 'provider' entirely).")},
             400,
         )
     if raw_provider not in KNOWN_PROVIDERS:
         return (
-            {
-                "error": (
-                    f"Unknown provider '{raw_provider}'. "
-                    f"Valid values: {sorted(KNOWN_PROVIDERS)}"
-                )
-            },
+            {"error": (f"Unknown provider '{raw_provider}'. Valid values: {sorted(KNOWN_PROVIDERS)}")},
             400,
         )
 
@@ -850,9 +817,7 @@ def _build_request_or_error(
     )
 
 
-def _agent_failure_to_response(
-    failure: AgentFailure, conversation_turn_count: int
-) -> tuple[dict[str, Any], int]:
+def _agent_failure_to_response(failure: AgentFailure, conversation_turn_count: int) -> tuple[dict[str, Any], int]:
     provider_label = _PROVIDER_DISPLAY["openrouter"]
     trace = _build_trace(
         "openrouter",
@@ -874,9 +839,7 @@ def _agent_failure_to_response(
     )
 
 
-def _agent_result_to_payload(
-    result: AgentResult, conversation_turn_count: int
-) -> dict[str, Any]:
+def _agent_result_to_payload(result: AgentResult, conversation_turn_count: int) -> dict[str, Any]:
     provider_label = _PROVIDER_DISPLAY["openrouter"]
     trace = _build_trace(
         "openrouter",
@@ -958,15 +921,12 @@ def health() -> Any:
 # ---------------------------------------------------------------------------
 # Player stats — DB-backed reads (squad) + image proxy
 # /api/player-stats/squad   reads raw_data.player_stats (written by proleague-ingest)
-# /api/player-stats/player  single-player live fetch via proleague-scraper (utility)
 # /api/player-stats/image   server-side CDN image proxy (bypasses hotlink/CORS)
 # ---------------------------------------------------------------------------
 
 #: Internal URL of the proleague-scraper Compose service.
-#: Used only for the /api/player-stats/player and /api/player-stats/image routes.
-PROLEAGUE_SCRAPER_URL = os.environ.get(
-    "PROLEAGUE_SCRAPER_URL", "http://proleague-scraper:8001"
-).rstrip("/")
+#: Used by the /api/player-stats/image route.
+PROLEAGUE_SCRAPER_URL = os.environ.get("PROLEAGUE_SCRAPER_URL", "http://proleague-scraper:8001").rstrip("/")
 
 # SQL to read all player rows from the raw_data schema.
 # llm_reader has search_path=dbt_dev so the schema qualifier is explicit.
@@ -1005,8 +965,18 @@ def _fetch_players_from_db() -> list[dict]:
     players = []
     for row in rows:
         (
-            player_id, slug, name, position, field_position, shirt_number,
-            image_url, profile, stats, competition, source_url, scraped_at,
+            player_id,
+            slug,
+            name,
+            position,
+            field_position,
+            shirt_number,
+            image_url,
+            profile,
+            stats,
+            competition,
+            source_url,
+            scraped_at,
         ) = row
         players.append(
             {
@@ -1057,40 +1027,6 @@ def player_stats_squad() -> Any:
             "players": players,
         }
     )
-
-
-@app.get("/api/player-stats/player")
-def player_stats_player() -> Any:
-    """Proxy a single-player live fetch from the proleague-scraper service.
-
-    This is a utility endpoint for on-demand single-player refresh; normal
-    squad reads go through /api/player-stats/squad (DB-backed).
-    Requires the proleague-scraper Compose service to be reachable.
-    """
-    player_url = request.args.get("url", "").strip()
-    if not player_url:
-        return jsonify({"error": "url query parameter is required"}), 400
-    try:
-        resp = requests.get(
-            f"{PROLEAGUE_SCRAPER_URL}/player",
-            params={"url": player_url},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return jsonify(resp.json())
-    except requests.exceptions.ConnectionError:
-        return (
-            jsonify(
-                {"error": "proleague-scraper is unreachable. "
-                          "Check: docker compose logs proleague-scraper."}
-            ),
-            503,
-        )
-    except requests.exceptions.Timeout:
-        return jsonify({"error": "proleague-scraper timed out."}), 504
-    except requests.exceptions.RequestException as exc:
-        log.info("player_stats_player_proxy_failed error={}", exc)
-        return jsonify({"error": f"Scraper request failed: {exc}"}), 502
 
 
 @app.get("/api/player-stats/image")
@@ -1183,9 +1119,7 @@ def ask() -> Any:
                 outcome.phase,
                 outcome.error[:200],
             )
-            payload, status = _agent_failure_to_response(
-                outcome, parsed.conversation_turn_count
-            )
+            payload, status = _agent_failure_to_response(outcome, parsed.conversation_turn_count)
             return jsonify(payload), status
 
         log.info(
@@ -1216,8 +1150,7 @@ def ask_stream() -> Any:
         try:
             log.info("api_ask_stream_received")
             log.debug(
-                "task=stream_route previous=request_validated "
-                "next=run_stream_pipeline question_preview={}",
+                "task=stream_route previous=request_validated next=run_stream_pipeline question_preview={}",
                 parsed.question[:80],
             )
             for evt in run_ask_stream(parsed):

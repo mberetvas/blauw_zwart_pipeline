@@ -25,7 +25,6 @@ This is for people who want to run the local stack once, work on one package wit
 | `src/frontend_app/` | Flask UI + API package: thin `app.py` orchestrator, `sql_agent/` Text-to-SQL pipeline, and static assets |
 | `dbt/` | Analytics models, dbt profiles, and local dbt workflow |
 | `docker-compose.yml` and `docker/` | Local operator stack, image definitions, and init SQL |
-| `specs/` | Deep feature quickstarts and contracts |
 
 ## How the pieces connect
 
@@ -40,69 +39,78 @@ This is for people who want to run the local stack once, work on one package wit
 
 ```mermaid
 flowchart TD
-    %% ── external actors ──────────────────────────────────────────
+    %% ── external actor ───────────────────────────────────────────
     user((User<br/>Browser))
-    proleague_site[(proleague.be)]
-    openrouter[OpenRouter<br/>LLM API]
 
-    %% ── data generation layer ────────────────────────────────────
-    subgraph gen ["Data Generation"]
-        producer["producer<br/><i>fan_events CLI</i>"]
-        scheduler["proleague-scheduler<br/><i>daily scrape</i>"]
+    %% ── event bus ────────────────────────────────────────────────
+    subgraph bus ["Event Bus"]
+        broker["Kafka Broker<br/><i>KRaft · :9092</i>"]
+        kafka_init["Fan Events Topic Init<br/><i>one-shot</i>"]:::init
+        kafka_init_scraper["Player Stats Topic Init<br/><i>one-shot</i>"]:::init
     end
 
-    %% ── message broker ───────────────────────────────────────────
-    subgraph kafka ["Kafka Broker · KRaft"]
-        fan_topic[/"fan_events"/]
-        player_topic[/"player_stats"/]
+    %% ── fan events pipeline ──────────────────────────────────────
+    subgraph fan ["Fan Events Pipeline"]
+        producer["Fan Events Producer<br/><i>synthetic stream</i>"]
+        ingest["Fan Events Ingest<br/><i>Kafka → Postgres</i>"]
     end
 
-    %% ── ingestion layer ──────────────────────────────────────────
-    subgraph consumers ["Ingestion"]
-        ingest["fan-ingest<br/><i>Kafka → Postgres</i>"]
-        pl_ingest["proleague-ingest<br/><i>Kafka → Postgres</i>"]
+    %% ── pro league pipeline ──────────────────────────────────────
+    subgraph pl ["Pro League Pipeline"]
+        pl_scheduler["Pro League Scheduler<br/><i>daily scrape</i>"]
+        pl_ingest["Pro League Ingest<br/><i>Kafka → Postgres</i>"]
+        pl_scraper["Pro League API<br/><i>HTTP · :8001</i>"]
     end
 
-    %% ── storage + analytics ──────────────────────────────────────
-    subgraph storage ["Storage & Analytics"]
-        postgres[("Postgres<br/><code>raw_data.*</code>")]
-        dbt["dbt-scheduler<br/><i>marts every DBT_RUN_INTERVAL_MINUTES</i>"]
-        marts[("dbt_dev<br/><code>mart_fan_loyalty</code><br/><code>mart_player_season_summary</code>")]
+    %% ── data store ───────────────────────────────────────────────
+    subgraph store ["Data Store"]
+        postgres[("PostgreSQL<br/><i>raw + marts</i>")]
+        dbt["dbt Scheduler<br/><i>builds analytics marts</i>"]
+        pgadmin["pgAdmin<br/><i>Admin UI · :5050</i>"]
     end
 
     %% ── presentation layer ───────────────────────────────────────
-    subgraph ui ["Presentation"]
-        frontend["frontend-app<br/><i>Flask · :8080</i>"]
-        scraper["proleague-scraper<br/><i>HTTP API · :8001</i>"]
-        pgadmin["pgAdmin<br/><i>:5050</i>"]
+    subgraph ui ["Presentation Layer"]
+        frontend["Frontend App<br/><i>Flask · :8080</i>"]
+        openrouter["OpenRouter<br/><i>LLM API</i>"]:::host
     end
 
-    %% ── flows ────────────────────────────────────────────────────
-    producer -- "publish" --> fan_topic
-    scheduler -. "HTTP scrape" .-> proleague_site
-    scheduler -- "publish" --> player_topic
+    %% ── topic init dependencies ──────────────────────────────────
+    broker -. "ready" .-> kafka_init
+    broker -. "ready" .-> kafka_init_scraper
 
-    fan_topic -- "consume" --> ingest
-    player_topic -- "consume" --> pl_ingest
+    %% ── fan events flow ──────────────────────────────────────────
+    producer -- "fan_events" --> broker
+    broker -- "fan_events" --> ingest
+    ingest -- "writes" --> postgres
+    kafka_init -. "topic ready" .-> producer
+    kafka_init -. "topic ready" .-> ingest
 
-    ingest -- "INSERT<br/>fan_events_ingested" --> postgres
-    pl_ingest -- "UPSERT<br/>player_stats" --> postgres
+    %% ── pro league flow ──────────────────────────────────────────
+    pl_scheduler -- "player_stats" --> broker
+    broker -- "player_stats" --> pl_ingest
+    pl_ingest -- "writes" --> postgres
+    pl_scraper -- "reads" --> postgres
+    kafka_init_scraper -. "topic ready" .-> pl_scheduler
+    kafka_init_scraper -. "topic ready" .-> pl_ingest
 
-    postgres -- "SELECT raw" --> dbt
-    dbt -- "build marts" --> marts
+    %% ── analytics + admin ────────────────────────────────────────
+    dbt -- "transforms raw → marts" --> postgres
+    pgadmin -- "admin" --> postgres
 
-    marts -- "Text-to-SQL<br/>read-only" --> frontend
-    postgres -- "SELECT raw_data.player_stats<br/>(squad listing)" --> frontend
-    postgres -- "SELECT raw_data.player_stats<br/>(scraper /squad)" --> scraper
-    frontend -. "single-player detail<br/>+ image proxy" .-> scraper
-    frontend <-. "generate SQL ↔ answer" .-> openrouter
-
+    %% ── presentation flow ────────────────────────────────────────
+    frontend -- "Text-to-SQL on marts" --> postgres
+    frontend -. "player detail" .-> pl_scraper
+    frontend -. "LLM calls" .-> openrouter
     user -- ":8080" --> frontend
     user -. ":5050" .-> pgadmin
-    pgadmin -- "admin" --> postgres
+
+    %% ── styling ──────────────────────────────────────────────────
+    classDef init fill:#f5f5f5,stroke:#888,color:#333,stroke-dasharray:5 5;
+    classDef host fill:#eaffea,stroke:#0a7,color:#063,stroke-dasharray:2 2;
 ```
 
-**Legend:** solid arrows = primary data flow; dashed arrows = supporting / on-demand calls.
+**Legend:** solid arrows = primary data flow; dashed arrows = readiness signals or on-demand calls. Dashed-bordered nodes are one-shot init containers; the green-bordered node is an external cloud service.
 
 ### SQL agent flow (Text-to-SQL chat)
 
@@ -115,7 +123,6 @@ See [`src/frontend_app/sql_agent/README.md`](src/frontend_app/sql_agent/README.m
 | Python 3.12+ | Needed for **`fan_events`** on the host, tests, and other **development** workflows |
 | [uv](https://docs.astral.sh/uv/) | Lockfile and toolchain for the **`fan_events`** CLI on the host, plus **development** commands (`uv run pytest`, `uv run dbt`, …) |
 | Docker + Docker Compose | **Recommended** way to run the **full MVP stack** (all long-running services) |
-| [Ollama](https://ollama.com/) | _No longer used._ The SQL agent uses OpenRouter exclusively. |
 | [just](https://just.systems/) | Optional convenience wrapper around common stack and CLI commands |
 
 ## Run the full MVP stack (recommended)
@@ -127,16 +134,15 @@ See [`src/frontend_app/sql_agent/README.md`](src/frontend_app/sql_agent/README.m
 2. Edit the required `.env` values before your first `docker compose up -d`:
    - **Must set**
      - `POSTGRES_INIT_BIND_OPTS` (OS-specific as above)
+     - `OPENROUTER_API_KEY` (required for the Data Q&A chat)
    - **Should change for any real/shared setup**
      - `POSTGRES_PASSWORD`
      - `PGADMIN_DEFAULT_PASSWORD`
      - `LLM_READER_PASSWORD` and matching password inside `LLM_READER_DATABASE_URL`
    - **Change only if needed**
      - `POSTGRES_PORT`, `PGADMIN_PORT`, `LLM_API_PORT` (if host ports are already in use)
-     - `OPENROUTER_API_KEY` (required for the Data Q&A chat)
 3. Start **everything** from the repo root with `docker compose up -d` (not `uv run` for services).
-4. Set `OPENROUTER_API_KEY` in `.env` — required for the Data Q&A flow.
-5. Open <http://localhost:8080>.
+4. Open <http://localhost:8080>.
 
 That path starts Kafka, Postgres, pgAdmin, the fan-event producer/consumer pair, the player-stats scraper/consumer pair, the dbt scheduler, and `frontend-app`. For service-by-service notes, ports, env vars, and operator commands, use [`docker/README.md`](docker/README.md).
 
@@ -153,7 +159,5 @@ That path starts Kafka, Postgres, pgAdmin, the fan-event producer/consumer pair,
 | `frontend_app` | [`src/frontend_app/README.md`](src/frontend_app/README.md) | Flask UI/API usage, provider config, Text-to-SQL flow, routes, screenshots, guardrails, and package split notes |
 | `dbt` | [`dbt/README.md`](dbt/README.md) | Local dbt setup, Compose dbt scheduler notes, profiles, env vars, and Windows-specific dbt guidance |
 | Local stack | [`docker/README.md`](docker/README.md) | Compose services, published ports, `.env` knobs, operator commands, `just` wrappers, and stack troubleshooting |
-
-Deep quickstarts and contracts stay under [`specs/`](specs). Each component README links to the relevant spec instead of duplicating it.
 
 Note: no license file is currently present in the repository root.
