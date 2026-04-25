@@ -16,8 +16,6 @@ from fan_ingest import db as db_mod
 
 
 def test_create_pool_invokes_asyncpg_and_ensures_table(monkeypatch) -> None:
-    pool = MagicMock()
-    pool.acquire.return_value.__aenter__ = AsyncMock(
     conn = MagicMock()
     conn.execute = AsyncMock(return_value=None)
 
