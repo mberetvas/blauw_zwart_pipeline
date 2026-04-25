@@ -1,4 +1,4 @@
--- Staging view over public.player_stats: typed casts for downstream JSON parsing and analytics.
+-- Staging view over raw_data.player_stats: typed casts for downstream JSON parsing and analytics.
 select
     player_id::text as player_id,
     slug,

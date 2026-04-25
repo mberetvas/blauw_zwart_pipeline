@@ -27,7 +27,8 @@ _conn_player_stats_ready: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary(
 # Same DDL as docker/postgres/init/003_player_stats.sql — run at runtime so existing
 # DB volumes (created before that init script existed) get the table without a manual migration.
 _ENSURE_PLAYER_STATS_SQL = """
-CREATE TABLE IF NOT EXISTS player_stats (
+CREATE SCHEMA IF NOT EXISTS raw_data;
+CREATE TABLE IF NOT EXISTS raw_data.player_stats (
     player_id       TEXT        PRIMARY KEY,
     slug            TEXT        NOT NULL,
     name            TEXT        NOT NULL,
@@ -46,12 +47,12 @@ CREATE TABLE IF NOT EXISTS player_stats (
 # Same as docker/postgres/init/003_player_stats.sql — frontend-app reads via role llm_reader.
 # One statement per execute (psycopg2 protocol).
 _GRANT_LLM_READER_ON_PLAYER_STATS = (
-    "GRANT USAGE ON SCHEMA public TO llm_reader",
-    "GRANT SELECT ON player_stats TO llm_reader",
+    "GRANT USAGE ON SCHEMA raw_data TO llm_reader",
+    "GRANT SELECT ON raw_data.player_stats TO llm_reader",
 )
 
 _UPSERT_SQL = """
-INSERT INTO player_stats (
+INSERT INTO raw_data.player_stats (
     player_id, slug, name, position, field_position, shirt_number,
     image_url, profile, stats, competition, source_url, scraped_at
 ) VALUES (
@@ -76,7 +77,7 @@ ON CONFLICT (player_id) DO UPDATE SET
 _SELECT_SQL = """
 SELECT player_id, slug, name, position, field_position, shirt_number,
        image_url, profile, stats, competition, source_url, scraped_at
-FROM player_stats
+FROM raw_data.player_stats
 ORDER BY name
 """
 
@@ -197,5 +198,5 @@ def count_players(conn: psycopg2.extensions.connection) -> int:
     """Return the number of rows currently in ``player_stats``."""
     _ensure_player_stats_once(conn)
     with conn.cursor() as cur:
-        cur.execute("SELECT COUNT(*) FROM player_stats")
+        cur.execute("SELECT COUNT(*) FROM raw_data.player_stats")
         return cur.fetchone()[0]

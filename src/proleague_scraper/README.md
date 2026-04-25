@@ -40,7 +40,7 @@ Normal browser users do not talk to this service directly. The host-facing entry
 ## Data flow
 
 ```text
-proleague-scheduler -> Kafka topic player_stats -> proleague-ingest -> Postgres public.player_stats
+proleague-scheduler -> Kafka topic player_stats -> proleague-ingest -> Postgres raw_data.player_stats
                                                            |
                                                            +-> proleague-scraper /squad reads cached rows
                                                            +-> frontend_app /api/player-stats/* serves host-facing routes

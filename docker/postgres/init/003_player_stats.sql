@@ -2,7 +2,9 @@
 -- Upserted by the proleague-scraper microservice; read by the frontend-app service.
 -- IMPORTANT: Operators must verify proleague.be Terms of Use before production use.
 
-CREATE TABLE IF NOT EXISTS player_stats (
+CREATE SCHEMA IF NOT EXISTS raw_data;
+
+CREATE TABLE IF NOT EXISTS raw_data.player_stats (
     player_id       TEXT        PRIMARY KEY,
     slug            TEXT        NOT NULL,
     name            TEXT        NOT NULL,
@@ -17,16 +19,16 @@ CREATE TABLE IF NOT EXISTS player_stats (
     scraped_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE player_stats IS
+COMMENT ON TABLE raw_data.player_stats IS
     'Player statistics scraped from proleague.be by the proleague-scraper service.';
 
-COMMENT ON COLUMN player_stats.profile IS
+COMMENT ON COLUMN raw_data.player_stats.profile IS
     'JSON map: birth_date, birth_place, height_cm, weight_kg, preferred_foot, nationality, nationality_code.';
 
-COMMENT ON COLUMN player_stats.stats IS
+COMMENT ON COLUMN raw_data.player_stats.stats IS
     'JSON array of {key, label, value} dicts from the main competition (Jupiler Pro League).';
 
 -- Allow the read-only LLM API role to query this table.
--- USAGE on public is explicit because llm_reader has search_path=dbt_dev (002_llm_reader.sql).
-GRANT USAGE ON SCHEMA public TO llm_reader;
-GRANT SELECT ON player_stats TO llm_reader;
+-- USAGE on raw_data is explicit because llm_reader has search_path=dbt_dev (002_llm_reader.sql).
+GRANT USAGE ON SCHEMA raw_data TO llm_reader;
+GRANT SELECT ON raw_data.player_stats TO llm_reader;

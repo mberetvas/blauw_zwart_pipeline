@@ -1,6 +1,6 @@
 # proleague_ingest
 
-Kafka consumer for the player-stats side of the MVP stack. It subscribes to the `player_stats` topic, then upserts the latest squad scrape into `public.player_stats`.
+Kafka consumer for the player-stats side of the MVP stack. It subscribes to the `player_stats` topic, then upserts the latest squad scrape into `raw_data.player_stats`.
 
 This service is packaged by [`docker/Dockerfile.scraper-ingest`](../../docker/Dockerfile.scraper-ingest) with [`docker/requirements.scraper-ingest.txt`](../../docker/requirements.scraper-ingest.txt). Like `proleague_scraper`, it is Compose-first rather than part of the repo's `uv` extras.
 
@@ -22,7 +22,7 @@ Verify rows landed in Postgres:
 
 ```bash
 docker compose exec postgres sh -lc \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT player_id, name, scraped_at FROM player_stats ORDER BY name LIMIT 5;"'
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT player_id, name, scraped_at FROM raw_data.player_stats ORDER BY name LIMIT 5;"'
 ```
 
 ## Environment variables
@@ -61,7 +61,7 @@ The Kafka key is `player_id` bytes for deterministic partition routing. Duplicat
 
 ## Postgres table
 
-`public.player_stats` is created by [`docker/postgres/init/003_player_stats.sql`](../../docker/postgres/init/003_player_stats.sql).
+`raw_data.player_stats` is created by [`docker/postgres/init/003_player_stats.sql`](../../docker/postgres/init/003_player_stats.sql).
 
 | Column | Type | Notes |
 | --- | --- | --- |

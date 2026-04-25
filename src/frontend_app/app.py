@@ -957,7 +957,7 @@ def health() -> Any:
 
 # ---------------------------------------------------------------------------
 # Player stats — DB-backed reads (squad) + image proxy
-# /api/player-stats/squad   reads public.player_stats (written by proleague-ingest)
+# /api/player-stats/squad   reads raw_data.player_stats (written by proleague-ingest)
 # /api/player-stats/player  single-player live fetch via proleague-scraper (utility)
 # /api/player-stats/image   server-side CDN image proxy (bypasses hotlink/CORS)
 # ---------------------------------------------------------------------------
@@ -968,12 +968,12 @@ PROLEAGUE_SCRAPER_URL = os.environ.get(
     "PROLEAGUE_SCRAPER_URL", "http://proleague-scraper:8001"
 ).rstrip("/")
 
-# SQL to read all player rows from the public schema.
+# SQL to read all player rows from the raw_data schema.
 # llm_reader has search_path=dbt_dev so the schema qualifier is explicit.
 _SELECT_PLAYERS_SQL = """
 SELECT player_id, slug, name, position, field_position, shirt_number,
        image_url, profile, stats, competition, source_url, scraped_at
-FROM public.player_stats
+FROM raw_data.player_stats
 ORDER BY name
 """
 
@@ -981,7 +981,7 @@ DEFAULT_SQUAD_URL = "https://www.proleague.be/teams/club-brugge-kv-182/squad"
 
 
 def _fetch_players_from_db() -> list[dict]:
-    """Return all rows from public.player_stats using the read-only DB connection.
+    """Return all rows from raw_data.player_stats using the read-only DB connection.
 
     Returns an empty list only when the table exists but contains no rows.
     Raises psycopg2.OperationalError when DATABASE_URL is not configured.

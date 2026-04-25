@@ -21,9 +21,9 @@ The full acceptance-style walkthrough still lives in [`specs/005-compose-kafka-p
 | `postgres` | PostgreSQL 18 |
 | `pgadmin` | Browser UI for Postgres |
 | `producer` | Runs `fan_events stream` inside Compose |
-| `ingest` | Runs `fan_ingest` and writes `fan_events_ingested` |
+| `ingest` | Runs `fan_ingest` and writes `raw_data.fan_events_ingested` |
 | `proleague-scheduler` | Daily scrape loop that publishes `player_stats` |
-| `proleague-ingest` | Consumes `player_stats` and upserts `public.player_stats` |
+| `proleague-ingest` | Consumes `player_stats` and upserts `raw_data.player_stats` |
 | `proleague-scraper` | Internal HTTP read layer for player data |
 | `dbt-scheduler` | Periodic dbt runner for analytics marts |
 | `frontend-app` | Host-facing UI + API over fan and player data |
@@ -65,14 +65,14 @@ Verify the fan-event side:
 
 ```bash
 docker compose exec postgres sh -lc \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) FROM fan_events_ingested;"'
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) FROM raw_data.fan_events_ingested;"'
 ```
 
 Verify the player-stats side:
 
 ```bash
 docker compose exec postgres sh -lc \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT player_id, name, scraped_at FROM player_stats ORDER BY name LIMIT 5;"'
+  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT player_id, name, scraped_at FROM raw_data.player_stats ORDER BY name LIMIT 5;"'
 curl -s http://localhost:8080/api/player-stats/squad
 ```
 
