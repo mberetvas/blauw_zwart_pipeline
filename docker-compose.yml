@@ -38,7 +38,12 @@ services:
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092
+            --list >/dev/null 2>&1",
+        ]
       interval: 10s
       timeout: 10s
       retries: 12
@@ -106,7 +111,7 @@ services:
       # Keep empty on Windows/macOS.
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro${POSTGRES_INIT_BIND_OPTS:-}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      test: [ "CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\"" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -116,6 +121,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.dbt
+    image: blauw-zwart/dbt-scheduler:${APP_VERSION:-dev}
     env_file: .env
     environment:
       PYTHONUNBUFFERED: "1"
@@ -153,6 +159,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.ingest
+    image: blauw-zwart/ingest:${APP_VERSION:-dev}
     env_file: .env
     environment:
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-broker:29092}
@@ -174,6 +181,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.ingest
+    image: blauw-zwart/producer:${APP_VERSION:-dev}
     env_file: .env
     # Logs: Kafka mode does not print each NDJSON line to stdout — stderr gets startup + periodic summaries.
     # Code default is every 256 deliveries; this service sets FAN_EVENTS_KAFKA_PROGRESS_INTERVAL=50 for livelier logs.
@@ -189,7 +197,7 @@ services:
       FAN_EVENTS_BOOTSTRAP_STATE_DIR: ${FAN_EVENTS_BOOTSTRAP_STATE_DIR:-/var/lib/fan-events-producer}
       FAN_EVENTS_BOOTSTRAP_SENTINEL: ${FAN_EVENTS_BOOTSTRAP_SENTINEL:-/var/lib/fan-events-producer/bootstrap.done}
       FAN_EVENTS_CALENDAR_PATH: /app/match_day.example.json
-    command: ["producer-boot-and-stream"]
+    command: [ "producer-boot-and-stream" ]
     volumes:
       - ./match_day.example.json:/app/match_day.example.json:ro
       - producer-bootstrap-state:/var/lib/fan-events-producer
@@ -210,6 +218,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.scraper
+    image: blauw-zwart/proleague-scraper:${APP_VERSION:-dev}
     environment:
       PYTHONUNBUFFERED: "1"
       DATABASE_URL: ${DATABASE_URL}
@@ -218,7 +227,12 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\""]
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request;
+            urllib.request.urlopen('http://localhost:8001/health')\"",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -233,7 +247,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.scraper
-    command: ["python", "-m", "proleague_scraper.scheduler"]
+    image: blauw-zwart/proleague-scheduler:${APP_VERSION:-dev}
+    command: [ "python", "-m", "proleague_scraper.scheduler" ]
     environment:
       PYTHONUNBUFFERED: "1"
       PROLEAGUE_SQUAD_URL: ${PROLEAGUE_SQUAD_URL:-https://www.proleague.be/teams/club-brugge-kv-182/squad}
@@ -256,6 +271,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.scraper-ingest
+    image: blauw-zwart/proleague-ingest:${APP_VERSION:-dev}
     environment:
       PYTHONUNBUFFERED: "1"
       KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS:-broker:29092}
@@ -282,6 +298,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.frontend-app
+    image: blauw-zwart/frontend-app:${APP_VERSION:-dev}
     env_file: .env
     environment:
       # Keep the service URL aligned with the password provisioned in postgres init.
@@ -312,7 +329,12 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\""]
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request;
+            urllib.request.urlopen('http://localhost:8080/health')\"",
+        ]
       interval: 15s
       timeout: 5s
       retries: 3
