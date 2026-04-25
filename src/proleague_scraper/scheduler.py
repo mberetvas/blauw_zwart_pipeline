@@ -38,16 +38,17 @@ IMPORTANT: Operators must verify proleague.be robots.txt and Terms of Use.
 from __future__ import annotations
 
 import json
-import logging
 import os
 import time
 from typing import Any
 
 from confluent_kafka import KafkaException, Producer
 
+from common.logging_setup import configure_logging, get_logger
+
 from .scraper import DEFAULT_SQUAD_URL, scrape_squad
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _SCHEMA_VERSION = 1
 _EVENT_TYPE = "player_stats_scraped"
@@ -60,15 +61,11 @@ _EVENT_TYPE = "player_stats_scraped"
 
 def _delivery_report(err: Any, msg: Any) -> None:
     if err:
-        log.error(
-            "scraper_produce_failed topic=%s key=%s: %s",
-            msg.topic(),
-            msg.key(),
-            err,
-        )
+        log.info("scraper_produce_failed topic={} key={} error={}", msg.topic(), msg.key(), err)
     else:
         log.debug(
-            "scraper_produce_ok topic=%s partition=%s offset=%s key=%s",
+            "task=produce_delivery_report previous=message_queued next=continue_batch "
+            "topic={} partition={} offset={} key={}",
             msg.topic(),
             msg.partition(),
             msg.offset(),
@@ -109,9 +106,13 @@ def run_once(
     Returns the number of successfully enqueued messages.
     Raises on scrape failure; individual produce errors are logged but not raised.
     """
-    log.info("scraper_run_start url=%s topic=%s bootstrap=%s", squad_url, topic, bootstrap_servers)
+    log.info("scraper_run_start url={} topic={} bootstrap={}", squad_url, topic, bootstrap_servers)
     t0 = time.monotonic()
 
+    log.debug(
+        "task=scrape_squad previous=run_initialized next=fetch_squad_listing url={}",
+        squad_url,
+    )
     result = scrape_squad(squad_url)
     players: list[dict[str, Any]] = result.get("players", [])
     scraped_at: str = result.get("fetched_at", "")
@@ -119,7 +120,7 @@ def run_once(
 
     valid = [p for p in players if p.get("player_id") and not p.get("error")]
     log.info(
-        "scraper_run_scraped total=%d valid=%d elapsed_s=%.1f",
+        "scraper_run_scraped total={} valid={} elapsed_s={:.1f}",
         len(players),
         len(valid),
         time.monotonic() - t0,
@@ -129,6 +130,12 @@ def run_once(
     produced = 0
     for player in valid:
         try:
+            log.debug(
+                "task=produce_player_event previous=validated_player next=enqueue_kafka_message "
+                "player_id={} topic={}",
+                player["player_id"],
+                topic,
+            )
             producer.produce(
                 topic=topic,
                 key=player["player_id"].encode(),
@@ -137,15 +144,15 @@ def run_once(
             )
             produced += 1
         except KafkaException as exc:
-            log.error("scraper_produce_error player_id=%s: %s", player["player_id"], exc)
+            log.info("scraper_produce_error player_id={} error={}", player["player_id"], exc)
 
     # Flush ensures all pending deliveries complete before we sleep.
     remaining = producer.flush(timeout=60)
     if remaining:
-        log.warning("scraper_produce_flush_incomplete remaining=%d", remaining)
+        log.info("scraper_flush_incomplete remaining={}", remaining)
 
     log.info(
-        "scraper_run_done produced=%d/%d elapsed_s=%.1f",
+        "scraper_run_done produced={}/{} elapsed_s={:.1f}",
         produced,
         len(valid),
         time.monotonic() - t0,
@@ -159,10 +166,7 @@ def run_once(
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(levelname)s %(name)s %(message)s",
-    )
+    configure_logging(level=os.environ.get("LOG_LEVEL", "INFO"))
 
     squad_url = os.environ.get("PROLEAGUE_SQUAD_URL", DEFAULT_SQUAD_URL).strip()
     bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "broker:29092").strip()
@@ -180,7 +184,7 @@ def main() -> None:
     interval_s = interval_h * 3600
 
     log.info(
-        "scheduler_init url=%s topic=%s interval_h=%.1f run_on_startup=%s",
+        "scheduler_init url={} topic={} interval_h={:.1f} run_on_startup={}",
         squad_url,
         topic,
         interval_h,
@@ -188,15 +192,15 @@ def main() -> None:
     )
 
     if not run_on_startup:
-        log.info("scheduler_waiting_first_interval seconds=%.0f", interval_s)
+        log.info("scheduler_waiting_first_interval seconds={:.0f}", interval_s)
         time.sleep(interval_s)
 
     while True:
         try:
             run_once(squad_url=squad_url, bootstrap_servers=bootstrap, topic=topic)
-        except Exception:
-            log.exception("scheduler_run_failed — will retry next interval")
-        log.info("scheduler_sleeping seconds=%.0f", interval_s)
+        except Exception as exc:  # noqa: BLE001
+            log.info("scheduler_run_failed error={} next=retry_after_sleep", exc)
+        log.info("scheduler_sleeping seconds={:.0f}", interval_s)
         time.sleep(interval_s)
 
 

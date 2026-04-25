@@ -23,16 +23,17 @@ Message schema (v1)
 from __future__ import annotations
 
 import json
-import logging
 import signal
 import time
 from typing import Any
 
+import psycopg2
 from confluent_kafka import Consumer, KafkaError, KafkaException
 
+from common.logging_setup import get_logger
 from proleague_scraper.db import upsert_players
 
-log = logging.getLogger("proleague_ingest.consumer")
+log = get_logger("proleague_ingest.consumer")
 
 SUPPORTED_SCHEMA_VERSION = 1
 
@@ -85,14 +86,14 @@ def run_consumer(
 
     def _handle_signal(signum, _frame):  # noqa: ANN001
         nonlocal stop
-        log.info("ingest_shutdown_requested signal=%s", signum)
+        log.info("ingest_shutdown_requested signal={}", signum)
         stop = True
 
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
     log.info(
-        "proleague_ingest_started topic=%s group=%s bootstrap=%s",
+        "proleague_ingest_started topic={} group={} bootstrap={}",
         topic,
         consumer_group,
         bootstrap_servers,
@@ -110,8 +111,8 @@ def run_consumer(
                 err = msg.error()
                 if err.code() == KafkaError._PARTITION_EOF:
                     continue
-                log.error(
-                    "consumer_error topic=%s partition=%s: %s",
+                log.info(
+                    "consumer_error topic={} partition={} error={}",
                     msg.topic(),
                     msg.partition(),
                     err,
@@ -119,10 +120,17 @@ def run_consumer(
                 continue
 
             try:
+                log.debug(
+                    "task=parse_envelope previous=message_polled next=validate_message "
+                    "topic={} partition={} offset={}",
+                    msg.topic(),
+                    msg.partition(),
+                    msg.offset(),
+                )
                 envelope = parse_envelope(msg.value())
             except ValueError as exc:
-                log.warning(
-                    "ingest_parse_skip topic=%s partition=%s offset=%s error=%s",
+                log.info(
+                    "ingest_parse_skip topic={} partition={} offset={} error={}",
                     msg.topic(),
                     msg.partition(),
                     msg.offset(),
@@ -139,14 +147,27 @@ def run_consumer(
 
             # Lazy DB connect / reconnect.
             if conn is None or conn.closed:
+                log.debug(
+                    "task=db_connect previous=message_validated next=upsert_player player_id={}",
+                    player.get("player_id"),
+                )
                 conn = _connect(database_url)
 
             try:
+                log.debug(
+                    "task=upsert_player previous=db_connection_ready next=commit_offset "
+                    "player_id={} topic={} partition={} offset={}",
+                    player.get("player_id"),
+                    msg.topic(),
+                    msg.partition(),
+                    msg.offset(),
+                )
                 upsert_players(conn, [player], source_url, scraped_at)
                 consumer.commit(msg, asynchronous=False)
                 processed += 1
-                log.info(
-                    "ingest_upserted player_id=%s name=%s topic=%s partition=%s offset=%s",
+                log.debug(
+                    "task=offset_committed previous=upsert_successful next=poll_next_message "
+                    "player_id={} name={} topic={} partition={} offset={}",
                     player.get("player_id"),
                     player.get("name"),
                     msg.topic(),
@@ -155,14 +176,13 @@ def run_consumer(
                 )
             except Exception as exc:
                 errors += 1
-                log.error(
-                    "ingest_db_error player_id=%s topic=%s partition=%s offset=%s: %s",
+                log.info(
+                    "ingest_db_error player_id={} topic={} partition={} offset={} error={}",
                     player.get("player_id"),
                     msg.topic(),
                     msg.partition(),
                     msg.offset(),
                     exc,
-                    exc_info=True,
                 )
                 # Close and reconnect on next iteration.
                 try:
@@ -172,14 +192,14 @@ def run_consumer(
                 conn = None
                 time.sleep(2.0)
 
-    except KafkaException:
-        log.exception("consumer_fatal_kafka_error")
+    except KafkaException as exc:
+        log.info("consumer_fatal_kafka_error error={}", exc)
     finally:
         consumer.close()
         if conn and not conn.closed:
             conn.close()
         log.info(
-            "proleague_ingest_stopped processed=%d skipped=%d errors=%d",
+            "proleague_ingest_stopped processed={} skipped={} errors={}",
             processed,
             skipped,
             errors,
@@ -188,6 +208,4 @@ def run_consumer(
 
 def _connect(database_url: str):  # noqa: ANN001
     """Open a psycopg2 connection from an explicit URL (bypasses DATABASE_URL env var)."""
-    import psycopg2
-
     return psycopg2.connect(database_url)

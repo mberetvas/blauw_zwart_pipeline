@@ -219,6 +219,45 @@ def test_ask_stream_returns_sse_events_from_agent(
     assert events[3][1] == {}
 
 
+def test_ask_stream_passes_through_progress_events(
+    llm_app_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fake_run_ask_stream(req):
+        yield StreamEvent(
+            "progress",
+            {
+                "step_key": "tool_start",
+                "title": "Cleaning the attic",
+                "detail": "Reviewing available tables.",
+                "phase": "primary",
+                "ts": "2026-04-25T09:00:00Z",
+            },
+        )
+        yield StreamEvent(
+            "meta",
+            {
+                "sql": "SELECT 1",
+                "data_preview": [{"x": 1}],
+                "trace_notes": [],
+                "repaired": False,
+            },
+        )
+        yield StreamEvent("answer_delta", {"text": "Hi"})
+        yield StreamEvent("done", {})
+
+    monkeypatch.setattr(llm_app_module, "run_ask_stream", fake_run_ask_stream)
+
+    response = llm_app_module.app.test_client().post(
+        "/api/ask/stream",
+        json={"question": "status please", "provider": "openrouter"},
+    )
+
+    assert response.status_code == 200
+    events = _parse_sse_events(response.get_data(as_text=True))
+    assert [e[0] for e in events] == ["progress", "meta", "answer_delta", "done"]
+    assert events[0][1]["title"] == "Cleaning the attic"
+
+
 def test_ask_route_returns_422_on_agent_failure(
     llm_app_module, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-import logging
 import time
 import uuid
 from contextvars import ContextVar, Token
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Callable
 from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
+
+from common.logging_setup import get_logger, register_request_id_getter
 
 # ---------------------------------------------------------------------------
 # Request-ID ContextVar
@@ -34,22 +36,14 @@ def get_request_id() -> str:
     return _REQUEST_ID.get()
 
 
-# ---------------------------------------------------------------------------
-# Logging filter
-# ---------------------------------------------------------------------------
-
-
 def reset_request_id(token: Token[str]) -> None:
     """Reset the request ID ContextVar to its previous value using the token."""
     _REQUEST_ID.reset(token)
 
 
-class RequestIdFilter(logging.Filter):
-    """Inject ``req_id`` from the ContextVar into every LogRecord."""
+register_request_id_getter(get_request_id)
 
-    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
-        record.req_id = _REQUEST_ID.get()  # type: ignore[attr-defined]
-        return True
+log = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -68,10 +62,17 @@ class AgentObservabilityHandler(BaseCallbackHandler):
     that ``on_*_end`` / ``on_*_error`` can emit complete log lines.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        progress_sink: Callable[[dict[str, Any]], None] | None = None,
+        phase: str = "primary",
+    ) -> None:
         super().__init__()
         # run_id -> {"started_at": float, "name": str}
         self._runs: dict[UUID, dict[str, Any]] = {}
+        self._progress_sink = progress_sink
+        self._phase = phase
 
     # ------------------------------------------------------------------
     # Chat model (LangChain ≥ 0.1)
@@ -87,7 +88,17 @@ class AgentObservabilityHandler(BaseCallbackHandler):
     ) -> None:
         model = self._extract_model(serialized)
         self._runs[run_id] = {"started_at": time.perf_counter(), "name": model}
-        logging.getLogger(__name__).info("LLM call start | model=%s", model)
+        self._emit_progress(
+            {
+                "step_key": "llm_start",
+                "phase": self._phase,
+                "model": model,
+            }
+        )
+        log.debug(
+            "task=llm_start model={} previous=agent_stage_ready next=await_llm_response",
+            model,
+        )
 
     # ------------------------------------------------------------------
     # Legacy text LLM
@@ -103,7 +114,17 @@ class AgentObservabilityHandler(BaseCallbackHandler):
     ) -> None:
         model = self._extract_model(serialized)
         self._runs[run_id] = {"started_at": time.perf_counter(), "name": model}
-        logging.getLogger(__name__).info("LLM call start | model=%s", model)
+        self._emit_progress(
+            {
+                "step_key": "llm_start",
+                "phase": self._phase,
+                "model": model,
+            }
+        )
+        log.debug(
+            "task=llm_start model={} previous=agent_stage_ready next=await_llm_response",
+            model,
+        )
 
     def on_llm_end(
         self,
@@ -113,7 +134,19 @@ class AgentObservabilityHandler(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         meta = self._pop_run(run_id)
-        logging.getLogger(__name__).info("LLM call end — %.0f ms", meta["elapsed_ms"])
+        log.info(
+            "llm_complete model={} elapsed_ms={:.0f}",
+            meta["name"],
+            meta["elapsed_ms"],
+        )
+        self._emit_progress(
+            {
+                "step_key": "llm_done",
+                "phase": self._phase,
+                "model": meta["name"],
+                "elapsed_ms": round(meta["elapsed_ms"]),
+            }
+        )
 
     def on_llm_error(
         self,
@@ -123,8 +156,20 @@ class AgentObservabilityHandler(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         meta = self._pop_run(run_id)
-        logging.getLogger(__name__).error(
-            "LLM call error — %.0f ms: %s", meta["elapsed_ms"], error
+        log.info(
+            "llm_failed model={} elapsed_ms={:.0f} error={}",
+            meta["name"],
+            meta["elapsed_ms"],
+            error,
+        )
+        self._emit_progress(
+            {
+                "step_key": "llm_error",
+                "phase": self._phase,
+                "model": meta["name"],
+                "elapsed_ms": round(meta["elapsed_ms"]),
+                "error": str(error),
+            }
         )
 
     # ------------------------------------------------------------------
@@ -141,8 +186,18 @@ class AgentObservabilityHandler(BaseCallbackHandler):
     ) -> None:
         name = serialized.get("name") or "unknown_tool"
         self._runs[run_id] = {"started_at": time.perf_counter(), "name": name}
-        logging.getLogger(__name__).info(
-            "Tool call start: %s | args=%s", name, input_str[:_TRUNCATE_ARGS]
+        self._emit_progress(
+            {
+                "step_key": "tool_start",
+                "phase": self._phase,
+                "tool": name,
+                "args_preview": input_str[:_TRUNCATE_ARGS],
+            }
+        )
+        log.debug(
+            "task=tool_start tool={} previous=llm_selected_tool next=invoke_tool args={}",
+            name,
+            input_str[:_TRUNCATE_ARGS],
         )
 
     def on_tool_end(
@@ -153,11 +208,19 @@ class AgentObservabilityHandler(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         meta = self._pop_run(run_id)
-        logging.getLogger(__name__).info(
-            "Tool call end: %s — %.0f ms | output=%s",
+        log.info(
+            "tool_complete tool={} elapsed_ms={:.0f} output={}",
             meta["name"],
             meta["elapsed_ms"],
             str(output)[:_TRUNCATE_OUTPUT],
+        )
+        self._emit_progress(
+            {
+                "step_key": "tool_done",
+                "phase": self._phase,
+                "tool": meta["name"],
+                "elapsed_ms": round(meta["elapsed_ms"]),
+            }
         )
 
     def on_tool_error(
@@ -168,8 +231,20 @@ class AgentObservabilityHandler(BaseCallbackHandler):
         **kwargs: Any,
     ) -> None:
         meta = self._pop_run(run_id)
-        logging.getLogger(__name__).error(
-            "Tool call error: %s — %.0f ms: %s", meta["name"], meta["elapsed_ms"], error
+        log.info(
+            "tool_failed tool={} elapsed_ms={:.0f} error={}",
+            meta["name"],
+            meta["elapsed_ms"],
+            error,
+        )
+        self._emit_progress(
+            {
+                "step_key": "tool_error",
+                "phase": self._phase,
+                "tool": meta["name"],
+                "elapsed_ms": round(meta["elapsed_ms"]),
+                "error": str(error),
+            }
         )
 
     # ------------------------------------------------------------------
@@ -189,3 +264,14 @@ class AgentObservabilityHandler(BaseCallbackHandler):
         started_at = meta.get("started_at")
         elapsed_ms = (time.perf_counter() - started_at) * 1000 if started_at else 0.0
         return {"name": meta.get("name", "unknown"), "elapsed_ms": elapsed_ms}
+
+    def _emit_progress(self, payload: dict[str, Any]) -> None:
+        if self._progress_sink is None:
+            return
+        event = dict(payload)
+        event.setdefault("ts", datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"))
+        try:
+            self._progress_sink(event)
+        except Exception:
+            # Progress reporting must never break the agent flow.
+            return

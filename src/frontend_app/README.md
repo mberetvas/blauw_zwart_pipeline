@@ -145,7 +145,15 @@ Current pipeline:
 
 ### Streaming details
 
-`POST /api/ask/stream` emits Server-Sent Events with `meta`, `answer_delta`, `done`, or `error` events. Successful follow-up questions also carry a small history window so prompts like "these fans" or "that match" stay scoped.
+`POST /api/ask/stream` emits Server-Sent Events with `progress`, `meta`, `answer_delta`, `done`, or `error` events. Successful follow-up questions also carry a small history window so prompts like "these fans" or "that match" stay scoped.
+
+`progress` events are advisory UX updates intended for "thinking out loud" feedback. Each payload includes:
+
+- `step_key` — stable machine key for the stage/tool step
+- `title` — short user-facing status line
+- `detail` — brief factual explanation of what is happening
+- `phase` — `primary`, `repair`, or `final`
+- `ts` — UTC ISO8601 timestamp
 
 ### What the model sees vs what the UI gets
 

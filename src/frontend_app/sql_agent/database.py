@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-import logging
 import os
 import time
 from decimal import Decimal
@@ -11,7 +10,9 @@ from typing import Any, Sequence
 
 import psycopg2
 
-log = logging.getLogger(__name__)
+from common.logging_setup import get_logger
+
+log = get_logger(__name__)
 
 # Prefer read-only role URL; Compose maps LLM_READER_DATABASE_URL -> DATABASE_URL for this service.
 DATABASE_URL = (
@@ -42,7 +43,10 @@ def _run_read_query(
     try:
         with conn.cursor() as cur:
             cur.execute("SET statement_timeout = '10s'")
-            log.debug("DB query: sql=%.150s", sql)
+            log.debug(
+                "task=db_query_prepare previous=connection_opened next=execute_sql sql_preview={}",
+                sql[:150],
+            )
             t0 = time.perf_counter()
             if params is None:
                 cur.execute(sql)
@@ -51,7 +55,7 @@ def _run_read_query(
             cols = [d[0] for d in cur.description]
             rows = [dict(zip(cols, row)) for row in cur.fetchall()]
             elapsed_ms = (time.perf_counter() - t0) * 1000
-            log.debug("DB query done: %d rows, %.0f ms", len(rows), elapsed_ms)
+            log.info("db_query_complete rows={} elapsed_ms={:.0f}", len(rows), elapsed_ms)
             return rows
     finally:
         conn.close()

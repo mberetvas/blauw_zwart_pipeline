@@ -197,6 +197,11 @@ class KafkaSink:
 
     def write(self, line: str) -> None:
         self._check_error()
+        logger.debug(
+            "task=kafka_produce previous=line_ready next=delivery_callback topic=%s bytes=%d",
+            self._topic,
+            len(line.encode("utf-8")),
+        )
         self._producer.produce(
             self._topic,
             value=line.encode("utf-8"),
@@ -213,8 +218,5 @@ class KafkaSink:
         logger.info("Closing Kafka producer — flushing in-flight messages")
         remaining = self._producer.flush(timeout=30)
         if remaining > 0:
-            logger.warning(
-                "%d Kafka message(s) not confirmed before flush timeout",
-                remaining,
-            )
+            logger.warning("%d Kafka message(s) not confirmed before flush timeout", remaining)
         self._check_error()

@@ -18,7 +18,6 @@ https://www.proleague.be/robots.txt.  Operators are responsible for compliance.
 from __future__ import annotations
 
 import json
-import logging
 import re
 import time
 from typing import Any
@@ -27,7 +26,9 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 
-log = logging.getLogger(__name__)
+from common.logging_setup import get_logger
+
+log = get_logger(__name__)
 
 BASE_URL = "https://www.proleague.be"
 DEFAULT_SQUAD_URL = f"{BASE_URL}/teams/club-brugge-kv-182/squad"
@@ -73,7 +74,13 @@ def _fetch_html(url: str) -> str:
             return resp.text
         except requests.RequestException as exc:
             last_exc = exc
-            log.warning("Fetch attempt %d/%d failed for %s: %s", attempt, MAX_RETRIES, url, exc)
+            log.info(
+                "fetch_attempt_failed attempt={} max_attempts={} url={} error={}",
+                attempt,
+                MAX_RETRIES,
+                url,
+                exc,
+            )
             if attempt < MAX_RETRIES:
                 time.sleep(delay)
                 delay *= BACKOFF_FACTOR
@@ -94,7 +101,7 @@ def _extract_next_data(html: str) -> dict[str, Any] | None:
     try:
         return json.loads(tag.string or "")
     except (json.JSONDecodeError, TypeError) as exc:
-        log.warning("Failed to parse __NEXT_DATA__: %s", exc)
+        log.info("next_data_parse_failed error={}", exc)
         return None
 
 
@@ -275,21 +282,38 @@ def scrape_squad(
     """
     import datetime
 
-    log.info("Fetching squad listing: %s", squad_url)
+    log.info("scrape_squad_start squad_url={}", squad_url)
+    log.debug(
+        "task=fetch_squad_listing previous=scrape_requested next=parse_player_urls url={}",
+        squad_url,
+    )
     squad_html = _fetch_html(squad_url)
     player_urls = _player_urls_from_html(squad_html, squad_url)
-    log.info("Found %d player URLs on squad page", len(player_urls))
+    log.info("scrape_squad_urls_discovered count={}", len(player_urls))
 
     players: list[dict[str, Any]] = []
     for idx, player_url in enumerate(player_urls):
         if idx > 0:
             time.sleep(concurrency_delay)
         try:
+            log.debug(
+                "task=scrape_player previous=player_url_discovered next=normalize_player_data "
+                "index={} total={} url={}",
+                idx + 1,
+                len(player_urls),
+                player_url,
+            )
             player = scrape_player(player_url)
             players.append(player)
-            log.info("Scraped player %d/%d: %s", idx + 1, len(player_urls), player["name"])
+            log.debug(
+                "task=scrape_player_complete previous=player_fetched next=continue_iteration "
+                "index={} total={} player={}",
+                idx + 1,
+                len(player_urls),
+                player["name"],
+            )
         except Exception as exc:
-            log.warning("Skipping player at %s: %s", player_url, exc)
+            log.info("scrape_player_skipped url={} error={}", player_url, exc)
             players.append(
                 {
                     "player_id": "",
@@ -301,6 +325,7 @@ def scrape_squad(
             )
 
     fetched_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+    log.info("scrape_squad_complete players_total={} source_url={}", len(players), squad_url)
     return {
         "source_url": squad_url,
         "fetched_at": fetched_at,

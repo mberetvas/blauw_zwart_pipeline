@@ -239,12 +239,47 @@ def test_run_ask_stream_emits_meta_then_delta_then_done(
 
     events = list(graph_env.run_ask_stream(graph_env.AgentRequest(question="q")))
     names = [e.name for e in events]
-    assert names[0] == "meta"
+    assert "progress" in names
+    assert names.index("progress") < names.index("meta")
     assert names[-1] == "done"
     assert "answer_delta" in names
     # First meta event carries the SQL and preview.
-    assert events[0].data["sql"] == "SELECT 1 AS x"
-    assert events[0].data["data_preview"] == [{"x": 1}]
+    meta_event = next(e for e in events if e.name == "meta")
+    assert meta_event.data["sql"] == "SELECT 1 AS x"
+    assert meta_event.data["data_preview"] == [{"x": 1}]
+
+
+def test_run_ask_progress_callback_receives_machine_events(
+    graph_env, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_messages = iter(
+        [
+            _ai_tool_call("execute_select", {"sql": "SELECT 1 AS x"}, "call_1"),
+            _ai_final("One row."),
+        ]
+    )
+    seen: list[dict[str, Any]] = []
+
+    def fake_build_chat_model(model: str, **_kw):
+        return FakeToolChatModel(messages=fake_messages)
+
+    def fake_execute_select_func(sql: str) -> str:
+        return json.dumps({"rows": [{"x": 1}], "row_count": 1, "sql": sql})
+
+    monkeypatch.setattr(graph_env, "build_chat_model", fake_build_chat_model)
+    monkeypatch.setattr(graph_env.execute_select, "func", fake_execute_select_func)
+
+    result = graph_env.run_ask(
+        graph_env.AgentRequest(question="q"),
+        on_progress=lambda evt: seen.append(evt),
+    )
+
+    assert isinstance(result, graph_env.AgentResult)
+    step_keys = [str(evt.get("step_key")) for evt in seen]
+    assert "run_start" in step_keys
+    assert "llm_start" in step_keys
+    assert "tool_start" in step_keys
+    assert any(str(evt.get("phase")) == "primary" for evt in seen)
 
 
 def test_run_ask_stream_failure_emits_error_event(
@@ -261,6 +296,7 @@ def test_run_ask_stream_failure_emits_error_event(
     monkeypatch.setattr(graph_env, "build_chat_model", fake_build_chat_model)
 
     events = list(graph_env.run_ask_stream(graph_env.AgentRequest(question="q")))
-    assert len(events) == 1
-    assert events[0].name == "error"
-    assert "phase" in events[0].data
+    names = [e.name for e in events]
+    assert "error" in names
+    err = next(e for e in events if e.name == "error")
+    assert "phase" in err.data
