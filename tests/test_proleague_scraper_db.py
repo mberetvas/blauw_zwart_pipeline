@@ -162,14 +162,10 @@ def _player(player_id: str = "p1") -> dict[str, Any]:
 
 def test_upsert_players_writes_and_commits() -> None:
     conn = _FakeConn()
-    n = scraper_db.upsert_players(
-        conn, [_player("p1"), _player("p2")], "https://src", "2026-04-25T00:00:00Z"
-    )
+    n = scraper_db.upsert_players(conn, [_player("p1"), _player("p2")], "https://src", "2026-04-25T00:00:00Z")
     assert n == 2
     # Ensure DDL ran first then 2 upsert executes.
-    upsert_calls = [
-        (s, p) for s, p in conn.cur.executed if "INSERT INTO raw_data.player_stats" in s
-    ]
+    upsert_calls = [(s, p) for s, p in conn.cur.executed if "INSERT INTO raw_data.player_stats" in s]
     assert len(upsert_calls) == 2
     assert upsert_calls[0][1]["player_id"] == "p1"
     assert upsert_calls[0][1]["profile"] == json.dumps({"age": 25})
@@ -204,14 +200,32 @@ def test_get_players_normalises_rows() -> None:
     ts = datetime.datetime(2026, 4, 25, 12, 0, 0)
     conn.cur._fetchall = [
         (
-            "p1", "alice", "Alice", "FW", "ST", 9,
-            "https://x/img.png", {"age": 25}, [{"goals": 3}],
-            "Pro League", "https://src", ts,
+            "p1",
+            "alice",
+            "Alice",
+            "FW",
+            "ST",
+            9,
+            "https://x/img.png",
+            {"age": 25},
+            [{"goals": 3}],
+            "Pro League",
+            "https://src",
+            ts,
         ),
         (
-            "p2", "bob", "Bob", None, None, None,
-            None, '{"age": 30}', '[{"goals": 1}]',
-            None, None, None,
+            "p2",
+            "bob",
+            "Bob",
+            None,
+            None,
+            None,
+            None,
+            '{"age": 30}',
+            '[{"goals": 1}]',
+            None,
+            None,
+            None,
         ),
     ]
     out = scraper_db.get_players(conn)

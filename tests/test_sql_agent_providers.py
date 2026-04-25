@@ -54,9 +54,7 @@ def test_build_chat_model_passes_runtime_config(cfg, monkeypatch: pytest.MonkeyP
     assert captured["request_timeout"] == 30_000
 
 
-def test_build_chat_model_binds_tools_when_provided(
-    cfg, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_build_chat_model_binds_tools_when_provided(cfg, monkeypatch: pytest.MonkeyPatch) -> None:
     chat = MagicMock(name="ChatOpenRouter")
     chat.bind_tools.return_value = "BOUND"
     monkeypatch.setattr(cfg, "ChatOpenRouter", lambda **_: chat)
@@ -66,9 +64,7 @@ def test_build_chat_model_binds_tools_when_provided(
     chat.bind_tools.assert_called_once_with(["t1", "t2"])
 
 
-def test_build_chat_model_raises_when_api_key_missing(
-    cfg, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_build_chat_model_raises_when_api_key_missing(cfg, monkeypatch: pytest.MonkeyPatch) -> None:
     import frontend_app.sql_agent.llm_runtime_config as runtime_config
 
     runtime_config.apply_llm_config_update({"openrouter_api_key": ""})
@@ -153,17 +149,13 @@ def test_llm_request_error_unauthorized_returns_503() -> None:
 
 
 def test_llm_request_error_timeout() -> None:
-    msg, code = providers._llm_request_error(
-        "OpenRouter", "answer", requests.exceptions.Timeout()
-    )
+    msg, code = providers._llm_request_error("OpenRouter", "answer", requests.exceptions.Timeout())
     assert code == 504
     assert "timed out" in msg.lower()
 
 
 def test_llm_request_error_connection() -> None:
-    msg, code = providers._llm_request_error(
-        "OpenRouter", "answer", requests.exceptions.ConnectionError()
-    )
+    msg, code = providers._llm_request_error("OpenRouter", "answer", requests.exceptions.ConnectionError())
     assert code == 503
     assert "unreachable" in msg.lower()
 

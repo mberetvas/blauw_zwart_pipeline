@@ -88,9 +88,7 @@ class _FakeConn:
 # ---------------------------------------------------------------------------
 
 
-def test_run_read_query_sets_timeout_and_returns_dicts(
-    db_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_read_query_sets_timeout_and_returns_dicts(db_module, monkeypatch: pytest.MonkeyPatch) -> None:
     cur = _FakeCursor(rows=[(1, "alice")], cols=["id", "name"])
     conn = _FakeConn(cur)
     monkeypatch.setattr(db_module.psycopg2, "connect", lambda url: conn)
@@ -104,9 +102,7 @@ def test_run_read_query_sets_timeout_and_returns_dicts(
     assert conn.closed_called is True
 
 
-def test_run_read_query_with_params(
-    db_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_read_query_with_params(db_module, monkeypatch: pytest.MonkeyPatch) -> None:
     cur = _FakeCursor(rows=[], cols=["id"])
     conn = _FakeConn(cur)
 
@@ -123,9 +119,7 @@ def test_run_read_query_with_params(
     assert captured["params"] is None or captured["params"] == (5,)
 
 
-def test_run_read_query_raises_when_no_url(
-    db_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_read_query_raises_when_no_url(db_module, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(db_module, "DATABASE_URL", "")
     with pytest.raises(db_module.psycopg2.OperationalError, match=r"No database URL"):
         db_module._run_read_query("SELECT 1")
@@ -136,9 +130,7 @@ def test_run_read_query_raises_when_no_url(
 # ---------------------------------------------------------------------------
 
 
-def test_execute_sql_wraps_with_limit_100(
-    db_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_execute_sql_wraps_with_limit_100(db_module, monkeypatch: pytest.MonkeyPatch) -> None:
     cur = _FakeCursor(rows=[(1,)], cols=["a"])
     conn = _FakeConn(cur)
     monkeypatch.setattr(db_module.psycopg2, "connect", lambda url: conn)

@@ -79,9 +79,7 @@ def test_player_calls_scraper(monkeypatch: pytest.MonkeyPatch, client) -> None:
     assert resp.get_json()["player_id"] == "p1"
 
 
-def test_player_returns_502_on_scrape_failure(
-    monkeypatch: pytest.MonkeyPatch, client
-) -> None:
+def test_player_returns_502_on_scrape_failure(monkeypatch: pytest.MonkeyPatch, client) -> None:
     def boom(url: str) -> dict[str, Any]:
         raise RuntimeError("network down")
 

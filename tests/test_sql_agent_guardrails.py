@@ -149,10 +149,7 @@ def test_strip_fences_no_fence_passthrough() -> None:
 
 
 def test_rewrite_replaces_staging() -> None:
-    assert (
-        _rewrite_layer_schema_qualifiers("SELECT * FROM staging.fans")
-        == "SELECT * FROM dbt_dev.fans"
-    )
+    assert _rewrite_layer_schema_qualifiers("SELECT * FROM staging.fans") == "SELECT * FROM dbt_dev.fans"
 
 
 def test_rewrite_replaces_intermediate_and_marts() -> None:

@@ -101,9 +101,7 @@ def test_resolve_repair_model_override_wins(cfg) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_file_overlay_persists_and_overrides_env(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_file_overlay_persists_and_overrides_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = tmp_path / "llm_config.json"
     config_path.write_text(
         json.dumps(
@@ -141,9 +139,7 @@ def test_file_overlay_persists_and_overrides_env(
     assert s["openrouter_base_url"] == "https://openrouter.ai/api/v1"
 
 
-def test_file_overlay_invalid_json_falls_back_to_env(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_file_overlay_invalid_json_falls_back_to_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = tmp_path / "llm_config.json"
     config_path.write_text("{not json", encoding="utf-8")
 
@@ -163,9 +159,7 @@ def test_file_overlay_invalid_json_falls_back_to_env(
     assert mod.get_llm_settings()["openrouter_model"] == "deepseek/deepseek-v3.2"
 
 
-def test_file_overlay_ignores_legacy_ollama_keys(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_file_overlay_ignores_legacy_ollama_keys(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = tmp_path / "llm_config.json"
     config_path.write_text(
         json.dumps(

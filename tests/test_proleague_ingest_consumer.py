@@ -55,14 +55,10 @@ def patched_consumer(monkeypatch: pytest.MonkeyPatch):
     return fake_consumer, fake_conn
 
 
-def test_run_consumer_processes_one_message_and_commits(
-    patched_consumer, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_consumer_processes_one_message_and_commits(patched_consumer, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_consumer, fake_conn = patched_consumer
     upserts: list[Any] = []
-    monkeypatch.setattr(
-        consumer_mod, "upsert_players", lambda conn, players, src, ts: upserts.append(players)
-    )
+    monkeypatch.setattr(consumer_mod, "upsert_players", lambda conn, players, src, ts: upserts.append(players))
 
     # poll() returns: a real msg, then None to drain — but we'll trigger stop after first commit.
     poll_seq: list = [_msg(_envelope_bytes("alice"))]
@@ -71,9 +67,9 @@ def test_run_consumer_processes_one_message_and_commits(
         # Trigger graceful stop after we've consumed the queued message.
         if not poll_seq:
             # Re-enter the consumer's signal handler manually.
-            for call in consumer_mod.signal.signal.mock_calls if hasattr(
-                consumer_mod.signal.signal, "mock_calls"
-            ) else []:
+            for call in (
+                consumer_mod.signal.signal.mock_calls if hasattr(consumer_mod.signal.signal, "mock_calls") else []
+            ):
                 pass
             return None
         return poll_seq.pop(0)
@@ -105,13 +101,9 @@ def test_run_consumer_processes_one_message_and_commits(
     fake_conn.close.assert_called()
 
 
-def test_run_consumer_skips_invalid_message_and_commits(
-    patched_consumer, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_consumer_skips_invalid_message_and_commits(patched_consumer, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_consumer, _ = patched_consumer
-    monkeypatch.setattr(
-        consumer_mod, "upsert_players", lambda *a, **kw: pytest.fail("must not upsert")
-    )
+    monkeypatch.setattr(consumer_mod, "upsert_players", lambda *a, **kw: pytest.fail("must not upsert"))
 
     fake_consumer.poll.side_effect = [_msg(b"not json")]
 
@@ -132,9 +124,7 @@ def test_run_consumer_skips_invalid_message_and_commits(
     fake_consumer.commit.assert_called_once()
 
 
-def test_run_consumer_skips_partition_eof_silently(
-    patched_consumer, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_consumer_skips_partition_eof_silently(patched_consumer, monkeypatch: pytest.MonkeyPatch) -> None:
     from confluent_kafka import KafkaError, KafkaException
 
     fake_consumer, _ = patched_consumer
@@ -156,9 +146,7 @@ def test_run_consumer_skips_partition_eof_silently(
     fake_consumer.commit.assert_not_called()
 
 
-def test_run_consumer_logs_other_consumer_errors(
-    patched_consumer, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_consumer_logs_other_consumer_errors(patched_consumer, monkeypatch: pytest.MonkeyPatch) -> None:
     from confluent_kafka import KafkaException
 
     fake_consumer, _ = patched_consumer
@@ -179,9 +167,7 @@ def test_run_consumer_logs_other_consumer_errors(
     fake_consumer.close.assert_called_once()
 
 
-def test_run_consumer_handles_db_failure_resets_connection(
-    patched_consumer, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_consumer_handles_db_failure_resets_connection(patched_consumer, monkeypatch: pytest.MonkeyPatch) -> None:
     from confluent_kafka import KafkaException
 
     fake_consumer, _ = patched_consumer
@@ -205,9 +191,7 @@ def test_run_consumer_handles_db_failure_resets_connection(
     fake_consumer.close.assert_called_once()
 
 
-def test_run_consumer_registers_signal_handlers(
-    patched_consumer, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_consumer_registers_signal_handlers(patched_consumer, monkeypatch: pytest.MonkeyPatch) -> None:
     from confluent_kafka import KafkaException
 
     fake_consumer, _ = patched_consumer

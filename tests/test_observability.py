@@ -129,9 +129,7 @@ def test_extract_model_falls_back_to_unknown() -> None:
 
 
 def test_extract_model_uses_kwargs_model_first() -> None:
-    out = obs.AgentObservabilityHandler._extract_model(
-        {"name": "fallback", "kwargs": {"model": "preferred"}}
-    )
+    out = obs.AgentObservabilityHandler._extract_model({"name": "fallback", "kwargs": {"model": "preferred"}})
     assert out == "preferred"
 
 
