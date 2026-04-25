@@ -11,6 +11,7 @@ import yaml
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _write_valid_yaml(path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {
@@ -71,6 +72,7 @@ def _write_valid_yaml(path: Path) -> Path:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def clear_semantic_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SEMANTIC_LAYER_FILE", raising=False)
@@ -81,6 +83,7 @@ def clear_semantic_env(monkeypatch: pytest.MonkeyPatch) -> None:
 # load_semantic_layer tests
 # ---------------------------------------------------------------------------
 
+
 def test_load_happy_path_returns_expected_keys(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -89,6 +92,7 @@ def test_load_happy_path_returns_expected_keys(
     from frontend_app.sql_agent import (
         semantic_layer,  # noqa: PLC0415  (import inside test intentional)
     )
+
     importlib.reload(semantic_layer)
 
     yaml_file = _write_valid_yaml(tmp_path / "semantic_layer.yml")
@@ -103,12 +107,11 @@ def test_load_happy_path_returns_expected_keys(
     assert isinstance(layer.get("answer_style"), dict)
 
 
-def test_load_missing_explicit_file_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_load_missing_explicit_file_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import importlib
 
     from frontend_app.sql_agent import semantic_layer
+
     importlib.reload(semantic_layer)
 
     missing = tmp_path / "no_such_file.yml"
@@ -126,6 +129,7 @@ def test_load_missing_default_file_returns_empty_gracefully(
     import importlib
 
     from frontend_app.sql_agent import semantic_layer
+
     importlib.reload(semantic_layer)
 
     # Override _DEFAULT_SEMANTIC_FILE to point somewhere that does not exist.
@@ -141,12 +145,11 @@ def test_load_missing_default_file_returns_empty_gracefully(
     assert any("semantic layer" in r.message.lower() for r in caplog.records)
 
 
-def test_load_bad_yaml_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_load_bad_yaml_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import importlib
 
     from frontend_app.sql_agent import semantic_layer
+
     importlib.reload(semantic_layer)
 
     bad = tmp_path / "bad.yml"
@@ -158,12 +161,11 @@ def test_load_bad_yaml_raises(
         semantic_layer.load_semantic_layer()
 
 
-def test_load_wrong_version_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_load_wrong_version_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import importlib
 
     from frontend_app.sql_agent import semantic_layer
+
     importlib.reload(semantic_layer)
 
     yaml_file = tmp_path / "wrong_ver.yml"
@@ -175,12 +177,11 @@ def test_load_wrong_version_raises(
         semantic_layer.load_semantic_layer()
 
 
-def test_load_non_mapping_top_level_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_load_non_mapping_top_level_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import importlib
 
     from frontend_app.sql_agent import semantic_layer
+
     importlib.reload(semantic_layer)
 
     yaml_file = tmp_path / "list.yml"
@@ -196,12 +197,14 @@ def test_load_non_mapping_top_level_raises(
 # build_sql_semantic_context tests
 # ---------------------------------------------------------------------------
 
+
 def test_build_sql_context_contains_mart_and_rules(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import importlib
 
     from frontend_app.sql_agent import semantic_layer
+
     importlib.reload(semantic_layer)
 
     yaml_file = _write_valid_yaml(tmp_path / "semantic_layer.yml")
@@ -223,6 +226,7 @@ def test_build_sql_context_empty_layer_returns_empty() -> None:
     import importlib
 
     from frontend_app.sql_agent import semantic_layer
+
     importlib.reload(semantic_layer)
 
     assert semantic_layer.build_sql_semantic_context({}) == ""
@@ -232,12 +236,14 @@ def test_build_sql_context_empty_layer_returns_empty() -> None:
 # build_answer_semantic_context tests
 # ---------------------------------------------------------------------------
 
+
 def test_build_answer_context_contains_units_and_rules(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import importlib
 
     from frontend_app.sql_agent import semantic_layer
+
     importlib.reload(semantic_layer)
 
     yaml_file = _write_valid_yaml(tmp_path / "semantic_layer.yml")
@@ -256,6 +262,7 @@ def test_build_answer_context_empty_layer_returns_empty() -> None:
     import importlib
 
     from frontend_app.sql_agent import semantic_layer
+
     importlib.reload(semantic_layer)
 
     assert semantic_layer.build_answer_semantic_context({}) == ""
@@ -265,12 +272,14 @@ def test_build_answer_context_empty_layer_returns_empty() -> None:
 # SEMANTIC_CONTEXT_MAX_CHARS truncation
 # ---------------------------------------------------------------------------
 
+
 def test_semantic_context_max_chars_truncates(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import importlib
 
     from frontend_app.sql_agent import semantic_layer
+
     importlib.reload(semantic_layer)
 
     yaml_file = _write_valid_yaml(tmp_path / "semantic_layer.yml")

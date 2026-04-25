@@ -37,9 +37,7 @@ def llm_app_module(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 def test_validate_sql_allows_select_and_with(llm_app_module) -> None:
     llm_app_module._validate_sql("SELECT 1")
-    llm_app_module._validate_sql(
-        "WITH latest AS (SELECT 1 AS fan_id) SELECT fan_id FROM latest"
-    )
+    llm_app_module._validate_sql("WITH latest AS (SELECT 1 AS fan_id) SELECT fan_id FROM latest")
 
 
 def test_validate_sql_rejects_mutating_keyword(llm_app_module) -> None:
@@ -334,9 +332,7 @@ def test_ask_route_legacy_model_field_treated_as_agent_model(
     assert captured["request"].agent_model == "openai/gpt-4.1-mini"
 
 
-def test_ask_route_passes_history_to_agent(
-    llm_app_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_ask_route_passes_history_to_agent(llm_app_module, monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, object] = {}
 
     def fake_run_ask(req):
@@ -416,10 +412,12 @@ def test_public_config_env_models_by_provider(
     public config, with missing keys filled from defaults."""
     from frontend_app.sql_agent import llm_runtime_config as rc
 
-    custom = json.dumps({
-        "google": ["google/gemini-2.0-flash"],
-        "gpt": ["openai/gpt-4.1"],
-    })
+    custom = json.dumps(
+        {
+            "google": ["google/gemini-2.0-flash"],
+            "gpt": ["openai/gpt-4.1"],
+        }
+    )
     monkeypatch.setenv("OPENROUTER_MODELS_BY_PROVIDER", custom)
     rc.init_llm_config()
 
@@ -511,9 +509,7 @@ def _write_minimal_semantic_yaml(path: Path) -> None:
         ],
         "dimensions": [],
         "join_paths": [],
-        "layering_rules": [
-            {"id": "prefer_mart", "description": "Prefer mart for fan KPIs."}
-        ],
+        "layering_rules": [{"id": "prefer_mart", "description": "Prefer mart for fan KPIs."}],
         "answer_style": {
             "currency_unit": "EUR",
             "decimal_places": 2,
@@ -878,7 +874,7 @@ def test_squad_route_returns_500_on_db_query_error(
     import psycopg2
 
     def raise_db_error() -> list:
-        raise psycopg2.ProgrammingError("relation \"raw_data.player_stats\" does not exist")
+        raise psycopg2.ProgrammingError('relation "raw_data.player_stats" does not exist')
 
     monkeypatch.setattr(llm_app_module, "_fetch_players_from_db", raise_db_error)
 

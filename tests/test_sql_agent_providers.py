@@ -155,7 +155,9 @@ def test_llm_request_error_timeout() -> None:
 
 
 def test_llm_request_error_connection() -> None:
-    msg, code = providers._llm_request_error("OpenRouter", "answer", requests.exceptions.ConnectionError())
+    msg, code = providers._llm_request_error(
+        "OpenRouter", "answer", requests.exceptions.ConnectionError()
+    )
     assert code == 503
     assert "unreachable" in msg.lower()
 

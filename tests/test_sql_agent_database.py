@@ -88,7 +88,9 @@ class _FakeConn:
 # ---------------------------------------------------------------------------
 
 
-def test_run_read_query_sets_timeout_and_returns_dicts(db_module, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_read_query_sets_timeout_and_returns_dicts(
+    db_module, monkeypatch: pytest.MonkeyPatch
+) -> None:
     cur = _FakeCursor(rows=[(1, "alice")], cols=["id", "name"])
     conn = _FakeConn(cur)
     monkeypatch.setattr(db_module.psycopg2, "connect", lambda url: conn)

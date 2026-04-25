@@ -249,21 +249,30 @@ def test_parse_stream_kafka_topic_accepted() -> None:
 
 def test_parse_stream_kafka_topic_and_output_mutually_exclusive() -> None:
     with pytest.raises(SystemExit):
-        parse_args([
-            SUBCOMMAND_STREAM,
-            "--kafka-topic", "fan-events",
-            "-o", "out/x.ndjson",
-            "--max-events", "1",
-        ])
+        parse_args(
+            [
+                SUBCOMMAND_STREAM,
+                "--kafka-topic",
+                "fan-events",
+                "-o",
+                "out/x.ndjson",
+                "--max-events",
+                "1",
+            ]
+        )
 
 
 def test_parse_stream_kafka_bootstrap_servers_without_topic_errors() -> None:
     with pytest.raises(SystemExit):
-        parse_args([
-            SUBCOMMAND_STREAM,
-            "--kafka-bootstrap-servers", "localhost:9092",
-            "--max-events", "1",
-        ])
+        parse_args(
+            [
+                SUBCOMMAND_STREAM,
+                "--kafka-bootstrap-servers",
+                "localhost:9092",
+                "--max-events",
+                "1",
+            ]
+        )
 
 
 def test_parse_stream_kafka_compression_without_topic_errors() -> None:
@@ -282,15 +291,23 @@ def test_parse_stream_kafka_client_id_without_topic_errors() -> None:
 
 
 def test_parse_stream_kafka_flags_with_topic_accepted() -> None:
-    ns = parse_args([
-        SUBCOMMAND_STREAM,
-        "--kafka-topic", "t",
-        "--kafka-bootstrap-servers", "broker:9092",
-        "--kafka-client-id", "client",
-        "--kafka-compression", "snappy",
-        "--kafka-acks", "all",
-        "--max-events", "1",
-    ])
+    ns = parse_args(
+        [
+            SUBCOMMAND_STREAM,
+            "--kafka-topic",
+            "t",
+            "--kafka-bootstrap-servers",
+            "broker:9092",
+            "--kafka-client-id",
+            "client",
+            "--kafka-compression",
+            "snappy",
+            "--kafka-acks",
+            "all",
+            "--max-events",
+            "1",
+        ]
+    )
     assert ns.kafka_topic == "t"
     assert ns.kafka_bootstrap_servers == "broker:9092"
     assert ns.kafka_client_id == "client"
@@ -303,12 +320,17 @@ def test_parse_stream_kafka_topic_stdout_dash_allowed() -> None:
     # The flag combination --kafka-topic + -o - uses explicit stdout flag; we treat it as
     # mutually exclusive to keep behaviour unambiguous.
     with pytest.raises(SystemExit):
-        parse_args([
-            SUBCOMMAND_STREAM,
-            "--kafka-topic", "t",
-            "-o", "-",
-            "--max-events", "1",
-        ])
+        parse_args(
+            [
+                SUBCOMMAND_STREAM,
+                "--kafka-topic",
+                "t",
+                "-o",
+                "-",
+                "--max-events",
+                "1",
+            ]
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -534,6 +556,5 @@ def test_run_stream_kafka_startup_log(
     assert any("2 brokers" in r.message for r in startup)
     # Must NOT contain SASL passwords
     assert not any(
-        "sasl" in r.message.lower() and "password" in r.message.lower()
-        for r in caplog.records
+        "sasl" in r.message.lower() and "password" in r.message.lower() for r in caplog.records
     )

@@ -162,10 +162,14 @@ def _player(player_id: str = "p1") -> dict[str, Any]:
 
 def test_upsert_players_writes_and_commits() -> None:
     conn = _FakeConn()
-    n = scraper_db.upsert_players(conn, [_player("p1"), _player("p2")], "https://src", "2026-04-25T00:00:00Z")
+    n = scraper_db.upsert_players(
+        conn, [_player("p1"), _player("p2")], "https://src", "2026-04-25T00:00:00Z"
+    )
     assert n == 2
     # Ensure DDL ran first then 2 upsert executes.
-    upsert_calls = [(s, p) for s, p in conn.cur.executed if "INSERT INTO raw_data.player_stats" in s]
+    upsert_calls = [
+        (s, p) for s, p in conn.cur.executed if "INSERT INTO raw_data.player_stats" in s
+    ]
     assert len(upsert_calls) == 2
     assert upsert_calls[0][1]["player_id"] == "p1"
     assert upsert_calls[0][1]["profile"] == json.dumps({"age": 25})

@@ -12,7 +12,6 @@ from typing import Any
 from fan_events.core.data import ITEMS, SHOP_IDS
 from fan_events.core.domain import MERCH_PURCHASE, RETAIL_PURCHASE, TICKET_SCAN
 
-
 _V2_OPTIONAL_MATCH_FIELDS = frozenset(
     {
         "kickoff_local",
@@ -36,7 +35,9 @@ _V2_OPTIONAL_MATCH_FIELDS = frozenset(
 )
 
 
-def _validate_allowed_keys(*, rec: dict[str, Any], required: set[str], optional: set[str], label: str) -> None:
+def _validate_allowed_keys(
+    *, rec: dict[str, Any], required: set[str], optional: set[str], label: str
+) -> None:
     keys = set(rec.keys())
     missing = required - keys
     invalid = keys - required - optional

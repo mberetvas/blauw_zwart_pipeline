@@ -127,8 +127,7 @@ def test_parse_skip_log_includes_error_detail(caplog: pytest.LogCaptureFixture) 
             _run_until_idle(runtime)
 
         assert any(
-            "ingest_parse_skip" in r.message and "error=" in r.message
-            for r in caplog.records
+            "ingest_parse_skip" in r.message and "error=" in r.message for r in caplog.records
         )
     finally:
         loop.call_soon_threadsafe(loop.stop)
@@ -174,9 +173,9 @@ def test_worker_failure_sets_stop_flag(caplog: pytest.LogCaptureFixture) -> None
             runtime.join(timeout=4.0)
 
         assert runtime._stop.is_set(), "_stop should be set after worker failure"
-        assert any(
-            "partition_worker_failed" in r.message for r in caplog.records
-        ), "Expected critical log for worker failure"
+        assert any("partition_worker_failed" in r.message for r in caplog.records), (
+            "Expected critical log for worker failure"
+        )
     finally:
         loop.call_soon_threadsafe(loop.stop)
         loop_thread.join(timeout=3)

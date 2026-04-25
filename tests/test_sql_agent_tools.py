@@ -70,9 +70,7 @@ def _stub_run_read(monkeypatch: pytest.MonkeyPatch, tools_mod, mapping):
     monkeypatch.setattr(tools_mod, "_run_read_query", fake)
 
 
-def test_list_tables_merges_layer_from_yaml(
-    tools_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_list_tables_merges_layer_from_yaml(tools_module, monkeypatch: pytest.MonkeyPatch) -> None:
     def fake(sql: str, params: tuple | None) -> list[dict[str, Any]]:
         assert "information_schema.tables" in sql
         assert params == ("dbt_dev",)
@@ -93,9 +91,7 @@ def test_describe_table_rejects_unknown_table(
         raise AssertionError("describe_table must not query columns for unknown table")
 
     _stub_run_read(monkeypatch, tools_module, fake)
-    out = json.loads(
-        tools_module.describe_table.invoke({"table": "nope; DROP TABLE x"})
-    )
+    out = json.loads(tools_module.describe_table.invoke({"table": "nope; DROP TABLE x"}))
     assert "error" in out
     assert "Invalid table identifier" in out["error"]
 
@@ -118,9 +114,7 @@ def test_describe_table_returns_columns_with_descriptions(
         raise AssertionError(f"Unexpected SQL: {sql}")
 
     _stub_run_read(monkeypatch, tools_module, fake)
-    out = json.loads(
-        tools_module.describe_table.invoke({"table": "mart_fan_loyalty"})
-    )
+    out = json.loads(tools_module.describe_table.invoke({"table": "mart_fan_loyalty"}))
     assert out["name"] == "mart_fan_loyalty"
     assert out["layer"] == "marts"
     cols = {c["name"]: c for c in out["columns"]}
@@ -140,12 +134,8 @@ def test_execute_select_rejects_mutation_with_validation_phase(
     assert "error" in out
 
 
-def test_execute_select_runs_valid_select(
-    tools_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(
-        tools_module, "_execute_sql", lambda sql: [{"fan_id": "F1", "n": 7}]
-    )
+def test_execute_select_runs_valid_select(tools_module, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tools_module, "_execute_sql", lambda sql: [{"fan_id": "F1", "n": 7}])
     out = json.loads(
         tools_module.execute_select.invoke(
             {"sql": "```sql\nSELECT fan_id, COUNT(*) AS n FROM fans GROUP BY fan_id\n```"}
@@ -167,9 +157,7 @@ def test_execute_select_rewrites_dbt_layer_prefix(
         return []
 
     monkeypatch.setattr(tools_module, "_execute_sql", fake_exec)
-    tools_module.execute_select.invoke(
-        {"sql": "SELECT fan_id FROM marts.mart_fan_loyalty"}
-    )
+    tools_module.execute_select.invoke({"sql": "SELECT fan_id FROM marts.mart_fan_loyalty"})
     assert "dbt_dev.mart_fan_loyalty" in captured["sql"]
 
 
@@ -180,9 +168,7 @@ def test_execute_select_reports_execution_phase_on_db_error(
         raise RuntimeError("permission denied for relation foo")
 
     monkeypatch.setattr(tools_module, "_execute_sql", fake_exec)
-    out = json.loads(
-        tools_module.execute_select.invoke({"sql": "SELECT 1 AS x"})
-    )
+    out = json.loads(tools_module.execute_select.invoke({"sql": "SELECT 1 AS x"}))
     assert out["phase"] == "execution"
     assert "permission denied" in out["error"]
 
