@@ -10,120 +10,117 @@ A non-streaming `POST /api/ask` route also exists on the Flask app but is not us
 
 ```mermaid
 flowchart TD
+    %% ── Entities ──
     user((User))
+    db[("PostgreSQL\n(llm_reader role)")]
 
-    %% ── 1. Streaming Layer ───────────────────────────────────────
-    subgraph streaming ["Streaming Layer"]
-        stream_api["run_ask_stream\nentry point for SSE chat requests"]
-        worker["Background Worker\nruns the agent off the request thread"]
-        pq["Progress Queue\nbridges worker and SSE loop"]
-        throttle["Dedup &amp; Throttle\ncollapses repeats within 0.25 s"]
-        sse_yield["SSE Emitter\nyields events to the browser"]
+    %% ── Step 1: Initialization & Prompting ──
+    subgraph step1 ["1. Initialization & Prompt Construction"]
+        direction TB
+        api["run_ask_stream()"]
+        load_sem["load_semantic_layer()\n(Extract style rules)"]
+        build_prompt["build_user_prompt()\n(Question + History + Rules)"]
     end
 
-    user -- "POST /api/ask/stream" --> stream_api
-    stream_api --> worker
-    worker -.-> pq
-    pq -.-> throttle
-    throttle -.-> sse_yield
-    sse_yield -. "progress → meta → answer_delta → done | error" .-> user
+    user -- "POST /api/ask/stream" --> api
+    api --> load_sem
+    load_sem --> build_prompt
 
-    %% ── 2. Prompt Construction ───────────────────────────────────
-    subgraph prompting ["Prompt Construction"]
-        sem_load1["Load Semantic Layer\n(answer style rules)"]
-        build_prompt["Build User Prompt\nquestion + history + style rules"]
-    end
+    %% ── Step 2: Primary Agent ──
+    subgraph step2["2. Stage 1: Primary Agent"]
+        direction TB
+        primary_agent{"Primary ReAct Agent\n(agent_model)"}
 
-    worker --> sem_load1
-    sem_load1 --> build_prompt
-
-    %% ── 3. Primary Agent ─────────────────────────────────────────
-    subgraph primary_box ["Primary Agent"]
-        primary["Primary ReAct Agent\nplans tool calls and drafts the answer"]
-
-        subgraph tools ["Tool Belt"]
+        subgraph all_tools ["ALL_TOOLS Belt"]
             direction LR
-            t1["get_semantic_layer\nsubjects, metrics, joins"]
-            t2["list_tables"]
-            t3["describe_table"]
-            t4["search_columns"]
-            t5["sample_table"]
-            t6["execute_select"]
+            t1([get_semantic_layer])
+            t2([list_tables])
+            t3([describe_table])
+            t4([search_columns])
+            t5([sample_table])
+            t_exec_1([execute_select])
         end
-
-        subgraph sql_exec ["SQL Execution"]
-            strip["Strip Fences\nclean markdown + trailing ;"]
-            rewrite["Rewrite Schema Qualifiers\nlayer names → dbt_dev"]
-            guard{"SQL Guard\n(AST parse + keyword check)"}
-            exec_sql["Execute SQL\nwrap in LIMIT 50"]
-            pg[("Postgres\ndbt_dev schema")]
-            preview["Data Preview\nfirst 10 rows for the user"]
-        end
-
-        sem_file[("semantic_layer.yml")]
-        sem_load2["Load Semantic Layer\n(subjects, metrics, join paths)"]
     end
 
-    build_prompt --> primary
-    primary --> tools
-    tools --> primary
-    t1 --> sem_load2
-    sem_load2 --> sem_file
-    t6 --> strip
-    strip --> rewrite
-    rewrite --> guard
-    guard -- "rejected → JSON error" --> t6
-    guard -- "safe SELECT" --> exec_sql
-    exec_sql --> pg
-    pg --> preview
-    preview --> t6
+    build_prompt --> primary_agent
+    primary_agent <-->|Iterative Tool Loop| all_tools
 
-    %% ── 4. Repair Agent ──────────────────────────────────────────
-    subgraph repair_box ["Repair Agent"]
-        repair_prompt["Build Repair Prompt\nfailed SQL + phase + error"]
-        repair["Repair ReAct Agent\nsecond chance to produce an answer"]
+    %% ── SQL Execution & Guardrails (Shared) ──
+    subgraph sql_pipeline ["SQL Execution & Guardrails"]
+        direction TB
+        strip["Strip Markdown Fences\n& Rewrite Schema"]
+        ast_guard{"AST Guardrail\n(Reject Mutating SQL)"}
+        exec_query["Execute SQL\n(LIMIT 100, 10s timeout)"]
+    end
 
-        subgraph repair_tools ["Repair Tool Belt"]
+    t_exec_1 --> strip
+    strip --> ast_guard
+    ast_guard -- "Pass" --> exec_query
+    exec_query --> db
+    db --> |Rows| exec_query
+    ast_guard -. "Fail (Validation Error)" .-> t_exec_1
+    exec_query -. "Fail (Execution Error)" .-> t_exec_1
+    exec_query -- "Success" --> t_exec_1
+
+    %% ── Step 3: Evaluation ──
+    eval{"_classify_outcome()"}
+    primary_agent --> eval
+
+    %% ── Step 4: Repair Stage ──
+    subgraph step4 ["4. Stage 2: Repair Pass"]
+        direction TB
+        repair_prompt["build_repair_user_prompt()\n(Failed SQL + Error Context)"]
+        repair_agent{"Repair ReAct Agent\n(repair_model)"}
+        
+        subgraph repair_tools ["REPAIR_TOOLS Belt"]
             direction LR
-            rt1["describe_table"]
-            rt2["execute_select"]
+            rt1([describe_table])
+            rt_exec([execute_select])
         end
     end
 
-    primary -- "failed / no rows / iteration cap" --> repair_prompt
-    repair_prompt --> repair
-    repair --> repair_tools
-    repair_tools --> repair
-    rt2 --> strip
-    sem_file --> sem_load2
+    eval -- "Failed\n(No SQL, Syntax Error, Timeout)" --> repair_prompt
+    repair_prompt --> repair_agent
+    repair_agent <-->|Targeted Retry Loop| repair_tools
+    rt_exec -->|Shares SQL Guardrails| strip
 
-    %% ── 5. Observability ─────────────────────────────────────────
-    subgraph obs ["Observability"]
-        handler["Agent Observability Handler\ncaptures LLM and tool timings"]
-        sink["Progress Sink\nstructured event buffer"]
-        user_progress["User Progress Mapper\nturns events into UI updates"]
+    eval_repair{"_classify_outcome()"}
+    repair_agent --> eval_repair
+
+    %% ── Step 5: Final Outcomes & Streaming ──
+    subgraph step5 ["5. Final Answer & SSE Streaming"]
+        direction TB
+        success_1["Success Result\n(repaired=False)"]
+        success_2["Success Result\n(repaired=True)"]
+        failure["AgentFailure\n(Error Card)"]
+        sse["SSE Event Emitter\n(progress → meta → answer_delta → done)"]
     end
 
-    primary -. "callbacks" .-> handler
-    repair -. "callbacks" .-> handler
-    handler -.-> sink
-    sink -.-> user_progress
-    user_progress -.-> pq
+    eval -- "Success" --> success_1
+    eval_repair -- "Success" --> success_2
+    eval_repair -- "Failed Again" --> failure
 
-    %% ── Outcome branches ─────────────────────────────────────────
-    primary -- "success" --> result_p["Answer\n(repaired=false)"]
-    repair -- "success" --> result_r["Answer\n(repaired=true)"]
-    repair -- "also failed" --> fail["Failure\n(phase + error message)"]
+    success_1 --> sse
+    success_2 --> sse
+    failure --> sse
+    sse -. "Stream Events to UI" .-> user
 
-    result_p --> sse_yield
-    result_r --> sse_yield
-    fail --> sse_yield
+    %% ── Observability (Background) ──
+    obs_handler[["AgentObservabilityHandler"]]
+    primary_agent -. "LangChain Callbacks" .-> obs_handler
+    repair_agent -. "LangChain Callbacks" .-> obs_handler
+    obs_handler -. "Yield progress events" .-> sse
 
-    %% ── Security callout ─────────────────────────────────────────
-    sec["Security: llm_reader role\nSELECT-only · 10 s timeout\nrow cap: LIMIT 50"]
-    sec -. "enforced on every query" .- guard
+    %% Styling
+    classDef agent fill:#171f33,stroke:#548dff,stroke-width:2px,color:#dae2fd
+    classDef tool fill:#222a3d,stroke:#8c90a1,color:#b0c6ff
+    classDef guard fill:#3f465c,stroke:#ffb4ab,stroke-width:2px,color:#fff
+    classDef state fill:#060e20,stroke:#8c90a1,stroke-dasharray: 5 5,color:#dae2fd
 
-    style sec fill:#fde68a,stroke:#b45309,color:#1f2937
+    class primary_agent,repair_agent agent
+    class t1,t2,t3,t4,t5,t_exec_1,rt1,rt_exec tool
+    class ast_guard guard
+    class success_1,success_2,failure state
 ```
 
 ## How it works
