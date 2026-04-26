@@ -220,7 +220,7 @@ def iter_retail_records(
         if cap_d is not None and (t - epoch).total_seconds() > cap_d:
             break
 
-            # Emit one purchase using the documented shop → item → amount → fan draw order.
+        # Emit one purchase using the documented shop → item → amount → fan draw order.
         shop = rng.choices(SHOP_IDS, weights=list(w), k=1)[0]
         item = rng.choice(ITEMS)
         amount = synthetic_line_amount_eur(item, rng)
