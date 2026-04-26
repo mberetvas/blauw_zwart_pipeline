@@ -1,4 +1,10 @@
-"""Consumer thread + per-partition asyncio workers (ordered commits, overlapping inserts)."""
+"""Coordinate Kafka polling with per-partition asyncio insert workers.
+
+The ingestion runtime keeps Kafka polling on a dedicated thread because the
+``confluent_kafka`` consumer is blocking and owns commit calls. Parsed messages
+are handed to asyncio workers keyed by partition so inserts overlap across
+partitions while commit order stays correct within each partition.
+"""
 
 from __future__ import annotations
 
@@ -35,6 +41,14 @@ class IngestRuntime:
         consumer: Consumer,
         topic: str,
     ) -> None:
+        """Initialize the runtime that bridges Kafka polling and async inserts.
+
+        Args:
+            loop: Running asyncio event loop that owns the database workers.
+            pool: Asyncpg pool used for inserts.
+            consumer: Configured Kafka consumer instance.
+            topic: Expected topic name for consumed messages.
+        """
         self._loop = loop
         self._pool = pool
         self._consumer = consumer
@@ -49,6 +63,7 @@ class IngestRuntime:
         self._queues_lock = threading.Lock()
 
     def start(self) -> None:
+        """Start the dedicated Kafka poll thread if it is not already running."""
         if self._thread and self._thread.is_alive():
             return
         self._thread = threading.Thread(
@@ -59,13 +74,20 @@ class IngestRuntime:
         self._thread.start()
 
     def stop(self) -> None:
+        """Request shutdown of the poll thread and partition workers."""
         self._stop.set()
 
     def join(self, timeout: float | None = None) -> None:
+        """Wait for the poll thread to exit.
+
+        Args:
+            timeout: Optional maximum number of seconds to wait.
+        """
         if self._thread:
             self._thread.join(timeout=timeout)
 
     def _drain_commits(self) -> None:
+        """Commit offsets queued by partition workers back on the poll thread."""
         while True:
             try:
                 msg = self._commit_q.get_nowait()
@@ -84,6 +106,7 @@ class IngestRuntime:
                 )
 
     def _ensure_partition_worker(self, partition: int) -> None:
+        """Ensure an asyncio worker exists for a Kafka partition."""
         with self._queues_lock:
             if partition in self._partition_queues:
                 return
@@ -104,6 +127,7 @@ class IngestRuntime:
         self._partition_tasks[partition] = task
 
     async def _shutdown_partition_workers(self) -> None:
+        """Signal all partition workers to exit and wait for their completion."""
         for q in list(self._partition_queues.values()):
             await q.put(None)
         await asyncio.gather(*list(self._partition_tasks.values()), return_exceptions=True)
@@ -126,12 +150,15 @@ class IngestRuntime:
         partition: int,
         q: asyncio.Queue[tuple[Message, dict[str, Any]] | None],
     ) -> None:
+        """Process one partition's parsed messages in order on the event loop."""
         while True:
             item = await q.get()
             try:
                 if item is None:
                     return
                 msg, row = item
+                # Persist first; only after a successful insert do we hand the
+                # message back to the poll thread for a synchronous commit.
                 await db_mod.insert_fan_event_row(self._pool, row)
                 self._commit_q.put(msg)
             except Exception:
@@ -147,6 +174,7 @@ class IngestRuntime:
                 q.task_done()
 
     def _enqueue_row(self, msg: Message, row: dict[str, Any], partition: int) -> None:
+        """Submit one parsed row to the owning partition worker queue."""
         q = self._partition_queues[partition]
 
         async def _put() -> None:
@@ -156,7 +184,10 @@ class IngestRuntime:
         fut.result(timeout=30.0)
 
     def _consumer_thread_main(self) -> None:
+        """Poll Kafka, parse messages, and feed partition workers until stopped."""
         while not self._stop.is_set():
+            # Commits must happen on the consumer thread, so drain the queue
+            # before and after each poll cycle.
             self._drain_commits()
             msg = self._consumer.poll(0.3)
             self._drain_commits()
@@ -165,6 +196,8 @@ class IngestRuntime:
                 continue
             if msg.error():
                 err = msg.error()
+                # Partition EOF is informational; other broker errors get logged
+                # and the poll loop continues.
                 if err.code() == KafkaError._PARTITION_EOF:
                     continue
                 logger.error("consumer_error: %s", err)
@@ -178,6 +211,8 @@ class IngestRuntime:
             self._ensure_partition_worker(partition)
 
             try:
+                # Parsing failures are non-fatal: log, commit, and keep moving so
+                # one bad payload does not wedge the consumer group.
                 row = kafka_message_to_row(
                     kafka_topic=msg.topic(),
                     kafka_partition=partition,
@@ -211,6 +246,8 @@ class IngestRuntime:
                 continue
 
             try:
+                # Successful parses cross the thread boundary only after the
+                # partition worker for this partition definitely exists.
                 self._enqueue_row(msg, row, partition)
             except Exception:
                 logger.exception(
@@ -221,6 +258,8 @@ class IngestRuntime:
                 )
                 raise
 
+            # Once stop is requested, ask all partition workers to finish and only
+            # then close the Kafka consumer.
         fut = asyncio.run_coroutine_threadsafe(self._shutdown_partition_workers(), self._loop)
         try:
             fut.result(timeout=120.0)

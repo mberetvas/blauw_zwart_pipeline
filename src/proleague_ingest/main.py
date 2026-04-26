@@ -21,11 +21,13 @@ log = get_logger(__name__)
 
 
 def _env(name: str, default: str) -> str:
+    """Return an environment variable value or a fallback default."""
     v = os.environ.get(name)
     return v if v is not None and v != "" else default
 
 
 def main() -> None:
+    """Configure logging and run the Pro League Kafka ingest consumer."""
     configure_logging(level=os.environ.get("LOG_LEVEL", "INFO"))
 
     bootstrap = _env("KAFKA_BOOTSTRAP_SERVERS", "broker:29092")

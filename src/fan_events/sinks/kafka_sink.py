@@ -43,6 +43,21 @@ _ENV_PREFIX = "FAN_EVENTS_KAFKA_"
 
 @dataclass
 class KafkaConfig:
+    """Configuration for publishing the merged stream to Kafka.
+
+    Attributes:
+        bootstrap_servers: Comma-separated Kafka broker list.
+        topic: Destination topic name.
+        client_id: Producer client identifier.
+        compression: Compression codec understood by Kafka.
+        acks: Required broker acknowledgements.
+        security_protocol: Optional security protocol such as ``SASL_SSL``.
+        sasl_mechanism: Optional SASL mechanism name.
+        sasl_username: Optional SASL username.
+        sasl_password: Optional SASL password.
+        _extra: Reserved passthrough settings for future producer options.
+    """
+
     bootstrap_servers: str = "localhost:9092"
     topic: str = ""
     client_id: str = "fan-events-producer"
@@ -58,15 +73,17 @@ class KafkaConfig:
 
 
 def kafka_config_from_env(overrides: dict[str, str | None] | None = None) -> KafkaConfig:
-    """Return a :class:`KafkaConfig` populated from env vars, then apply *overrides*.
+    """Build Kafka configuration from environment variables and CLI overrides.
 
-    Only non-``None`` values in *overrides* replace the env-derived defaults, so callers
-    can pass ``vars(args)`` filtered to the relevant keys and ``None`` means "not provided".
+    Args:
+        overrides: Optional mapping of explicit override values. Only non-``None``
+            values replace environment-derived defaults.
+
+    Returns:
+        Kafka configuration ready to convert into producer settings.
     """
     cfg = KafkaConfig(
-        bootstrap_servers=os.environ.get(
-            f"{_ENV_PREFIX}BOOTSTRAP_SERVERS", "localhost:9092"
-        ),
+        bootstrap_servers=os.environ.get(f"{_ENV_PREFIX}BOOTSTRAP_SERVERS", "localhost:9092"),
         topic=os.environ.get(f"{_ENV_PREFIX}TOPIC", ""),
         client_id=os.environ.get(f"{_ENV_PREFIX}CLIENT_ID", "fan-events-producer"),
         compression=os.environ.get(f"{_ENV_PREFIX}COMPRESSION", "none"),
@@ -84,7 +101,14 @@ def kafka_config_from_env(overrides: dict[str, str | None] | None = None) -> Kaf
 
 
 def build_producer_config(cfg: KafkaConfig) -> dict[str, Any]:
-    """Build the ``confluent_kafka.Producer`` config dict from *cfg*."""
+    """Translate :class:`KafkaConfig` into ``confluent_kafka`` settings.
+
+    Args:
+        cfg: High-level Kafka configuration.
+
+    Returns:
+        Producer configuration dictionary suitable for ``Producer(...)``.
+    """
     conf: dict[str, Any] = {
         "bootstrap.servers": cfg.bootstrap_servers,
         "client.id": cfg.client_id,
@@ -104,10 +128,13 @@ def build_producer_config(cfg: KafkaConfig) -> dict[str, Any]:
 
 
 def summarize_bootstrap_for_log(servers: str) -> str:
-    """Return a safe summary of bootstrap servers for INFO-level logging.
+    """Return a concise, credential-safe bootstrap summary for INFO logs.
 
-    At INFO the summary is ``"3 brokers (first: kafka:9092)"``; callers wanting the
-    full list should log it at DEBUG separately.  Never includes SASL credentials.
+    Args:
+        servers: Raw comma-separated broker list.
+
+    Returns:
+        Human-readable broker summary suitable for INFO-level logs.
     """
     brokers = [b.strip() for b in servers.split(",") if b.strip()]
     count = len(brokers)
@@ -155,6 +182,14 @@ class KafkaSink:
         *,
         progress_interval: int | None = None,
     ) -> None:
+        """Initialize a Kafka-backed sink compatible with ``write_merged_stream``.
+
+        Args:
+            producer: ``confluent_kafka.Producer``-compatible instance.
+            topic: Destination topic name.
+            progress_interval: Optional number of successful deliveries between
+                progress log lines. ``None`` falls back to the environment.
+        """
         self._producer = producer
         self._topic = topic
         self._delivery_error: str | None = None
@@ -169,10 +204,13 @@ class KafkaSink:
                     self._progress_interval = max(0, int(raw))
                 except ValueError:
                     self._progress_interval = 256
+        # Delivery counters are maintained here so progress logs stay sink-local
+        # even when multiple sinks exist in the same process.
         self._produced_count: int = 0
         self._produced_bytes: int = 0
 
     def _on_delivery(self, err: Any, _msg: Any) -> None:
+        """Handle one asynchronous Kafka delivery callback."""
         if err is not None:
             logger.error("Kafka delivery failed: %s", err)
             if self._delivery_error is None:
@@ -192,10 +230,20 @@ class KafkaSink:
             )
 
     def _check_error(self) -> None:
+        """Raise the first stored delivery error, if any."""
         if self._delivery_error:
             raise RuntimeError(f"Kafka delivery error: {self._delivery_error}")
 
     def write(self, line: str) -> None:
+        """Publish one NDJSON line to Kafka.
+
+        Args:
+            line: LF-terminated NDJSON line produced by the stream orchestrator.
+
+        Raises:
+            RuntimeError: If a prior asynchronous delivery callback already
+                reported a Kafka error.
+        """
         self._check_error()
         logger.debug(
             "task=kafka_produce previous=line_ready next=delivery_callback topic=%s bytes=%d",
@@ -209,12 +257,20 @@ class KafkaSink:
         )
 
     def flush(self) -> None:
-        """Poll for delivery callbacks (non-blocking); called after every line."""
+        """Poll for Kafka delivery callbacks without blocking.
+
+        Raises:
+            RuntimeError: If any prior delivery callback captured an error.
+        """
         self._producer.poll(0)
         self._check_error()
 
     def close(self) -> None:
-        """Block until all in-flight messages are delivered or timeout expires."""
+        """Flush in-flight Kafka messages during sink shutdown.
+
+        Raises:
+            RuntimeError: If a prior delivery callback captured an error.
+        """
         logger.info("Closing Kafka producer — flushing in-flight messages")
         remaining = self._producer.flush(timeout=30)
         if remaining > 0:

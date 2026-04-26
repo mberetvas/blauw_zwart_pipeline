@@ -84,9 +84,7 @@ def build_chat_model(
 
 def _check_provider(provider: str) -> None:
     if provider not in KNOWN_PROVIDERS:
-        raise ValueError(
-            f"Unknown provider '{provider}'. Only 'openrouter' is supported."
-        )
+        raise ValueError(f"Unknown provider '{provider}'. Only 'openrouter' is supported.")
 
 
 def complete(prompt: str, provider: str, model: str) -> str:

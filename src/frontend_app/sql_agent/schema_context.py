@@ -1,4 +1,9 @@
-"""Load and merge dbt schema YAML files for Text-to-SQL prompts."""
+"""Load and merge dbt schema YAML files for Text-to-SQL prompts.
+
+This module discovers one or more dbt schema files, merges their model and
+column descriptions, and renders a compact text block that can be injected into
+prompt templates. It performs filesystem I/O only; callers receive plain text.
+"""
 
 from __future__ import annotations
 
@@ -16,14 +21,16 @@ _DEFAULT_SCHEMA_FILE = Path(__file__).resolve().parent / "schema.yml"
 
 
 class SchemaContextOverflowError(ValueError):
-    """Merged schema text exceeds SCHEMA_CONTEXT_MAX_CHARS (error mode)."""
+    """Raised when rendered schema context exceeds the configured size budget."""
 
 
 def _env_trim(name: str) -> str:
+    """Return a stripped environment variable value, or ``""`` when unset."""
     return os.environ.get(name, "").strip()
 
 
 def _layer_rank_and_label(path: Path) -> tuple[int, str]:
+    """Infer a sort rank and human label from a dbt schema file path."""
     parts = {p.lower() for p in path.parts}
     if "staging" in parts:
         return 0, "staging"
@@ -35,10 +42,12 @@ def _layer_rank_and_label(path: Path) -> tuple[int, str]:
 
 
 def _parse_schema_files_list(raw: str) -> list[Path]:
+    """Parse a comma-separated schema file list from the environment."""
     return [Path(p.strip()).expanduser() for p in raw.split(",") if p.strip()]
 
 
 def _discover_dbt_models_dir(root: Path) -> list[Path]:
+    """Discover schema YAML files beneath a dbt ``models`` directory."""
     if not root.is_dir():
         raise FileNotFoundError(f"DBT_MODELS_DIR is not a directory: {root}")
 
@@ -62,8 +71,8 @@ def _discover_dbt_models_dir(root: Path) -> list[Path]:
         rank, _ = _layer_rank_and_label(f)
         if rank == 99:
             log.warning(
-                "Schema file path has no staging/intermediate/marts segment; "
-                "layer will be 'unspecified': %s",
+                "Schema file path has no staging/intermediate/marts segment;"
+                " layer will be 'unspecified': %s",
                 f,
             )
         keyed.append((rank, str(f.resolve()), f))
@@ -73,6 +82,7 @@ def _discover_dbt_models_dir(root: Path) -> list[Path]:
 
 
 def _resolve_schema_paths() -> list[Path]:
+    """Resolve schema file paths from ``SCHEMA_FILES``, ``DBT_MODELS_DIR``, or fallback."""
     files_raw = _env_trim("SCHEMA_FILES")
     if files_raw:
         return _parse_schema_files_list(files_raw)
@@ -87,6 +97,7 @@ def _resolve_schema_paths() -> list[Path]:
 
 
 def _load_models_from_file(path: Path) -> list[dict[str, Any]]:
+    """Load dbt ``models`` entries from one YAML schema file."""
     with open(path, encoding="utf-8") as fh:
         data = yaml.safe_load(fh)
     if not isinstance(data, dict):
@@ -102,6 +113,7 @@ def _load_models_from_file(path: Path) -> list[dict[str, Any]]:
 
 
 def _format_model(model: dict[str, Any], layer_label: str) -> list[str]:
+    """Render one dbt model entry as prompt-friendly text lines."""
     parts: list[str] = []
     parts.append(f"Layer: {layer_label}")
     parts.append(f"Table: {model['name']}")
@@ -112,14 +124,13 @@ def _format_model(model: dict[str, Any], layer_label: str) -> list[str]:
         if not isinstance(col, dict) or not col.get("name"):
             continue
         col_desc = (col.get("description") or "").strip().replace("\n", " ")
-        parts.append(
-            f"  - {col['name']} ({col.get('data_type', '?')}): {col_desc}"
-        )
+        parts.append(f"  - {col['name']} ({col.get('data_type', '?')}): {col_desc}")
     parts.append("")
     return parts
 
 
 def _apply_size_limit(text: str) -> str:
+    """Apply the optional schema-context size limit configured via env vars."""
     max_raw = _env_trim("SCHEMA_CONTEXT_MAX_CHARS")
     if not max_raw or max_raw == "0":
         return text
@@ -135,10 +146,7 @@ def _apply_size_limit(text: str) -> str:
 
     mode = _env_trim("SCHEMA_CONTEXT_OVERFLOW").lower() or "error"
     if mode not in {"error", "truncate"}:
-        raise ValueError(
-            "SCHEMA_CONTEXT_OVERFLOW must be 'error' or 'truncate'; "
-            f"got {mode!r}"
-        )
+        raise ValueError(f"SCHEMA_CONTEXT_OVERFLOW must be 'error' or 'truncate'; got {mode!r}")
 
     if len(text) <= max_chars:
         return text
@@ -162,7 +170,17 @@ def _apply_size_limit(text: str) -> str:
 
 
 def build_schema_context_text() -> str:
-    """Read configured schema YAML file(s) and return prompt-friendly text."""
+    """Read configured schema YAML file(s) and return prompt-friendly text.
+
+    Returns:
+        Human-readable schema summary describing tables, layers, and columns.
+
+    Raises:
+        FileNotFoundError: If an explicitly selected schema file is missing.
+        SchemaContextOverflowError: If the rendered text exceeds the configured
+            limit while overflow mode is ``error``.
+        ValueError: If environment configuration is invalid.
+    """
     paths = _resolve_schema_paths()
     relation_schema = _env_trim("DBT_RELATION_SCHEMA") or "dbt_dev"
 
@@ -175,6 +193,8 @@ def build_schema_context_text() -> str:
             raise FileNotFoundError(f"Schema file not found: {path}")
 
         layer_rank, layer_label = _layer_rank_and_label(path)
+        # Later files intentionally win so callers can override shared models by
+        # ordering SCHEMA_FILES explicitly.
         for model in _load_models_from_file(path):
             name = str(model["name"])
             if name in merged:
@@ -192,6 +212,7 @@ def build_schema_context_text() -> str:
         f"Use unqualified relation names or qualify as {relation_schema}.<relation>.\n\n"
     )
 
+    # Render models in layer order so staging context appears before marts.
     ordered_names = sorted(
         merged.keys(),
         key=lambda n: (merged[n][1], n),

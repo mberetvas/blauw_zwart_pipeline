@@ -60,6 +60,7 @@ _EVENT_TYPE = "player_stats_scraped"
 
 
 def _delivery_report(err: Any, msg: Any) -> None:
+    """Log the outcome of one asynchronous Kafka delivery callback."""
     if err:
         log.info("scraper_produce_failed topic={} key={} error={}", msg.topic(), msg.key(), err)
     else:
@@ -79,7 +80,16 @@ def build_envelope(
     source_url: str,
     scraped_at: str,
 ) -> bytes:
-    """Serialise a player dict into a Kafka message value (UTF-8 JSON)."""
+    """Serialize one scraped player payload into the Kafka envelope format.
+
+    Args:
+        player: Normalised player dictionary.
+        source_url: Squad source URL used for the scrape.
+        scraped_at: Batch scrape timestamp in UTC string form.
+
+    Returns:
+        UTF-8 JSON bytes ready for ``Producer.produce``.
+    """
     payload = {
         "_schema_version": _SCHEMA_VERSION,
         "event_type": _EVENT_TYPE,
@@ -101,14 +111,24 @@ def run_once(
     bootstrap_servers: str,
     topic: str,
 ) -> int:
-    """Scrape the squad and publish one Kafka message per valid player.
+    """Scrape the squad once and publish valid players to Kafka.
 
-    Returns the number of successfully enqueued messages.
-    Raises on scrape failure; individual produce errors are logged but not raised.
+    Args:
+        squad_url: Squad listing URL to scrape.
+        bootstrap_servers: Kafka broker list.
+        topic: Kafka topic receiving player payloads.
+
+    Returns:
+        Number of successfully enqueued Kafka messages.
+
+    Raises:
+        Exception: Propagates scrape failures so the scheduler can log and retry
+            after sleeping.
     """
     log.info("scraper_run_start url={} topic={} bootstrap={}", squad_url, topic, bootstrap_servers)
     t0 = time.monotonic()
 
+    # Phase 1: fetch the latest squad snapshot and discard placeholder errors.
     log.debug(
         "task=scrape_squad previous=run_initialized next=fetch_squad_listing url={}",
         squad_url,
@@ -128,11 +148,12 @@ def run_once(
 
     producer = Producer({"bootstrap.servers": bootstrap_servers})
     produced = 0
+    # Phase 2: publish one message per valid player, keyed by player_id.
     for player in valid:
         try:
             log.debug(
-                "task=produce_player_event previous=validated_player next=enqueue_kafka_message "
-                "player_id={} topic={}",
+                "task=produce_player_event previous=validated_player"
+                " next=enqueue_kafka_message player_id={} topic={}",
                 player["player_id"],
                 topic,
             )
@@ -146,7 +167,8 @@ def run_once(
         except KafkaException as exc:
             log.info("scraper_produce_error player_id={} error={}", player["player_id"], exc)
 
-    # Flush ensures all pending deliveries complete before we sleep.
+    # Phase 3: flush before returning so the next scheduler sleep starts only
+    # after all delivery callbacks have had a chance to fire.
     remaining = producer.flush(timeout=60)
     if remaining:
         log.info("scraper_flush_incomplete remaining={}", remaining)
@@ -166,6 +188,7 @@ def run_once(
 
 
 def main() -> None:
+    """Run the infinite scrape scheduler loop for the Pro League squad."""
     configure_logging(level=os.environ.get("LOG_LEVEL", "INFO"))
 
     squad_url = os.environ.get("PROLEAGUE_SQUAD_URL", DEFAULT_SQUAD_URL).strip()
@@ -177,9 +200,7 @@ def main() -> None:
         if interval_h <= 0:
             raise ValueError("must be positive")
     except ValueError as exc:
-        raise SystemExit(
-            f"Invalid SCRAPER_INTERVAL_HOURS={_raw_interval!r}: {exc}"
-        ) from exc
+        raise SystemExit(f"Invalid SCRAPER_INTERVAL_HOURS={_raw_interval!r}: {exc}") from exc
     run_on_startup = os.environ.get("SCRAPER_RUN_ON_STARTUP", "1").strip() == "1"
     interval_s = interval_h * 3600
 
@@ -197,6 +218,7 @@ def main() -> None:
 
     while True:
         try:
+            # Each iteration is independent: scrape, publish, then sleep.
             run_once(squad_url=squad_url, bootstrap_servers=bootstrap, topic=topic)
         except Exception as exc:  # noqa: BLE001
             log.info("scheduler_run_failed error={} next=retry_after_sleep", exc)

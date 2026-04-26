@@ -1,5 +1,11 @@
 ![Blauw zwart - Synthetic Fan Data Platform](assets/banner_v2.jpg)
 
+[![Docker Build](https://github.com/mberetvas/blauw_zwart_pipeline/actions/workflows/docker-build.yml/badge.svg)](https://github.com/mberetvas/blauw_zwart_pipeline/actions/workflows/docker-build.yml)
+
+[![Pytest](https://github.com/mberetvas/blauw_zwart_pipeline/actions/workflows/pytest.yml/badge.svg)](https://github.com/mberetvas/blauw_zwart_pipeline/actions/workflows/pytest.yml)
+
+[![Ruff](https://github.com/mberetvas/blauw_zwart_pipeline/actions/workflows/ruff.yml/badge.svg)](https://github.com/mberetvas/blauw_zwart_pipeline/actions/workflows/ruff.yml)
+
 # blauw-zwart-fan-sim-pipeline
 
 MVP / non-production sandbox for Club Brugge fan-data demos. The repo combines synthetic fan events, Kafka/Postgres ingest, a Pro League player-stats pipeline, dbt analytics, and a small Flask Text-to-SQL UI.

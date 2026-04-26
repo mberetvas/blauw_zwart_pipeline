@@ -51,6 +51,7 @@ _VALID_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _dbt_schema() -> str:
+    """Return the active dbt relation schema used for read-only tool queries."""
     return os.environ.get("DBT_RELATION_SCHEMA", "dbt_dev").strip() or "dbt_dev"
 
 
@@ -125,20 +126,18 @@ def _list_relations() -> list[dict[str, str]]:
 def _ensure_known_table(table: str) -> str:
     """Whitelist *table* against live information_schema; return validated name."""
     if not isinstance(table, str) or not _VALID_IDENT.match(table):
-        raise ValueError(
-            f"Invalid table identifier: {table!r}. "
-            "Must match [A-Za-z_][A-Za-z0-9_]*."
-        )
+        raise ValueError(f"Invalid table identifier: {table!r}. Must match [A-Za-z_][A-Za-z0-9_]*.")
     known = {r["name"] for r in _list_relations()}
     if table not in known:
         raise ValueError(
-            f"Unknown table {table!r} in schema {_dbt_schema()!r}. "
-            "Call list_tables to see valid options."
+            f"Unknown table {table!r} in schema {_dbt_schema()!r}."
+            " Call list_tables to see valid options."
         )
     return table
 
 
 def _truncate(items: list[Any], cap: int, label: str) -> list[Any]:
+    """Cap a result list and append a sentinel entry when truncation occurs."""
     if len(items) <= cap:
         return items
     truncated = items[:cap]
@@ -166,9 +165,7 @@ def list_tables() -> str:
     layer is one of ``staging``, ``intermediate``, ``marts``, ``unspecified``.
     Always call this first when you need to discover what data is available.
     """
-    log.debug(
-        "task=list_tables previous=agent_requested_schema next=query_information_schema"
-    )
+    log.debug("task=list_tables previous=agent_requested_schema next=query_information_schema")
     try:
         rows = _list_relations()
     except Exception as exc:
@@ -244,8 +241,8 @@ def search_columns(pattern: str, limit: int = 20) -> str:
     Returns a JSON array of ``{table, column, data_type, description}``.
     """
     log.debug(
-        "task=search_columns previous=search_requested "
-        "next=query_information_schema pattern={} limit={}",
+        "task=search_columns previous=search_requested"
+        " next=query_information_schema pattern={} limit={}",
         pattern,
         limit,
     )
@@ -308,9 +305,7 @@ def sample_table(table: str, limit: int = _DEFAULT_SAMPLE_ROWS) -> str:
     cap = max(1, min(int(limit), _MAX_SAMPLE_ROWS))
     schema = _dbt_schema()
     try:
-        rows = _run_read_query(
-            f'SELECT * FROM "{schema}"."{validated}" LIMIT {cap}'
-        )
+        rows = _run_read_query(f'SELECT * FROM "{schema}"."{validated}" LIMIT {cap}')
     except Exception as exc:
         return json.dumps({"error": f"sample_table failed: {exc}"})
     return json.dumps(rows, default=_json_default)
@@ -356,9 +351,7 @@ def execute_select(sql: str) -> str:
     Always inspect the result; on validation errors, fix the SQL and retry.
     """
     if not isinstance(sql, str) or not sql.strip():
-        return json.dumps(
-            {"error": "sql must be a non-empty string", "phase": "validation"}
-        )
+        return json.dumps({"error": "sql must be a non-empty string", "phase": "validation"})
     cleaned = _rewrite_layer_schema_qualifiers(_strip_fences(sql))
     log.debug(
         "task=execute_select_validate previous=sql_received next=run_guardrails sql_preview={}",
@@ -368,9 +361,7 @@ def execute_select(sql: str) -> str:
         _validate_sql(cleaned)
     except ValueError as exc:
         log.info("execute_select_validation_failed error={}", exc)
-        return json.dumps(
-            {"error": str(exc), "phase": "validation", "sql": cleaned}
-        )
+        return json.dumps({"error": str(exc), "phase": "validation", "sql": cleaned})
     log.debug(
         "task=execute_select_run previous=validation_passed next=query_database sql_preview={}",
         cleaned[:200],
@@ -380,9 +371,7 @@ def execute_select(sql: str) -> str:
         rows = _execute_sql(cleaned)
     except Exception as exc:
         log.info("execute_select_runtime_failed error={}", exc)
-        return json.dumps(
-            {"error": str(exc), "phase": "execution", "sql": cleaned}
-        )
+        return json.dumps({"error": str(exc), "phase": "execution", "sql": cleaned})
     elapsed_ms = (time.perf_counter() - t0) * 1000
     log.info("execute_select_complete rows={} elapsed_ms={:.0f}", len(rows), elapsed_ms)
     return json.dumps(

@@ -38,7 +38,7 @@ _SUPPORTED_VERSIONS = frozenset({1})
 
 
 class SemanticLayerError(ValueError):
-    """Raised when the semantic layer file is invalid, malformed, or explicitly missing."""
+    """Raised when the semantic layer file is invalid, malformed, or missing."""
 
 
 def _env_trim(name: str) -> str:
@@ -66,9 +66,7 @@ def load_semantic_layer() -> dict[str, Any]:
 
     if not path.is_file():
         if explicit:
-            raise SemanticLayerError(
-                f"SEMANTIC_LAYER_FILE points to a missing file: {path}"
-            )
+            raise SemanticLayerError(f"SEMANTIC_LAYER_FILE points to a missing file: {path}")
         log.warning(
             "Semantic layer file not found at default path %s; "
             "semantic context will be empty. "
@@ -85,9 +83,7 @@ def load_semantic_layer() -> dict[str, Any]:
     try:
         data = yaml.safe_load(raw_text)
     except yaml.YAMLError as exc:
-        raise SemanticLayerError(
-            f"Semantic layer file {path} is not valid YAML: {exc}"
-        ) from exc
+        raise SemanticLayerError(f"Semantic layer file {path} is not valid YAML: {exc}") from exc
 
     if not isinstance(data, dict):
         raise SemanticLayerError(
@@ -116,9 +112,7 @@ def _apply_max_chars(text: str, label: str) -> str:
         ) from exc
     if max_chars <= 0 or len(text) <= max_chars:
         return text
-    banner = (
-        f"[{label} TRUNCATED: original {len(text)} chars, limit {max_chars}]\n"
-    )
+    banner = f"[{label} TRUNCATED: original {len(text)} chars, limit {max_chars}]\n"
     budget = max_chars - len(banner)
     if budget <= 0:
         return banner[:max_chars]

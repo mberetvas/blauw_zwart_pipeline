@@ -1,8 +1,12 @@
-"""Match-independent retail (NDJSON v3) synthetic event generation.
+"""Generate synthetic retail purchases independent of the match calendar.
 
-RNG draw order (for reproducibility): each event draws inter-arrival gap (mode-dependent),
-then shop (weighted choice), item (uniform), amount (catalog EUR + jitter, one randint),
-fan_id (pool).
+This module powers the NDJSON v3 retail stream used both standalone and inside
+the merged stream orchestrator. It is intentionally deterministic: given the
+same RNG seed and parameters, each event consumes random draws in the documented
+order so tests and golden fixtures remain stable.
+
+RNG draw order per emitted event is: inter-arrival gap, then shop, item,
+amount jitter, and finally ``fan_id`` selection.
 """
 
 from __future__ import annotations
@@ -30,6 +34,18 @@ def make_retail_purchase(
     timestamp: str,
     shop: str,
 ) -> dict[str, Any]:
+    """Build one retail purchase record in NDJSON v3 shape.
+
+    Args:
+        fan_id: Synthetic purchaser identifier.
+        item: Retail catalog item name.
+        amount: Rounded purchase amount in EUR.
+        timestamp: UTC timestamp string in ``YYYY-MM-DDTHH:MM:SSZ`` format.
+        shop: Stable shop identifier from :data:`fan_events.core.data.SHOP_IDS`.
+
+    Returns:
+        Dictionary ready for v3 validation or serialization.
+    """
     return {
         "amount": amount,
         "event": RETAIL_PURCHASE,
@@ -41,10 +57,12 @@ def make_retail_purchase(
 
 
 def _dt_to_utc_z(dt: datetime) -> str:
+    """Format a datetime as the canonical UTC timestamp string."""
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _fan_id(rng: random.Random, pool: int) -> str:
+    """Draw one synthetic fan ID from the configured inclusive pool."""
     return f"fan_{rng.randint(1, pool):05d}"
 
 
@@ -57,6 +75,24 @@ def _next_interarrival_seconds(
     weighted_gaps: Sequence[float] | None,
     weighted_gap_weights: Sequence[float] | None,
 ) -> float:
+    """Return the next inter-arrival gap for non-inline arrival strategies.
+
+    Args:
+        rng: Random generator used for deterministic draw order.
+        arrival_mode: Gap strategy name.
+        poisson_rate: Events-per-second rate for Poisson sampling.
+        fixed_gap_seconds: Constant gap used by ``fixed`` mode.
+        weighted_gaps: Candidate gap sizes for ``weighted_gap`` mode.
+        weighted_gap_weights: Sampling weights paired with ``weighted_gaps``.
+
+    Returns:
+        Gap duration in seconds until the next synthetic purchase.
+
+    Raises:
+        ValueError: If the selected mode is misconfigured or unknown.
+    """
+    # Validate per-mode inputs here so the main loop can stay focused on the
+    # synthetic clock and record emission sequence.
     if arrival_mode == "poisson":
         if poisson_rate <= 0:
             raise ValueError("poisson_rate must be > 0 for poisson arrival_mode")
@@ -70,9 +106,7 @@ def _next_interarrival_seconds(
             raise ValueError("weighted_gap mode requires weighted_gaps and weighted_gap_weights")
         if len(weighted_gaps) != len(weighted_gap_weights):
             raise ValueError("weighted_gaps and weighted_gap_weights must have the same length")
-        return float(
-            rng.choices(list(weighted_gaps), weights=list(weighted_gap_weights), k=1)[0]
-        )
+        return float(rng.choices(list(weighted_gaps), weights=list(weighted_gap_weights), k=1)[0])
     raise ValueError(f"unknown arrival_mode: {arrival_mode!r}")
 
 
@@ -92,18 +126,38 @@ def iter_retail_records(
     skip_default_event_cap: bool = False,
     rate_factor_fn: Callable[[datetime], float] | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """
-    Deterministic order of RNG draws: inter-arrival gap, then shop, item, amount, fan_id per event.
+    """Yield deterministic synthetic retail purchase records.
 
-    Stopping: default when both ``max_events`` and ``max_simulated_duration_seconds`` are ``None``,
-    ``max_events`` is set to **200** unless ``skip_default_event_cap`` is true (then there is no
-    event-count cap until ``max_simulated_duration_seconds`` binds, if set). When only duration is
-    set, event count is unlimited until the duration window is exceeded. When both limits are set,
-    generation stops when **either** is hit first (duration checked after advancing the synthetic
-    clock, before emitting).
+    Args:
+        rng: Random generator controlling all reproducible draws.
+        epoch_utc: Optional UTC starting point for the synthetic clock.
+        shop_weights: Optional per-shop weights matching ``SHOP_IDS`` order.
+        max_events: Optional hard cap on emitted events.
+        max_simulated_duration_seconds: Optional cap on simulated time elapsed
+            from ``epoch_utc``.
+        arrival_mode: Gap strategy name: ``poisson``, ``fixed``, or
+            ``weighted_gap``.
+        poisson_rate: Base events-per-second rate for Poisson arrivals.
+        fixed_gap_seconds: Constant gap used by ``fixed`` mode.
+        weighted_gaps: Candidate gap sizes for ``weighted_gap`` mode.
+        weighted_gap_weights: Sampling weights paired with ``weighted_gaps``.
+        fan_pool: Optional inclusive upper bound for generated fan IDs.
+        skip_default_event_cap: Whether to disable the default 200-event cap
+            when neither ``max_events`` nor duration is supplied.
+        rate_factor_fn: Optional multiplier callback ``F(t)`` used to increase
+            effective arrival intensity over time.
 
-    When ``rate_factor_fn`` is set, Poisson mode uses ``λ_eff = poisson_rate * F(t)`` before each
-    gap draw; non-poisson modes scale the gap inversely by ``F(t)`` (≥ 1).
+    Yields:
+        NDJSON v3-compatible retail purchase dictionaries.
+
+    Raises:
+        ValueError: If arrival parameters are invalid for the chosen mode.
+
+    Note:
+        The RNG draw order per emitted event is inter-arrival gap, shop, item,
+        amount jitter, then ``fan_id``. When ``rate_factor_fn`` is supplied,
+        Poisson mode scales ``poisson_rate`` by ``F(t)`` while non-Poisson modes
+        divide the drawn gap by ``F(t)``.
     """
     if max_events == 0:
         return
@@ -123,6 +177,7 @@ def iter_retail_records(
     cap_n = me
     cap_d = md
 
+    # Pick a conservative shared fan pool when the caller does not provide one.
     if fan_pool is None:
         est = cap_n if cap_n is not None else 500
         pool = min(500, max(est * 2, 2))
@@ -132,8 +187,11 @@ def iter_retail_records(
     t = epoch
     count = 0
     while True:
+        # Stop as soon as the event-count cap is reached, before consuming any
+        # more random draws.
         if cap_n is not None and count >= cap_n:
             break
+        # Advance the synthetic clock according to the requested arrival model.
         if arrival_mode == "poisson":
             if poisson_rate <= 0:
                 raise ValueError("poisson_rate must be > 0 for arrival_mode='poisson'")
@@ -157,17 +215,18 @@ def iter_retail_records(
                 fac = max(1.0, float(rate_factor_fn(t)))
                 gap = float(gap) / fac
         t = t + timedelta(seconds=gap)
+        # Duration checks apply after the clock advances but before emission so
+        # callers never receive an out-of-window record.
         if cap_d is not None and (t - epoch).total_seconds() > cap_d:
             break
 
+        # Emit one purchase using the documented shop → item → amount → fan draw order.
         shop = rng.choices(SHOP_IDS, weights=list(w), k=1)[0]
         item = rng.choice(ITEMS)
         amount = synthetic_line_amount_eur(item, rng)
         fan = _fan_id(rng, pool)
         ts = _dt_to_utc_z(t)
-        yield make_retail_purchase(
-            fan_id=fan, item=item, amount=amount, timestamp=ts, shop=shop
-        )
+        yield make_retail_purchase(fan_id=fan, item=item, amount=amount, timestamp=ts, shop=shop)
         count += 1
 
 
@@ -175,10 +234,28 @@ def generate_retail_batch(
     rng: random.Random,
     **kwargs: Any,
 ) -> list[dict[str, Any]]:
+    """Materialize retail records into a list.
+
+    Args:
+        rng: Random generator controlling event reproducibility.
+        **kwargs: Keyword arguments forwarded to :func:`iter_retail_records`.
+
+    Returns:
+        List of generated retail purchase dictionaries.
+    """
     return list(iter_retail_records(rng, **kwargs))
 
 
 def generate_retail_ndjson(rng: random.Random, **kwargs: Any) -> str:
+    """Generate a full retail batch and serialize it to NDJSON text.
+
+    Args:
+        rng: Random generator controlling event reproducibility.
+        **kwargs: Keyword arguments forwarded to :func:`generate_retail_batch`.
+
+    Returns:
+        Canonical NDJSON text containing the generated retail records.
+    """
     return records_to_ndjson_v3(generate_retail_batch(rng, **kwargs))
 
 
@@ -188,9 +265,15 @@ def iter_retail_ndjson_lines(
     fan_ids: set[str] | None = None,
     **kwargs: Any,
 ) -> Iterator[str]:
-    """Yield canonical NDJSON lines.
+    """Yield canonical NDJSON lines for generated retail records.
 
-    If ``fan_ids`` is a set, each emitted ``fan_id`` is added to it.
+    Args:
+        rng: Random generator controlling event reproducibility.
+        fan_ids: Optional mutable set that collects each emitted ``fan_id``.
+        **kwargs: Keyword arguments forwarded to :func:`iter_retail_records`.
+
+    Yields:
+        Canonical LF-terminated NDJSON lines.
     """
     for rec in iter_retail_records(rng, **kwargs):
         if fan_ids is not None:
@@ -199,4 +282,13 @@ def iter_retail_ndjson_lines(
 
 
 def retail_stream_ndjson(rng: random.Random, **kwargs: Any) -> str:
+    """Return all generated retail NDJSON lines as one concatenated string.
+
+    Args:
+        rng: Random generator controlling event reproducibility.
+        **kwargs: Keyword arguments forwarded to :func:`iter_retail_ndjson_lines`.
+
+    Returns:
+        Single string containing all LF-terminated NDJSON lines.
+    """
     return "".join(iter_retail_ndjson_lines(rng, **kwargs))

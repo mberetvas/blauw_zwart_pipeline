@@ -30,9 +30,7 @@ def _json_default(obj: Any) -> Any:
     raise TypeError(f"Object of type {type(obj)} is not JSON serialisable")
 
 
-def _run_read_query(
-    sql: str, params: Sequence[Any] | None = None
-) -> list[dict[str, Any]]:
+def _run_read_query(sql: str, params: Sequence[Any] | None = None) -> list[dict[str, Any]]:
     """Execute a read-only query with the shared reader DSN and timeout."""
     if not DATABASE_URL:
         raise psycopg2.OperationalError(

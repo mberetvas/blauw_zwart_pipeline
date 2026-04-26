@@ -121,6 +121,8 @@ def test_run_read_query_with_params(db_module, monkeypatch: pytest.MonkeyPatch) 
 
     select_calls = [params for sql, params in captured if "SELECT * FROM t WHERE id = %s" in sql]
     assert select_calls == [(5,)]
+
+
 def test_run_read_query_raises_when_no_url(db_module, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(db_module, "DATABASE_URL", "")
     with pytest.raises(db_module.psycopg2.OperationalError, match=r"No database URL"):

@@ -65,8 +65,17 @@ DEFAULT_RETAIL_OUTPUT = "out/retail.ndjson"
 
 
 def _companion_fans_json_path(ndjson_path: str) -> str:
-    """Sidecar fan master path: same location/stem as the NDJSON output, ``.json`` suffix."""
+    """Return the default fan-profile sidecar path for an NDJSON output file.
+
+    Args:
+        ndjson_path: Target NDJSON output path.
+
+    Returns:
+        Sibling JSON path with the same stem and a ``.json`` suffix.
+    """
     return str(Path(ndjson_path).with_suffix(".json"))
+
+
 DEFAULT_COUNT = 200
 DEFAULT_DAYS = 90
 # Aligned with fan_events.v3_retail.iter_retail_records (do not drift silently).
@@ -79,7 +88,8 @@ SUBCOMMAND_EVENTS = "generate_events"
 SUBCOMMAND_RETAIL = "generate_retail"
 SUBCOMMAND_STREAM = "stream"
 
-# Copy-paste examples (flags/paths align with README). Epilog is styled by ColoredHelpFormatter.
+# Copy-paste examples (flags/paths align with README).
+# Epilog is styled by ColoredHelpFormatter.
 _HELP_DEV_NOTE = (
     "Without install, prefix with uv run or uv run python -m fan_events (same arguments).\n\n"
 )
@@ -91,8 +101,8 @@ _EX_HELP_STREAM = "fan_events stream --help"
 _EX_V1_ROLLING = "fan_events generate_events -s 1 -n 200 -d 90 -o out/v1.ndjson"
 _EX_V2_CAL_ALL = "fan_events generate_events -c my_calendar.json -s 42 -o out/v2.ndjson"
 _EX_V2_DATE_RANGE = (
-    "fan_events generate_events -c my_calendar.json "
-    "--from-date 2026-09-01 --to-date 2026-12-31 -s 42 -o out/v2.ndjson"
+    "fan_events generate_events -c my_calendar.json"
+    " --from-date 2026-09-01 --to-date 2026-12-31 -s 42 -o out/v2.ndjson"
 )
 _EX_V3_FILE = "fan_events generate_retail -o out/retail.ndjson -s 42"
 _EX_V3_STREAM = "fan_events generate_retail -t -s 42 -n 100"
@@ -100,8 +110,8 @@ _EX_V3_STREAM_LIVE = (
     "fan_events generate_retail -t -s 42 -n 50 --emit-wall-clock-min 0.5 --emit-wall-clock-max 2.0"
 )
 _EX_STREAM_MERGED = (
-    "fan_events stream -c my_calendar.json -s 42 -o out/mixed.ndjson "
-    "--retail-max-events 500 --max-events 1000"
+    "fan_events stream -c my_calendar.json -s 42 -o out/mixed.ndjson"
+    " --retail-max-events 500 --max-events 1000"
 )
 _EX_STREAM_RETAIL_ONLY = "fan_events stream -s 1 --retail-max-events 10"
 
@@ -135,8 +145,8 @@ _EX_KAFKA_ENV = (
     "fan_events stream -s 42 --retail-max-events 100 --max-events 50"
 )
 _EX_KAFKA_FLAGS = (
-    "fan_events stream --kafka-topic fan_events "
-    "--kafka-bootstrap-servers localhost:9092 --max-events 50"
+    "fan_events stream --kafka-topic fan_events"
+    " --kafka-bootstrap-servers localhost:9092 --max-events 50"
 )
 
 EPILOG_STREAM = (
@@ -179,16 +189,18 @@ EPILOG_GENERATE_RETAIL = (
 
 
 def _parse_iso_date(s: str) -> date:
+    """Parse a ``YYYY-MM-DD`` CLI value into a :class:`datetime.date`."""
     return date.fromisoformat(s)
 
 
 def _write_fans_sidecar(path: Path, fan_ids: set[str], global_seed: int | None) -> None:
+    """Build and atomically write the fan-profile sidecar JSON document."""
     doc = build_fans_sidecar(fan_ids, global_seed=global_seed)
     write_atomic_text(path, format_fans_sidecar_json(doc))
 
 
 def _tokens_for_flag_checks(argv: list[str] | None) -> list[str]:
-    """Tokens after optional subcommand name (for mutual-exclusion checks vs --calendar)."""
+    """Return argv tokens with the top-level events subcommand stripped off."""
     tokens = list(argv) if argv is not None else sys.argv[1:]
     if tokens and tokens[0] == SUBCOMMAND_EVENTS:
         return tokens[1:]
@@ -196,6 +208,7 @@ def _tokens_for_flag_checks(argv: list[str] | None) -> list[str]:
 
 
 def _tokens_after_subcommand(argv: list[str] | None, subcommand: str) -> list[str]:
+    """Return tokens that appear after a named subcommand in ``argv``."""
     tokens = list(argv) if argv is not None else sys.argv[1:]
     try:
         i = tokens.index(subcommand)
@@ -204,19 +217,22 @@ def _tokens_after_subcommand(argv: list[str] | None, subcommand: str) -> list[st
     return tokens[i + 1 :]
 
 
-_RETAIL_BANNED = frozenset({
-    "--calendar",
-    "--from-date",
-    "--to-date",
-    "--scan-fraction",
-    "--merch-factor",
-    "--count",
-    "--days",
-    "--events",
-})
+_RETAIL_BANNED = frozenset(
+    {
+        "--calendar",
+        "--from-date",
+        "--to-date",
+        "--scan-fraction",
+        "--merch-factor",
+        "--count",
+        "--days",
+        "--events",
+    }
+)
 
 
 def _retail_forbidden_token(tokens: list[str]) -> str | None:
+    """Return the first v1/v2-only token found in retail CLI args, if any."""
     for t in tokens:
         if t in _RETAIL_BANNED:
             return t
@@ -224,6 +240,7 @@ def _retail_forbidden_token(tokens: list[str]) -> str | None:
 
 
 def _parse_epoch_utc(s: str) -> datetime:
+    """Parse a CLI epoch string and normalize it to UTC."""
     t = s.strip()
     if t.endswith("Z"):
         t = t[:-1] + "+00:00"
@@ -234,6 +251,14 @@ def _parse_epoch_utc(s: str) -> datetime:
 
 
 def _retail_generator_kwargs(args: argparse.Namespace) -> dict[str, object]:
+    """Translate parsed retail CLI flags into generator keyword arguments.
+
+    Args:
+        args: Parsed namespace from the retail or stream subcommand.
+
+    Returns:
+        Keyword-argument mapping suitable for ``iter_retail_records``.
+    """
     kw: dict[str, object] = {}
     if args.epoch is not None:
         kw["epoch_utc"] = _parse_epoch_utc(args.epoch)
@@ -259,13 +284,22 @@ def _validate_generate_retail(
     ns: argparse.Namespace,
     argv: list[str] | None,
 ) -> None:
+    """Validate cross-flag constraints for ``generate_retail``.
+
+    Args:
+        p: Parser used to emit argparse-style errors.
+        ns: Parsed namespace for ``generate_retail``.
+        argv: Original argument vector, when supplied.
+    """
     tok = _tokens_after_subcommand(argv, SUBCOMMAND_RETAIL)
     bad = _retail_forbidden_token(tok)
     if bad is not None:
         p.error(
-            f"{bad} cannot be used with generate_retail "
-            "(v1/v2 options belong under generate_events)"
+            f"{bad} cannot be used with generate_retail"
+            " (v1/v2 options belong under generate_events)"
         )
+
+    # Validate numeric bounds before we derive generator kwargs from them.
     if ns.max_events is not None and ns.max_events < 0:
         p.error("--max-events must be >= 0")
     if ns.max_duration is not None and ns.max_duration <= 0:
@@ -290,6 +324,7 @@ def _validate_generate_retail(
         if sum(ns.weighted_gap_weights) <= 0:
             p.error("--weighted-gap-weights must have a positive total weight")
 
+    # Wall-clock pacing only makes sense when stdout streaming is enabled.
     emit_min = ns.emit_wall_clock_min
     emit_max = ns.emit_wall_clock_max
     if (emit_min is None) != (emit_max is None):
@@ -302,23 +337,32 @@ def _validate_generate_retail(
         if emit_min > emit_max:
             p.error("--emit-wall-clock-min must be <= --emit-wall-clock-max")
 
+    # Unlimited generation needs another stopping condition so the CLI cannot
+    # accidentally hang forever in non-streaming mode.
     if ns.unlimited:
         if ns.max_events is not None:
             p.error("--unlimited cannot be used with --max-events")
         if ns.stream:
             if emit_min is None and ns.max_duration is None:
                 p.error(
-                    "--unlimited with --stream requires --emit-wall-clock-min/max "
-                    "or --max-duration"
+                    "--unlimited with --stream requires --emit-wall-clock-min/max or --max-duration"
                 )
         elif ns.max_duration is None:
             p.error("--unlimited without --stream requires --max-duration")
 
 
 def _stream_retail_kwargs(ns: argparse.Namespace) -> dict[str, object]:
-    """Kwargs for ``iter_retail_records`` on ``stream``.
+    """Build retail-generator kwargs for the unified ``stream`` command.
 
-    Retail-internal caps use separate argparse destinations from post-merge limits.
+    Args:
+        ns: Parsed ``stream`` namespace.
+
+    Returns:
+        Keyword-argument mapping suitable for ``iter_retail_records``.
+
+    Note:
+        Retail-specific limits use separate argparse destinations from the
+        post-merge ``--max-events`` and ``--max-duration`` cutoffs.
     """
     kw: dict[str, object] = {}
     if ns.epoch is not None:
@@ -333,9 +377,7 @@ def _stream_retail_kwargs(ns: argparse.Namespace) -> dict[str, object]:
     if ns.arrival_mode == "weighted_gap":
         kw["weighted_gaps"] = ns.weighted_gaps
         kw["weighted_gap_weights"] = ns.weighted_gap_weights
-    kw["skip_default_event_cap"] = (
-        ns.retail_max_events is None and ns.retail_max_duration is None
-    )
+    kw["skip_default_event_cap"] = ns.retail_max_events is None and ns.retail_max_duration is None
     return kw
 
 
@@ -344,6 +386,14 @@ def _validate_stream(
     ns: argparse.Namespace,
     argv: list[str] | None,
 ) -> None:
+    """Validate cross-flag constraints for the merged ``stream`` command.
+
+    Args:
+        p: Parser used to emit argparse-style errors.
+        ns: Parsed namespace for ``stream``.
+        argv: Original argument vector, when supplied.
+    """
+    # Calendar-specific toggles only make sense when calendar mode is active.
     if ns.no_retail and not ns.calendar:
         p.error("--no-retail requires --calendar (calendar-only mode)")
     if ns.calendar_loop and not ns.calendar:
@@ -362,8 +412,8 @@ def _validate_stream(
     if ns.calendar:
         if (ns.from_date is None) != (ns.to_date is None):
             p.error(
-                "--from-date and --to-date must be given together, "
-                "or omit both to include all matches"
+                "--from-date and --to-date must be given together,"
+                " or omit both to include all matches"
             )
     else:
         if ns.from_date is not None or ns.to_date is not None:
@@ -371,6 +421,8 @@ def _validate_stream(
         if ns.scan_fraction is not None or ns.merch_factor is not None:
             p.error("--scan-fraction / --merch-factor require --calendar")
 
+    # Retail iterator limits are distinct from post-merge limits, but both need
+    # basic sanity checks before the stream starts.
     if ns.retail_max_events is not None and ns.retail_max_events < 0:
         p.error("--retail-max-events must be >= 0")
     if ns.retail_max_duration is not None and ns.retail_max_duration <= 0:
@@ -400,6 +452,8 @@ def _validate_stream(
         if sum(ns.weighted_gap_weights) <= 0:
             p.error("--weighted-gap-weights must have a positive total weight")
 
+    # Optional wall-clock pacing is independent from synthetic time but must be
+    # configured as a complete min/max pair.
     emit_min = ns.emit_wall_clock_min
     emit_max = ns.emit_wall_clock_max
     if (emit_min is None) != (emit_max is None):
@@ -409,6 +463,7 @@ def _validate_stream(
     if emit_min is not None and emit_min > emit_max:
         p.error("--emit-wall-clock-min must be <= --emit-wall-clock-max")
 
+    # Match-day multipliers must remain positive so intensity scaling never flips sign.
     hmd = getattr(ns, "retail_home_match_day_multiplier", 2.0)
     hpre = getattr(ns, "retail_home_kickoff_pre_minutes", 90)
     hpost = getattr(ns, "retail_home_kickoff_post_minutes", 120)
@@ -432,7 +487,12 @@ def _validate_stream(
 
 
 def _validate_stream_kafka(p: argparse.ArgumentParser, ns: argparse.Namespace) -> None:
-    """Validate Kafka-specific stream flags."""
+    """Validate Kafka-specific flag combinations for ``stream``.
+
+    Args:
+        p: Parser used to emit argparse-style errors.
+        ns: Parsed ``stream`` namespace.
+    """
     kafka_only_flags = {
         "--kafka-bootstrap-servers": ns.kafka_bootstrap_servers,
         "--kafka-client-id": ns.kafka_client_id,
@@ -450,43 +510,48 @@ def _validate_stream_kafka(p: argparse.ArgumentParser, ns: argparse.Namespace) -
 
 
 # Options that consume the next argv token as their value (same set argparse uses).
-_OPTS_WITH_FOLLOWING_VALUE = frozenset({
-    "-o",
-    "--output",
-    "-s",
-    "--seed",
-    "-c",
-    "--calendar",
-    "-d",
-    "--days",
-    "--from-date",
-    "--to-date",
-    "--scan-fraction",
-    "--merch-factor",
-    "-e",
-    "--events",
-    "-F",
-    "--fans-out",
-    "--kafka-topic",
-    "--kafka-bootstrap-servers",
-    "--kafka-client-id",
-    "--kafka-compression",
-    "--kafka-acks",
-    "--calendar-loop-shift",
-    "--retail-home-match-day-multiplier",
-    "--retail-home-kickoff-pre-minutes",
-    "--retail-home-kickoff-post-minutes",
-    "--retail-home-kickoff-extra-multiplier",
-    "--retail-away-match-day-multiplier",
-})
+_OPTS_WITH_FOLLOWING_VALUE = frozenset(
+    {
+        "-o",
+        "--output",
+        "-s",
+        "--seed",
+        "-c",
+        "--calendar",
+        "-d",
+        "--days",
+        "--from-date",
+        "--to-date",
+        "--scan-fraction",
+        "--merch-factor",
+        "-e",
+        "--events",
+        "-F",
+        "--fans-out",
+        "--kafka-topic",
+        "--kafka-bootstrap-servers",
+        "--kafka-client-id",
+        "--kafka-compression",
+        "--kafka-acks",
+        "--calendar-loop-shift",
+        "--retail-home-match-day-multiplier",
+        "--retail-home-kickoff-pre-minutes",
+        "--retail-home-kickoff-post-minutes",
+        "--retail-home-kickoff-extra-multiplier",
+        "--retail-away-match-day-multiplier",
+    }
+)
 
 
 def _explicit_v1_rolling_flags_in_tokens(tokens: list[str]) -> bool:
-    """
-    True if -n / --count / -d / --days appear as rolling-window options.
+    """Detect whether raw argv tokens contain v1 rolling-window flags.
 
-    Values of other flags (e.g. ``--calendar -n`` where ``-n`` is a path) are skipped
-    so they are not mistaken for rolling flags.
+    Args:
+        tokens: Raw tokens after subcommand extraction.
+
+    Returns:
+        ``True`` when ``-n/--count`` or ``-d/--days`` are used as real rolling
+        options rather than values for another flag.
     """
     i = 0
     n_tok = len(tokens)
@@ -510,6 +575,15 @@ def _explicit_v1_rolling_flags_in_tokens(tokens: list[str]) -> bool:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse and validate ``fan_events`` command-line arguments.
+
+    Args:
+        argv: Optional argument list. When omitted, argparse reads ``sys.argv``.
+
+    Returns:
+        Parsed and validated argparse namespace.
+    """
+    # Root parser defines shared branding and top-level help text.
     p = ColoredArgumentParser(
         prog="fan_events",
         description=(
@@ -520,6 +594,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         epilog=EPILOG_ROOT,
     )
     sub = p.add_subparsers(dest="command", required=True, parser_class=ColoredArgumentParser)
+
+    # ``generate_events`` covers the legacy v1 rolling mode and the v2 calendar mode.
     gen = sub.add_parser(
         SUBCOMMAND_EVENTS,
         help="Write v1 (rolling) or v2 (calendar) fan events to a file.",
@@ -537,9 +613,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--seed",
         type=int,
         default=None,
-        help=(
-            "RNG seed for reproducible output (default: random)"
-        ),
+        help=("RNG seed for reproducible output (default: random)"),
     )
 
     rolling = gen.add_argument_group("Rolling window (v1)")
@@ -564,25 +638,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--calendar",
         type=str,
         default=None,
-        help=(
-            "Path to match calendar JSON; enables v2 output"
-        ),
+        help=("Path to match calendar JSON; enables v2 output"),
     )
     cal.add_argument(
         "--from-date",
         type=str,
         default=None,
-        help=(
-            "Earliest match date to include, YYYY-MM-DD (omit to include all)"
-        ),
+        help=("Earliest match date to include, YYYY-MM-DD (omit to include all)"),
     )
     cal.add_argument(
         "--to-date",
         type=str,
         default=None,
-        help=(
-            "Latest match date to include, YYYY-MM-DD (omit to include all)"
-        ),
+        help=("Latest match date to include, YYYY-MM-DD (omit to include all)"),
     )
     cal.add_argument(
         "--scan-fraction",
@@ -596,9 +664,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--merch-factor",
         type=float,
         default=None,
-        help=(
-            f"Merch purchase count scale relative to capacity (default: {DEFAULT_MERCH_FACTOR})"
-        ),
+        help=(f"Merch purchase count scale relative to capacity (default: {DEFAULT_MERCH_FACTOR})"),
     )
 
     gen.add_argument(
@@ -620,6 +686,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
 
+    # ``generate_retail`` exposes the standalone v3 retail generator.
     ret = sub.add_parser(
         SUBCOMMAND_RETAIL,
         help="Write v3 retail purchase events to a file or stream to stdout.",
@@ -637,26 +704,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--seed",
         type=int,
         default=None,
-        help=(
-            "RNG seed for reproducible output (default: random)"
-        ),
+        help=("RNG seed for reproducible output (default: random)"),
     )
     ret.add_argument(
         "-t",
         "--stream",
         action="store_true",
-        help=(
-            "Stream NDJSON to stdout instead of writing to a file (default: off)"
-        ),
+        help=("Stream NDJSON to stdout instead of writing to a file (default: off)"),
     )
     ret.add_argument(
         "-n",
         "--max-events",
         type=int,
         default=None,
-        help=(
-            "Stop after N events; 0 = empty (default: 200 when no other limits set)"
-        ),
+        help=("Stop after N events; 0 = empty (default: 200 when no other limits set)"),
     )
     ret.add_argument(
         "-d",
@@ -665,9 +726,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         dest="max_duration",
         metavar="SECONDS",
-        help=(
-            "Stop after N simulated seconds from epoch (default: none)"
-        ),
+        help=("Stop after N simulated seconds from epoch (default: none)"),
     )
     ret.add_argument(
         "-E",
@@ -685,8 +744,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar=("W1", "W2", "W3"),
         default=None,
         help=(
-            "Relative weights for 3 shops: jan_breydel_fan_shop, webshop, "
-            "bruges_city_shop (default: equal)"
+            "Relative weights for 3 shops: jan_breydel_fan_shop,"
+            " webshop, bruges_city_shop (default: equal)"
         ),
     )
     ret.add_argument(
@@ -700,8 +759,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=DEFAULT_RETAIL_POISSON_RATE,
         help=(
-            f"Arrival rate in events/second for poisson mode "
-            f"(default: {DEFAULT_RETAIL_POISSON_RATE})"
+            f"Arrival rate in events/second for poisson mode"
+            f" (default: {DEFAULT_RETAIL_POISSON_RATE})"
         ),
     )
     ret.add_argument(
@@ -709,8 +768,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=DEFAULT_RETAIL_FIXED_GAP_SECONDS,
         help=(
-            f"Gap in seconds between events for fixed mode "
-            f"(default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
+            "Gap in seconds between events for fixed mode"
+            f" (default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
         ),
     )
     ret.add_argument(
@@ -719,9 +778,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=None,
         metavar="SEC",
-        help=(
-            "Gap lengths in seconds for weighted_gap mode (requires --weighted-gap-weights)"
-        ),
+        help=("Gap lengths in seconds for weighted_gap mode (requires --weighted-gap-weights)"),
     )
     ret.add_argument(
         "--weighted-gap-weights",
@@ -729,9 +786,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=None,
         metavar="W",
-        help=(
-            "Probability weights for each --weighted-gaps value (same length)"
-        ),
+        help=("Probability weights for each --weighted-gaps value (same length)"),
     )
     ret.add_argument(
         "-p",
@@ -739,9 +794,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=None,
         metavar="N",
-        help=(
-            "Max fan ID pool size (default: auto)"
-        ),
+        help=("Max fan ID pool size (default: auto)"),
     )
     ret.add_argument(
         "--emit-wall-clock-min",
@@ -784,6 +837,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
 
+    # ``stream`` merges calendar and retail iterators into one ordered output.
     st = sub.add_parser(
         SUBCOMMAND_STREAM,
         help="Stream v2 match events and/or v3 retail as merged NDJSON sorted by time.",
@@ -796,18 +850,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=str,
         default=None,
         metavar="PATH",
-        help=(
-            "Append output to this file; omit or use '-' for stdout (default: stdout)"
-        ),
+        help=("Append output to this file; omit or use '-' for stdout (default: stdout)"),
     )
     st.add_argument(
         "-s",
         "--seed",
         type=int,
         default=None,
-        help=(
-            "RNG seed for reproducible output (default: random)"
-        ),
+        help=("RNG seed for reproducible output (default: random)"),
     )
     st.add_argument(
         "--no-retail",
@@ -846,9 +896,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--merch-factor",
         type=float,
         default=None,
-        help=(
-            f"Merch purchase count scale relative to capacity (default: {DEFAULT_MERCH_FACTOR})"
-        ),
+        help=(f"Merch purchase count scale relative to capacity (default: {DEFAULT_MERCH_FACTOR})"),
     )
     cal_s.add_argument(
         "-e",
@@ -949,9 +997,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=None,
         metavar="N",
-        help=(
-            "Stop after N merged output lines (default: none)"
-        ),
+        help=("Stop after N merged output lines (default: none)"),
     )
     lim.add_argument(
         "--max-duration",
@@ -959,9 +1005,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="SECONDS",
         dest="max_duration",
-        help=(
-            "Stop after N simulated seconds from the first event (default: none)"
-        ),
+        help=("Stop after N simulated seconds from the first event (default: none)"),
     )
     rlim = st.add_argument_group("Retail-only iterator limits (v3, before merge)")
     rlim.add_argument(
@@ -970,9 +1014,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="N",
         dest="retail_max_events",
-        help=(
-            "Cap retail events before merging (default: none)"
-        ),
+        help=("Cap retail events before merging (default: none)"),
     )
     rlim.add_argument(
         "--retail-max-duration",
@@ -988,8 +1030,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=str,
         default=None,
         help=(
-            f"Start of retail synthetic timeline, ISO-8601 UTC "
-            f"(default: {_DEFAULT_RETAIL_EPOCH_HELP_STR})"
+            "Start of retail synthetic timeline, ISO-8601 UTC"
+            f" (default: {_DEFAULT_RETAIL_EPOCH_HELP_STR})"
         ),
     )
     st.add_argument(
@@ -999,8 +1041,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar=("W1", "W2", "W3"),
         default=None,
         help=(
-            "Weights for 3 retail shops: jan_breydel_fan_shop, webshop, "
-            "bruges_city_shop (default: equal)"
+            "Weights for 3 retail shops: jan_breydel_fan_shop,"
+            " webshop, bruges_city_shop (default: equal)"
         ),
     )
     st.add_argument(
@@ -1014,8 +1056,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=DEFAULT_RETAIL_POISSON_RATE,
         help=(
-            f"Arrival rate in events/second for poisson mode "
-            f"(default: {DEFAULT_RETAIL_POISSON_RATE})"
+            f"Arrival rate in events/second for poisson mode"
+            f" (default: {DEFAULT_RETAIL_POISSON_RATE})"
         ),
     )
     st.add_argument(
@@ -1023,8 +1065,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=DEFAULT_RETAIL_FIXED_GAP_SECONDS,
         help=(
-            f"Gap in seconds between retail events for fixed mode "
-            f"(default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
+            "Gap in seconds between retail events for fixed mode"
+            f" (default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
         ),
     )
     st.add_argument(
@@ -1049,9 +1091,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=None,
         metavar="N",
-        help=(
-            "Max fan ID pool size; shared between v2 and v3 when both active (default: auto)"
-        ),
+        help=("Max fan ID pool size; shared between v2 and v3 when both active (default: auto)"),
     )
     st.add_argument(
         "--emit-wall-clock-min",
@@ -1059,9 +1099,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="SEC",
         dest="emit_wall_clock_min",
-        help=(
-            "Min sleep in seconds between output lines (requires --emit-wall-clock-max)"
-        ),
+        help=("Min sleep in seconds between output lines (requires --emit-wall-clock-max)"),
     )
     st.add_argument(
         "--emit-wall-clock-max",
@@ -1085,9 +1123,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=os.environ.get("FAN_EVENTS_KAFKA_TOPIC"),
         metavar="TOPIC",
         dest="kafka_topic",
-        help=(
-            "Kafka topic to publish to; enables Kafka mode (env: FAN_EVENTS_KAFKA_TOPIC)"
-        ),
+        help=("Kafka topic to publish to; enables Kafka mode (env: FAN_EVENTS_KAFKA_TOPIC)"),
     )
     kafka_g.add_argument(
         "--kafka-bootstrap-servers",
@@ -1095,9 +1131,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="SERVERS",
         dest="kafka_bootstrap_servers",
-        help=(
-            "Broker addresses, e.g. localhost:9092 (env: FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS)"
-        ),
+        help=("Broker addresses, e.g. localhost:9092 (env: FAN_EVENTS_KAFKA_BOOTSTRAP_SERVERS)"),
     )
     kafka_g.add_argument(
         "--kafka-client-id",
@@ -1105,18 +1139,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="ID",
         dest="kafka_client_id",
-        help=(
-            "Producer client ID (env: FAN_EVENTS_KAFKA_CLIENT_ID, default: fan-events-producer)"
-        ),
+        help=("Producer client ID (env: FAN_EVENTS_KAFKA_CLIENT_ID, default: fan-events-producer)"),
     )
     kafka_g.add_argument(
         "--kafka-compression",
         choices=("none", "gzip", "snappy", "lz4", "zstd"),
         default=None,
         dest="kafka_compression",
-        help=(
-            "Message compression codec (env: FAN_EVENTS_KAFKA_COMPRESSION, default: none)"
-        ),
+        help=("Message compression codec (env: FAN_EVENTS_KAFKA_COMPRESSION, default: none)"),
     )
     kafka_g.add_argument(
         "--kafka-acks",
@@ -1124,9 +1154,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         metavar="ACKS",
         dest="kafka_acks",
-        help=(
-            "Required broker acks: 0, 1, or all/-1 (env: FAN_EVENTS_KAFKA_ACKS, default: 1)"
-        ),
+        help=("Required broker acks: 0, 1, or all/-1 (env: FAN_EVENTS_KAFKA_ACKS, default: 1)"),
     )
     st.add_argument(
         "--verbose",
@@ -1138,6 +1166,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     ns = p.parse_args(argv)
 
+    # Command-specific validation runs after argparse has populated defaults.
     if ns.command == SUBCOMMAND_STREAM:
         _validate_stream(p, ns, argv)
         return ns
@@ -1150,13 +1179,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     if ns.calendar:
         if _explicit_v1_rolling_flags_in_tokens(raw):
-            p.error(
-                "-n / --count / -d / --days cannot be used with --calendar (v2 calendar mode)"
-            )
+            p.error("-n / --count / -d / --days cannot be used with --calendar (v2 calendar mode)")
         if (ns.from_date is None) != (ns.to_date is None):
             p.error(
-                "--from-date and --to-date must be given together, "
-                "or omit both to include all matches"
+                "--from-date and --to-date must be given together,"
+                " or omit both to include all matches"
             )
     else:
         if ns.from_date is not None or ns.to_date is not None:
@@ -1175,8 +1202,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def run_v1(args: argparse.Namespace) -> None:
+    """Execute the legacy rolling-window v1 generation flow.
+
+    Args:
+        args: Parsed namespace for ``generate_events`` without ``--calendar``.
+    """
     rng = random.Random(args.seed) if args.seed is not None else random.Random()
     now = FIXED_NOW_UTC if args.seed is not None else datetime.now(timezone.utc)
+    # Seeded runs pin ``now`` so byte-for-byte fixtures stay reproducible.
     records = generate_batch(
         rng,
         count=args.count,
@@ -1191,7 +1224,13 @@ def run_v1(args: argparse.Namespace) -> None:
 
 
 def run_v2(args: argparse.Namespace) -> None:
+    """Execute the match-calendar-driven v2 generation flow.
+
+    Args:
+        args: Parsed namespace for ``generate_events`` with ``--calendar``.
+    """
     path = Path(args.calendar)
+    # Parse and filter the source calendar before any RNG is consumed.
     doc = load_calendar_json(path)
     rows = validate_and_parse_matches(doc)
     from_d = _parse_iso_date(args.from_date) if args.from_date is not None else None
@@ -1214,13 +1253,18 @@ def run_v2(args: argparse.Namespace) -> None:
 
 
 def run_v3(args: argparse.Namespace) -> None:
+    """Execute the standalone retail v3 generation flow.
+
+    Args:
+        args: Parsed namespace for ``generate_retail``.
+    """
     rng = random.Random(args.seed) if args.seed is not None else random.Random()
-    pacing_rng = (
-        random.Random(f"pacing:{args.seed}") if args.seed is not None else random.Random()
-    )
+    pacing_rng = random.Random(f"pacing:{args.seed}") if args.seed is not None else random.Random()
     kw = _retail_generator_kwargs(args)
     fan_ids: set[str] | None = set() if args.fans_out else None
     if args.stream:
+        # Stream mode writes each line as soon as it is generated and optionally
+        # adds wall-clock pacing between lines.
         if args.emit_wall_clock_min is not None:
             first = True
             for line in iter_retail_ndjson_lines(rng, fan_ids=fan_ids, **kw):
@@ -1241,6 +1285,7 @@ def run_v3(args: argparse.Namespace) -> None:
                 sys.stdout.write(text)
                 sys.stdout.flush()
     else:
+        # File mode materializes the batch first so it can be atomically replaced.
         records = generate_retail_batch(rng, **kw)
         text = records_to_ndjson_v3(records)
         write_atomic_text(Path(args.output), text)
@@ -1258,10 +1303,22 @@ def _stream_t0_anchor_and_retail_epoch(
     include_v2: bool,
     include_retail: bool,
 ) -> tuple[datetime | None, datetime]:
-    """``--max-duration`` anchor uses the effective retail emission epoch in ``compute_stream_t0``;
-    emission start follows research §3 (no backward retail vs first v2 window when calendar is
-    present). When ``--epoch`` is omitted, both emission and the t0 anchor use ``earliest_v2``
-    so that duration semantics are aligned with the master-clock start actually used."""
+    """Resolve the merged stream's duration anchor and retail emission epoch.
+
+    Args:
+        args: Parsed ``stream`` namespace.
+        contexts: Filtered calendar contexts.
+        include_v2: Whether calendar events will participate in the stream.
+        include_retail: Whether retail events will participate in the stream.
+
+    Returns:
+        Two-tuple ``(t0_anchor, retail_emission_epoch)`` in UTC.
+
+    Note:
+        When the caller omits ``--epoch`` and both v2 plus retail are active,
+        the helper aligns retail emission with the earliest v2 window so merged
+        duration semantics match the actual master-clock start.
+    """
     retail_epoch_cli = (
         _parse_epoch_utc(args.epoch) if args.epoch is not None else DEFAULT_RETAIL_SIM_EPOCH_UTC
     )
@@ -1293,14 +1350,20 @@ def _stream_t0_anchor_and_retail_epoch(
 
 
 def run_stream(args: argparse.Namespace) -> None:
+    """Execute the merged v2/v3 streaming flow.
+
+    Args:
+        args: Parsed namespace for the ``stream`` subcommand.
+    """
+    # Split RNG namespaces so v2, retail, and wall-clock pacing remain stable
+    # independently when a seed is supplied.
     v2_rng = random.Random(f"v2:{args.seed}") if args.seed is not None else random.Random()
     retail_rng = random.Random(f"retail:{args.seed}") if args.seed is not None else random.Random()
-    pacing_rng = (
-        random.Random(f"pacing:{args.seed}") if args.seed is not None else random.Random()
-    )
+    pacing_rng = random.Random(f"pacing:{args.seed}") if args.seed is not None else random.Random()
 
     contexts: list = []
     if args.calendar:
+        # Calendar loading is optional; retail-only stream mode skips this entire phase.
         path = Path(args.calendar)
         doc = load_calendar_json(path)
         rows = validate_and_parse_matches(doc)
@@ -1315,9 +1378,7 @@ def run_stream(args: argparse.Namespace) -> None:
     unified: int | None = None
     if include_v2 and include_retail:
         unified = (
-            args.fan_pool
-            if args.fan_pool is not None
-            else default_unified_fan_pool_max(contexts)
+            args.fan_pool if args.fan_pool is not None else default_unified_fan_pool_max(contexts)
         )
 
     sf = DEFAULT_SCAN_FRACTION if args.scan_fraction is None else args.scan_fraction
@@ -1325,6 +1386,7 @@ def run_stream(args: argparse.Namespace) -> None:
     events_mode = args.events
 
     if include_v2:
+        # Calendar mode can either loop year-over-year or emit a single pass.
         if use_calendar_loop:
             v2_iter = iter_looped_v2_records(
                 contexts,
@@ -1353,6 +1415,7 @@ def run_stream(args: argparse.Namespace) -> None:
     retail_kw = _stream_retail_kwargs(args)
     retail_kw["epoch_utc"] = retail_epoch_eff
     if include_retail and include_v2 and contexts:
+        # Match-day intensity only applies when both calendars and retail are active.
         retail_kw["rate_factor_fn"] = build_retail_rate_factor_fn(
             contexts,
             home_match_day_multiplier=args.retail_home_match_day_multiplier,
@@ -1379,6 +1442,7 @@ def run_stream(args: argparse.Namespace) -> None:
     emax = emit_max if use_pacing else None
 
     out = args.output
+    # Output dispatch picks Kafka first, then stdout, then file append mode.
     if args.kafka_topic not in (None, ""):
         _run_stream_kafka(args, merged, prng, emin, emax, t0_anchor=t0_anchor)
     elif out is None or out == "-":
@@ -1407,11 +1471,14 @@ def run_stream(args: argparse.Namespace) -> None:
 
 
 def _configure_kafka_observability(verbose: bool = False) -> None:
-    """Configure centralized Loguru output for Kafka mode.
+    """Configure shared logging just before entering Kafka mode.
 
-    Called once when entering Kafka mode so non-Kafka subcommands are unaffected.
-    The level is resolved as: ``--verbose`` → DEBUG, else ``FAN_EVENTS_LOG_LEVEL`` or
-    ``LOGLEVEL`` env var, else INFO.
+    Args:
+        verbose: Whether Kafka diagnostics should be elevated to DEBUG.
+
+    Note:
+        Non-Kafka subcommands do not call this helper, so their logging remains
+        unaffected by Kafka-specific verbosity choices.
     """
     if verbose:
         level = "DEBUG"
@@ -1429,7 +1496,16 @@ def _run_stream_kafka(
     *,
     t0_anchor: datetime | None = None,
 ) -> None:
-    """Publish the merged stream to Kafka (called from run_stream when --kafka-topic is set)."""
+    """Publish the merged stream to Kafka instead of stdout or a file.
+
+    Args:
+        args: Parsed ``stream`` namespace.
+        merged: Merged iterator of NDJSON-ready event dictionaries.
+        prng: Optional pacing RNG for wall-clock sleeps.
+        emin: Optional lower bound for wall-clock pacing.
+        emax: Optional upper bound for wall-clock pacing.
+        t0_anchor: Optional duration anchor for merged-stream cutoffs.
+    """
     try:
         from confluent_kafka import Producer
     except ImportError:
@@ -1452,13 +1528,16 @@ def _run_stream_kafka(
     _configure_kafka_observability(verbose=getattr(args, "verbose", False))
     kafka_logger = logging.getLogger("fan_events.kafka")
 
-    cfg = kafka_config_from_env({
-        "topic": args.kafka_topic,
-        "bootstrap_servers": args.kafka_bootstrap_servers,
-        "client_id": args.kafka_client_id,
-        "compression": args.kafka_compression,
-        "acks": args.kafka_acks,
-    })
+    # Merge CLI overrides with environment defaults before creating the producer.
+    cfg = kafka_config_from_env(
+        {
+            "topic": args.kafka_topic,
+            "bootstrap_servers": args.kafka_bootstrap_servers,
+            "client_id": args.kafka_client_id,
+            "compression": args.kafka_compression,
+            "acks": args.kafka_acks,
+        }
+    )
 
     kafka_logger.info(
         "Kafka mode — topic=%s  client_id=%s  bootstrap=%s",
@@ -1467,8 +1546,8 @@ def _run_stream_kafka(
         summarize_bootstrap_for_log(cfg.bootstrap_servers),
     )
     kafka_logger.debug(
-        "task=kafka_bootstrap_resolved previous=config_loaded next=create_producer "
-        "full_bootstrap=%s",
+        "task=kafka_bootstrap_resolved previous=config_loaded"
+        " next=create_producer full_bootstrap=%s",
         cfg.bootstrap_servers,
     )
 
@@ -1492,8 +1571,15 @@ def _run_stream_kafka(
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Run the ``fan_events`` CLI and map known failures to exit codes.
+
+    Args:
+        argv: Optional argument list. When omitted, the CLI reads ``sys.argv``.
+    """
     try:
         args = parse_args(argv)
+        # Dispatch is intentionally explicit so each subcommand keeps its own
+        # generation flow easy to trace from the entrypoint.
         if args.command == SUBCOMMAND_RETAIL:
             run_v3(args)
         elif args.command == SUBCOMMAND_STREAM:

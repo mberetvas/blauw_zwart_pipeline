@@ -1,4 +1,10 @@
-"""Match calendar load, validation, and v2 NDJSON record generation."""
+"""Load match calendars and generate match-aware v2 NDJSON records.
+
+The v2 pipeline validates calendar JSON, derives UTC match contexts, and emits
+ticket-scan plus merch-purchase records in a stable order suitable for batch or
+stream merging. It is the bridge between football schedule data and synthetic
+fan activity timelines.
+"""
 
 from __future__ import annotations
 
@@ -29,6 +35,16 @@ class CalendarError(ValueError):
 
 @dataclass(frozen=True)
 class MatchContext:
+    """Bundle one validated match row with derived timing metadata.
+
+    Attributes:
+        row: Original validated calendar row, plus any propagated metadata.
+        kickoff_utc: Kickoff converted to UTC.
+        window_start: Start of the synthetic event window around kickoff.
+        window_end: End of the synthetic event window around kickoff.
+        effective_cap: Attendance cap used for event-volume calculations.
+    """
+
     row: dict[str, Any]
     kickoff_utc: datetime
     window_start: datetime
@@ -37,6 +53,18 @@ class MatchContext:
 
 
 def load_calendar_json(path: Path) -> dict[str, Any]:
+    """Load one calendar JSON document from disk.
+
+    Args:
+        path: Calendar file path.
+
+    Returns:
+        Parsed JSON object.
+
+    Raises:
+        CalendarError: If the file contents are not valid JSON or the root is
+            not a JSON object.
+    """
     raw = path.read_text(encoding="utf-8")
     try:
         doc = json.loads(raw)
@@ -80,6 +108,7 @@ _PROPAGATED_MATCH_ROW_KEYS: tuple[str, ...] = (
 
 
 def _validate_non_empty_string(*, value: Any, field_name: str, mid: str | None = None) -> str:
+    """Validate that a calendar field is a non-empty string."""
     if not isinstance(value, str) or not value.strip():
         prefix = f"match {mid!r}: " if mid is not None else ""
         raise CalendarError(f"{prefix}{field_name} must be a non-empty string")
@@ -87,6 +116,7 @@ def _validate_non_empty_string(*, value: Any, field_name: str, mid: str | None =
 
 
 def _validate_non_negative_int(*, value: Any, field_name: str, mid: str | None = None) -> int:
+    """Validate that a calendar field is a non-negative integer."""
     if not isinstance(value, int) or isinstance(value, bool):
         prefix = f"match {mid!r}: " if mid is not None else ""
         raise CalendarError(f"{prefix}{field_name} must be an integer")
@@ -97,6 +127,7 @@ def _validate_non_negative_int(*, value: Any, field_name: str, mid: str | None =
 
 
 def _validate_optional_home_venue_metadata(doc: dict[str, Any]) -> dict[str, Any]:
+    """Validate and normalize optional document-level home venue metadata."""
     meta = doc.get("club_home_venue_metadata")
     if meta is None:
         return {}
@@ -104,6 +135,8 @@ def _validate_optional_home_venue_metadata(doc: dict[str, Any]) -> dict[str, Any
         raise CalendarError("calendar 'club_home_venue_metadata' must be a JSON object")
 
     out: dict[str, Any] = {}
+    # First propagate human-readable venue labels that should survive onto
+    # every generated match row.
     for src_key in ("club", "stadium"):
         if src_key in meta:
             out[_DOC_HOME_VENUE_META_ROW_MAP[src_key]] = _validate_non_empty_string(
@@ -111,6 +144,7 @@ def _validate_optional_home_venue_metadata(doc: dict[str, Any]) -> dict[str, Any
                 field_name=f"club_home_venue_metadata.{src_key}",
             )
 
+    # Then validate integer-valued rollup metrics sourced from the calendar doc.
     for src_key in (
         "stadium_capacity",
         "reported_total_attendance",
@@ -128,6 +162,7 @@ def _validate_optional_home_venue_metadata(doc: dict[str, Any]) -> dict[str, Any
             out[_DOC_HOME_VENUE_META_ROW_MAP[src_key]] = val
 
     if "reported_capacity_pct" in meta:
+        # Percentage is the only numeric field that may legitimately be float.
         pct = meta["reported_capacity_pct"]
         if not isinstance(pct, (int, float)) or isinstance(pct, bool):
             raise CalendarError("club_home_venue_metadata.reported_capacity_pct must be numeric")
@@ -141,10 +176,24 @@ def _validate_optional_home_venue_metadata(doc: dict[str, Any]) -> dict[str, Any
 
 
 def _match_payload_metadata(row: dict[str, Any]) -> dict[str, Any]:
+    """Return the subset of row metadata propagated onto generated event records."""
     return {key: row[key] for key in _PROPAGATED_MATCH_ROW_KEYS if key in row}
 
 
 def validate_and_parse_matches(doc: dict[str, Any]) -> list[dict[str, Any]]:
+    """Validate the ``matches`` array from a calendar document.
+
+    Args:
+        doc: Parsed calendar JSON document.
+
+    Returns:
+        List of validated match rows with document-level metadata propagated.
+
+    Raises:
+        CalendarError: If required fields are missing, values are invalid, or
+            match identifiers are duplicated.
+    """
+    # Validate the top-level collection before looking at any per-row fields.
     matches = doc.get("matches")
     if matches is None:
         raise CalendarError("calendar must contain 'matches'")
@@ -166,6 +215,9 @@ def validate_and_parse_matches(doc: dict[str, Any]) -> list[dict[str, Any]]:
         if mid in seen:
             raise CalendarError(f"duplicate match_id: {mid!r}")
         seen.add(mid)
+
+        # Required fields and attendance invariants define whether we can turn
+        # this row into a MatchContext at all.
         for key in (
             "kickoff_local",
             "timezone",
@@ -185,8 +237,8 @@ def validate_and_parse_matches(doc: dict[str, Any]) -> list[dict[str, Any]]:
             raise CalendarError(f"match {mid!r}: home_away must be 'home' or 'away'")
         if ha == "home" and att > JAN_BREYDEL_MAX_CAPACITY:
             raise CalendarError(
-                f"match {mid!r}: home attendance {att} exceeds "
-                f"Jan Breydel capacity {JAN_BREYDEL_MAX_CAPACITY}"
+                f"match {mid!r}: home attendance {att} exceeds"
+                f" Jan Breydel capacity {JAN_BREYDEL_MAX_CAPACITY}"
             )
         try:
             ZoneInfo(str(row["timezone"]))
@@ -197,6 +249,8 @@ def validate_and_parse_matches(doc: dict[str, Any]) -> list[dict[str, Any]]:
         except ValueError as e:
             raise CalendarError(f"match {mid!r}: invalid kickoff_local: {e}") from e
 
+        # Optional descriptive fields and score data get validated only when the
+        # caller includes them in the calendar payload.
         if "opponent" in row:
             _validate_non_empty_string(value=row["opponent"], field_name="opponent", mid=mid)
 
@@ -211,8 +265,8 @@ def validate_and_parse_matches(doc: dict[str, Any]) -> list[dict[str, Any]]:
         has_away_score = "away_score" in row
         if has_home_score != has_away_score:
             raise CalendarError(
-                f"match {mid!r}: home_score and away_score must either "
-                "both be present or both be absent"
+                f"match {mid!r}: home_score and away_score"
+                " must either both be present or both be absent"
             )
         if has_home_score:
             _validate_non_negative_int(value=row["home_score"], field_name="home_score", mid=mid)
@@ -223,6 +277,18 @@ def validate_and_parse_matches(doc: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def kickoff_utc_for_row(row: dict[str, Any]) -> datetime:
+    """Convert one validated calendar row into a UTC kickoff instant.
+
+    Args:
+        row: Validated match row containing ``kickoff_local`` and ``timezone``.
+
+    Returns:
+        UTC datetime for kickoff.
+
+    Raises:
+        CalendarError: If the row's ``kickoff_local`` unexpectedly includes its
+            own timezone information.
+    """
     local_s = str(row["kickoff_local"])
     tz_name = str(row["timezone"])
     naive = datetime.fromisoformat(local_s)
@@ -240,12 +306,30 @@ def match_window(
     start_offset_min: int = 120,
     end_offset_min: int = 90,
 ) -> tuple[datetime, datetime]:
+    """Compute the synthetic event window around a kickoff instant.
+
+    Args:
+        kickoff: Kickoff instant in UTC.
+        start_offset_min: Minutes before kickoff included in the window.
+        end_offset_min: Minutes after kickoff included in the window.
+
+    Returns:
+        Two-tuple ``(window_start, window_end)`` in UTC.
+    """
     start = kickoff - timedelta(minutes=start_offset_min)
     end = kickoff + timedelta(minutes=end_offset_min)
     return (start, end)
 
 
 def effective_cap(row: dict[str, Any]) -> int:
+    """Return the attendance cap that should drive event volume for one match.
+
+    Args:
+        row: Validated match row.
+
+    Returns:
+        Home attendance clipped to Jan Breydel capacity, or raw away attendance.
+    """
     att = int(row["attendance"])
     if row["home_away"] == "home":
         return min(att, JAN_BREYDEL_MAX_CAPACITY)
@@ -253,6 +337,14 @@ def effective_cap(row: dict[str, Any]) -> int:
 
 
 def build_match_context(row: dict[str, Any]) -> MatchContext:
+    """Derive a :class:`MatchContext` from one validated calendar row.
+
+    Args:
+        row: Validated calendar row.
+
+    Returns:
+        Match context with UTC kickoff, event window, and effective capacity.
+    """
     ku = kickoff_utc_for_row(row)
     ws = int(row.get("window_start_offset_minutes", 120))
     we = int(row.get("window_end_offset_minutes", 90))
@@ -266,6 +358,16 @@ def filter_matches_by_date_range(
     from_date: date | None,
     to_date: date | None,
 ) -> list[MatchContext]:
+    """Build and filter match contexts by inclusive UTC kickoff dates.
+
+    Args:
+        rows: Validated match rows.
+        from_date: Optional lower date bound.
+        to_date: Optional upper date bound.
+
+    Returns:
+        Sorted list of :class:`MatchContext` values inside the requested range.
+    """
     contexts: list[MatchContext] = []
     for row in rows:
         ctx = build_match_context(row)
@@ -280,6 +382,7 @@ def filter_matches_by_date_range(
 
 
 def _ts_string_from_epoch(rng: random.Random, start_sec: int, end_sec: int) -> str:
+    """Draw one UTC timestamp string from an inclusive epoch range."""
     if end_sec < start_sec:
         start_sec, end_sec = end_sec, start_sec
     sec = rng.randint(start_sec, end_sec)
@@ -301,9 +404,22 @@ def records_for_match(
     events_mode: str = "both",
     fan_pool_max: int | None = None,
 ) -> list[dict[str, Any]]:
-    """
-    Build v2 records for one match in the same order as legacy ``generate_v2_records``:
-    all ticket_scan rows, then all merch_purchase rows.
+    """Build v2 event records for one match context.
+
+    Args:
+        ctx: Match context that defines timing, metadata, and capacity.
+        rng: Random generator controlling reproducible output.
+        scan_fraction: Fraction of effective capacity turned into ticket scans.
+        merch_factor: Fraction of effective capacity turned into merch purchases.
+        events_mode: ``ticket_scan``, ``merch_purchase``, or ``both``.
+        fan_pool_max: Optional shared upper bound for synthetic fan IDs.
+
+    Returns:
+        List of v2 event dictionaries for the match.
+
+    Note:
+        Records are emitted in legacy order: all ticket scans first, then all
+        merch purchases. Downstream merge helpers sort afterward when needed.
     """
     row = ctx.row
     mid = str(row["match_id"])
@@ -319,6 +435,7 @@ def records_for_match(
     pool = [f"fan_{fan_indices[i]:05d}" for i in range(pick_n)]
 
     records: list[dict[str, Any]] = []
+    # Decide how many scan versus merch events this match should contribute.
     if events_mode == TICKET_SCAN:
         ts_count = max(1, int(cap * scan_fraction))
         merch_count = 0
@@ -329,6 +446,8 @@ def records_for_match(
         ts_count = max(1, int(cap * scan_fraction))
         merch_count = max(1, int(cap * merch_factor))
 
+    # Ticket scans model stadium entry; away fixtures reuse the venue label
+    # instead of the Jan Breydel gate catalog.
     for i in range(ts_count):
         fan_id = pool[i % len(pool)]
         loc = rng.choice(LOCATIONS) if row["home_away"] == "home" else venue
@@ -342,6 +461,8 @@ def records_for_match(
         }
         rec.update(_match_payload_metadata(row))
         records.append(rec)
+    # Merch events reuse the same fan pool but draw fans independently to allow
+    # repeated purchases around the same match.
     for _ in range(merch_count):
         fan_id = pool[rng.randrange(0, len(pool))]
         ts = _ts_string_from_epoch(rng, start_sec, end_sec)
@@ -370,6 +491,19 @@ def generate_v2_records(
     events_mode: str = "both",
     fan_pool_max: int | None = None,
 ) -> list[dict[str, Any]]:
+    """Materialize v2 records for every selected match context.
+
+    Args:
+        contexts: Match contexts to process in order.
+        rng: Random generator shared across all matches.
+        scan_fraction: Fraction of effective capacity turned into ticket scans.
+        merch_factor: Fraction of effective capacity turned into merch purchases.
+        events_mode: ``ticket_scan``, ``merch_purchase``, or ``both``.
+        fan_pool_max: Optional shared upper bound for synthetic fan IDs.
+
+    Returns:
+        Concatenated list of all generated v2 records.
+    """
     records: list[dict[str, Any]] = []
     for ctx in contexts:
         records.extend(
@@ -394,10 +528,18 @@ def iter_sorted_records_for_match(
     events_mode: str = "both",
     fan_pool_max: int | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """
-    Yield match records sorted by ``merge_key_tuple`` (non-decreasing).
+    """Yield one match's records sorted for merge-stream consumption.
 
-    Preconditions: iteration order is suitable as one input to ``heapq.merge`` with the same key.
+    Args:
+        ctx: Match context to generate.
+        rng: Random generator shared with other match iterators.
+        scan_fraction: Fraction of effective capacity turned into ticket scans.
+        merch_factor: Fraction of effective capacity turned into merch purchases.
+        events_mode: ``ticket_scan``, ``merch_purchase``, or ``both``.
+        fan_pool_max: Optional shared upper bound for synthetic fan IDs.
+
+    Yields:
+        Match records in non-decreasing :func:`merge_key_tuple` order.
     """
     recs = records_for_match(
         ctx,
@@ -420,14 +562,22 @@ def iter_v2_records_merged_sorted(
     events_mode: str = "both",
     fan_pool_max: int | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """
-    Globally merge per-match streams with ``heapq.merge``.
+    """Globally merge all selected matches into one sorted v2 record stream.
 
-    Each inner iterator from ``iter_sorted_records_for_match`` is non-decreasing by
-    ``merge_key_tuple``.
+    Args:
+        contexts: Match contexts to generate.
+        rng: Random generator shared across matches.
+        scan_fraction: Fraction of effective capacity turned into ticket scans.
+        merch_factor: Fraction of effective capacity turned into merch purchases.
+        events_mode: ``ticket_scan``, ``merch_purchase``, or ``both``.
+        fan_pool_max: Optional shared upper bound for synthetic fan IDs.
 
-    RNG is consumed in **match order** (same as ``generate_v2_records``): we materialize each
-    match's sorted list before merging, so ``random.Random`` state matches batch generation.
+    Yields:
+        Records from every match in non-decreasing :func:`merge_key_tuple` order.
+
+    Note:
+        Each per-match list is fully materialized before merge so RNG consumption
+        stays identical to :func:`generate_v2_records`.
     """
     per_match_iters: list[Iterator[dict[str, Any]]] = []
     for ctx in contexts:
@@ -448,7 +598,15 @@ def iter_v2_records_merged_sorted(
 
 
 def add_calendar_years_to_naive_local(naive: datetime, years: int) -> datetime:
-    """Add *years* to naive local datetime; Feb 29 clamps to Feb 28 in non-leap years."""
+    """Add calendar years to a naive local datetime.
+
+    Args:
+        naive: Naive local datetime from the calendar document.
+        years: Number of calendar years to add.
+
+    Returns:
+        Shifted naive datetime, with Feb 29 clamped to Feb 28 in non-leap years.
+    """
     y = naive.year + years
     m, d = naive.month, naive.day
     if m == 2 and d == 29:
@@ -460,7 +618,18 @@ def add_calendar_years_to_naive_local(naive: datetime, years: int) -> datetime:
 
 
 def shift_match_context_calendar_years(ctx: MatchContext, cycle: int) -> MatchContext:
-    """Shift ``kickoff_local`` by *cycle* calendar years; suffix ``match_id`` with ``:c{cycle}``."""
+    """Replay a match context in a later calendar year.
+
+    Args:
+        ctx: Base match context.
+        cycle: Number of calendar years to add.
+
+    Returns:
+        New match context with shifted kickoff fields and suffixed ``match_id``.
+
+    Raises:
+        ValueError: If ``cycle`` is less than 1.
+    """
     if cycle < 1:
         raise ValueError("cycle must be >= 1")
     new_row = dict(ctx.row)
@@ -472,12 +641,20 @@ def shift_match_context_calendar_years(ctx: MatchContext, cycle: int) -> MatchCo
 
 
 def shift_match_context(ctx: MatchContext, shift: timedelta, cycle: int) -> MatchContext:
-    """Return a new MatchContext with all timestamps shifted by *shift* and match_id suffixed.
+    """Return a shifted copy of a match context.
 
-    The ``kickoff_local`` string in the row dict is updated to keep it consistent with
-    ``kickoff_utc`` (shift applied in UTC-equivalent wall-clock offset; the naive local string
-    is shifted by the same delta, which is correct for a synthetic replay that does not need
-    DST-aware rescheduling).
+    Args:
+        ctx: Base match context.
+        shift: Timedelta applied to kickoff and window timestamps.
+        cycle: Suffix index recorded in the new ``match_id``.
+
+    Returns:
+        Match context shifted by ``shift`` with a suffixed ``match_id``.
+
+    Note:
+        ``kickoff_local`` is shifted by the same wall-clock delta as the UTC
+        fields. That is sufficient for synthetic replay and avoids DST-aware
+        rescheduling logic.
     """
     new_row = dict(ctx.row)
     naive = datetime.fromisoformat(str(ctx.row["kickoff_local"]))
@@ -501,12 +678,22 @@ def iter_looped_v2_records(
     events_mode: str = "both",
     fan_pool_max: int | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """Yield v2 records indefinitely by cycling *base_contexts* with **+1 calendar year** per pass.
+    """Yield v2 records indefinitely by replaying the calendar year after year.
 
-    Cycle 0 uses the original contexts; cycle N ≥ 1 applies ``shift_match_context_calendar_years``
-    (Feb 29 → Feb 28 when needed). A **single RNG** is shared across cycles.
+    Args:
+        base_contexts: Initial match contexts for cycle 0.
+        rng: Random generator shared across all cycles.
+        scan_fraction: Fraction of effective capacity turned into ticket scans.
+        merch_factor: Fraction of effective capacity turned into merch purchases.
+        events_mode: ``ticket_scan``, ``merch_purchase``, or ``both``.
+        fan_pool_max: Optional shared upper bound for synthetic fan IDs.
 
-    Stops when the consumer stops pulling (``--max-events``, ``--max-duration``, ``Ctrl+C``, etc.).
+    Yields:
+        Sorted v2 records across repeated calendar passes.
+
+    Note:
+        Cycle 0 uses the original contexts. Later cycles shift the calendar by
+        +1 year per pass, clamping Feb 29 to Feb 28 when needed.
     """
     if not base_contexts:
         return

@@ -606,3 +606,5 @@ answer_style:
       football club club brugge, so you can assume that when interpreting player
       stats and profiles."
     - "Do not filter players on nationality or competition."
+    - "Always use an ORDER BY clause in every query that you are writing because
+      you will only get the top 100 rows back."

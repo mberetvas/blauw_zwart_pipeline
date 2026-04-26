@@ -83,7 +83,14 @@ ORDER BY name
 
 
 def get_connection() -> psycopg2.extensions.connection:
-    """Open a new database connection using DATABASE_URL env var."""
+    """Open a new Postgres connection using ``DATABASE_URL``.
+
+    Returns:
+        Live psycopg2 connection.
+
+    Raises:
+        RuntimeError: If ``DATABASE_URL`` is missing.
+    """
     url = os.environ.get("DATABASE_URL", "").strip()
     if not url:
         raise RuntimeError("DATABASE_URL environment variable is not set")
@@ -91,11 +98,14 @@ def get_connection() -> psycopg2.extensions.connection:
 
 
 def ensure_player_stats_table(conn: psycopg2.extensions.connection) -> None:
-    """Create ``player_stats`` if missing (idempotent).
+    """Create ``player_stats`` and grants if they are missing.
 
-    Docker init only runs on an empty data directory; this covers upgraded volumes.
-    When the table is created here (not by init SQL), apply the same grants as
-    ``003_player_stats.sql`` so ``llm_reader`` can SELECT for the LLM API.
+    Args:
+        conn: Psycopg2 connection used for idempotent DDL execution.
+
+    Note:
+        Docker init scripts only run on fresh volumes, so this runtime check
+        keeps upgraded local databases usable without a manual migration.
     """
     with conn.cursor() as cur:
         cur.execute(_ENSURE_PLAYER_STATS_SQL)
@@ -104,6 +114,8 @@ def ensure_player_stats_table(conn: psycopg2.extensions.connection) -> None:
             for stmt in _GRANT_LLM_READER_ON_PLAYER_STATS:
                 cur.execute(stmt)
         except psycopg2.Error as exc:
+            # Missing llm_reader should not block the scraper's write path on a
+            # minimal local database.
             cur.execute("ROLLBACK TO SAVEPOINT grant_llm_reader_player_stats")
             # Role missing (e.g. minimal local DB): table still usable for writers.
             if getattr(exc, "pgcode", None) != psycopg2.errorcodes.UNDEFINED_OBJECT:
@@ -113,6 +125,7 @@ def ensure_player_stats_table(conn: psycopg2.extensions.connection) -> None:
 
 
 def _ensure_player_stats_once(conn: psycopg2.extensions.connection) -> None:
+    """Ensure the player_stats DDL runs at most once per live connection."""
     if _conn_player_stats_ready.get(conn) is not True:
         ensure_player_stats_table(conn)
         _conn_player_stats_ready[conn] = True
@@ -124,16 +137,24 @@ def upsert_players(
     source_url: str,
     scraped_at: str,
 ) -> int:
-    """Upsert a list of normalised player dicts into ``player_stats``.
+    """Upsert normalised player dicts into ``raw_data.player_stats``.
 
-    Players that carry an ``error`` key or have an empty ``player_id`` are skipped.
-    Returns the number of rows actually written.
+    Args:
+        conn: Psycopg2 connection used for the transaction.
+        players: Normalised player dictionaries from the scraper.
+        source_url: Squad source URL to persist on each row.
+        scraped_at: ISO-8601 scrape timestamp shared by this batch.
+
+    Returns:
+        Number of rows written or updated.
     """
     _ensure_player_stats_once(conn)
 
     count = 0
     with conn.cursor() as cur:
         for p in players:
+            # Error placeholders from scrape_squad are informative for logs but
+            # should never overwrite real player rows in the DB.
             if p.get("error") or not p.get("player_id"):
                 continue
             cur.execute(
@@ -162,7 +183,14 @@ def upsert_players(
 def get_players(
     conn: psycopg2.extensions.connection,
 ) -> list[dict[str, Any]]:
-    """Return all rows from ``player_stats`` as normalised player dicts."""
+    """Return all cached player rows as normalised dictionaries.
+
+    Args:
+        conn: Psycopg2 connection used for the query.
+
+    Returns:
+        List of player dictionaries ordered by player name.
+    """
     _ensure_player_stats_once(conn)
     with conn.cursor() as cur:
         cur.execute(_SELECT_SQL)
@@ -171,8 +199,18 @@ def get_players(
     players: list[dict[str, Any]] = []
     for row in rows:
         (
-            player_id, slug, name, position, field_position, shirt_number,
-            image_url, profile, stats, competition, source_url, scraped_at,
+            player_id,
+            slug,
+            name,
+            position,
+            field_position,
+            shirt_number,
+            image_url,
+            profile,
+            stats,
+            competition,
+            source_url,
+            scraped_at,
         ) = row
         # psycopg2 returns JSONB columns as Python dicts/lists already.
         players.append(
@@ -195,7 +233,7 @@ def get_players(
 
 
 def count_players(conn: psycopg2.extensions.connection) -> int:
-    """Return the number of rows currently in ``player_stats``."""
+    """Return the number of cached player rows currently in ``player_stats``."""
     _ensure_player_stats_once(conn)
     with conn.cursor() as cur:
         cur.execute("SELECT COUNT(*) FROM raw_data.player_stats")
