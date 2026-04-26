@@ -1,93 +1,56 @@
 # dbt analytics
 
-## How to run (at a glance)
+This module turns raw fan and player tables into dbt marts so the UI and SQL agent can query one Postgres database with stable, analytics-ready models.
 
-| | |
+Start the stack from [`../README.md`](../README.md); this runbook covers the `dbt-scheduler` service that Compose starts for you.
+
+## Compose service mapping
+
+| Compose service | Role |
 | --- | --- |
-| **Demo stack / scheduled builds** | **`docker compose up -d`** from the repo root starts **`dbt-scheduler`** with the rest of the MVP (see [`../docker/README.md`](../docker/README.md)). This is the **recommended** path for keeping marts fresh while the stack runs. |
-| **Local `uv run dbt …`** | **Optional development** workflow when iterating on models against a running Postgres (from the host). It is **not** a substitute for Compose for “running the project”. |
+| `dbt-scheduler` | Runs scheduled dbt builds against the shared `postgres` service |
 
-The repo ships a dbt project under `dbt/` for analytics models such as `mart_fan_loyalty`. The same project is used in **Compose** (primary for the demo) and optionally on the host with `uv run dbt …` for development.
+## How this module fits the stack
 
-## What matters here
+```mermaid
+flowchart LR
+    fanIngest["ingest"] --> fanRaw[("raw_data.fan_events_ingested")]
+    playerIngest["proleague-ingest"] --> playerRaw[("raw_data.player_stats")]
+    dbt["dbt-scheduler"] --> fanRaw
+    dbt --> playerRaw
+    dbt --> marts[("dbt_dev marts")]
+    frontend["frontend-app"] --> marts
+```
 
-| Asset | Path |
+## Prerequisites / dependencies
+
+| Dependency | Why it matters |
 | --- | --- |
-| dbt project config | [`../dbt_project.yml`](../dbt_project.yml) |
-| Local profiles | [`profiles.yml`](profiles.yml) and [`profiles.yml.example`](profiles.yml.example) |
-| Loyalty mart | [`models/marts/mart_fan_loyalty.sql`](models/marts/mart_fan_loyalty.sql) |
-| Schema docs used by `frontend_app.sql_agent` | `models/**/*_schema.yaml` and [`models/marts/schema.yml`](models/marts/schema.yml) |
+| `postgres` | dbt reads raw tables and writes marts in the same database. |
+| `ingest` | Supplies `raw_data.fan_events_ingested`. |
+| `proleague-ingest` | Supplies `raw_data.player_stats`. |
+| `frontend-app` | Reads dbt marts for the leaderboard and the SQL agent. |
 
-## Run dbt via Compose (recommended for the MVP)
+## Key environment variables
 
-The `dbt-scheduler` service uses the same project but runs inside Docker (usually started with the full stack):
-
-```bash
-docker compose up -d
-docker compose logs -f dbt-scheduler
-```
-
-To run only the scheduler (if the rest of the stack is already up):
-
-```bash
-docker compose up -d dbt-scheduler
-docker compose logs -f dbt-scheduler
-```
-
-By default it refreshes all marts plus their upstream dependencies immediately on startup, then rebuilds the observability mart after dbt logs that run's results, and repeats every `DBT_RUN_INTERVAL_MINUTES`.
-
-## Run dbt locally (development only)
-
-Use this when you are editing SQL/YAML and want faster iteration against Postgres on `localhost` — **not** as the primary way to run the demo stack.
-
-```bash
-uv sync --group dbt
-uv run --env-file .env dbt debug --project-dir . --profiles-dir dbt
-uv run --env-file .env dbt run --project-dir . --profiles-dir dbt --select +mart_fan_loyalty
-```
-
-The project file lives at the repo root, so run dbt commands from the repo root even though the models live in `dbt/`.
-
-## Environment variables
-
-| Variable | Default | Purpose |
+| Variable | Override when | Notes |
 | --- | --- | --- |
-| `DBT_PROFILES_DIR` | `./dbt` | Directory containing `profiles.yml` |
-| `DBT_POSTGRES_HOST` | `localhost` | Host-side Postgres hostname |
-| `DBT_POSTGRES_PORT` | `5432` | Host-side Postgres port |
-| `DBT_TARGET_SCHEMA` | `dbt_dev` | Schema where dbt builds its relations |
-| `DBT_RUN_INTERVAL_MINUTES` | `5` | Compose scheduler interval |
-| `DBT_RUN_SELECTOR` | `+tag:mart` | Primary Compose scheduler selector for all marts plus upstream dependencies |
-| `DBT_RUN_POST_BUILD_SELECTOR` | `tag:observability` | Optional second-pass selector, used by the scheduler to rebuild the observability mart after `dbt_run_results` is logged |
-| `POSTGRES_USER` | from `.env` | dbt profile credential |
-| `POSTGRES_PASSWORD` | from `.env` | dbt profile credential |
-| `POSTGRES_DB` | from `.env` | dbt profile database |
+| `DBT_RUN_INTERVAL_MINUTES` | You want faster or slower refreshes | Controls the scheduler loop interval. |
+| `DBT_RUN_SELECTOR` | You want a different primary dbt selection | Defaults to `+tag:mart`. |
+| `DBT_RUN_POST_BUILD_SELECTOR` | You want a different follow-up selector | Defaults to `tag:observability`. |
+| `DBT_TARGET_SCHEMA` | You need marts in a different schema | Defaults to `dbt_dev`. |
 
-## Windows notes
-
-If `dbt --version` prints `dbt-fusion`, the binary on your PATH is not the Postgres adapter used by this repo. On Windows, prefer:
+## Operator check
 
 ```bash
-uv sync --group dbt
-uv run --env-file .env dbt ...
+docker compose logs -f dbt-scheduler
 ```
 
-Do not point `DBT_PROFILE` at a file path such as `dbt/profiles.yml`. If you set it at all, it should be the profile name `fan_sim_pipeline`.
+## Related runbooks
 
-## Why `frontend_app.sql_agent` cares about this folder
-
-`frontend_app.sql_agent` builds the Text-to-SQL schema context directly from the dbt YAML docs in this project, while `frontend_app.app` stays the thin HTTP/UI orchestrator. In Compose the API image bakes in a copy of the dbt schemas; on the host you can point `DBT_MODELS_DIR=./dbt/models`.
-
-## Troubleshooting
-
-| Problem | What to check |
+| Area | README or spec |
 | --- | --- |
-| dbt cannot connect to Postgres from the host | Use `localhost:<POSTGRES_PORT>` from `.env`, not `postgres:5432` |
-| dbt on Windows fails with Postgres DLL errors | Use `uv run dbt ...` rather than a global `dbt` binary |
-| dbt says the profile is not found | `DBT_PROFILE` should be unset or `fan_sim_pipeline`, and `DBT_PROFILES_DIR` should point at the `dbt/` folder |
-
-## Related docs
-
-- [`../README.md`](../README.md) - repo-level overview
-- [`../docker/README.md`](../docker/README.md) - Compose scheduler and stack-level docs
-- [`../src/frontend_app/README.md`](../src/frontend_app/README.md) - how dbt YAML docs feed the Text-to-SQL prompts
+| Stack entry point | [`../README.md`](../README.md) |
+| Compose service runbook | [`../docker/README.md`](../docker/README.md) |
+| Flask UI and API | [`../src/frontend_app/README.md`](../src/frontend_app/README.md) |
+| SQL agent | [`../src/frontend_app/sql_agent/README.md`](../src/frontend_app/sql_agent/README.md) |

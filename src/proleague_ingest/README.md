@@ -1,137 +1,55 @@
 # proleague_ingest
 
-Kafka consumer for the player-stats side of the MVP stack. It subscribes to the `player_stats` topic, then upserts the latest squad scrape into `raw_data.player_stats`.
+This module consumes `player_stats` messages from Kafka and upserts the latest squad snapshot into Postgres for the rest of the stack.
 
-This service is packaged by [`docker/Dockerfile.scraper-ingest`](../../docker/Dockerfile.scraper-ingest) with [`docker/requirements.scraper-ingest.txt`](../../docker/requirements.scraper-ingest.txt). Like `proleague_scraper`, it is Compose-first rather than part of the repo's `uv` extras.
+Start the stack from [`../../README.md`](../../README.md); this runbook covers the `proleague-ingest` service that Compose starts for you.
 
-## High-level flow
+## Compose service mapping
+
+| Compose service | Role |
+| --- | --- |
+| `proleague-ingest` | Consumes `player_stats` and writes `raw_data.player_stats` |
+
+## How this module fits the stack
 
 ```mermaid
 flowchart LR
-    subgraph pl ["Pro League Pipeline"]
-        scheduler["proleague-scheduler<br/><i>daily scrape</i>"]
-        subgraph kafka ["Kafka"]
-            topic[("player_stats topic")]
-        end
-        subgraph svc ["proleague-ingest"]
-            consumer["Consumer<br/><i>group: scraper-ingest-local</i>"]
-            parse["Parse + validate<br/><i>_schema_version=1</i>"]
-            upsert["upsert_players()<br/><i>proleague_scraper.db</i>"]
-        end
-    end
-
-    subgraph pg ["Postgres"]
-        table[("raw_data.player_stats")]
-    end
-
-    downstream["frontend-app<br/><i>squad listing</i>"]
-
-    scheduler -- "publish" --> topic
-    topic -- "poll" --> consumer
-    consumer --> parse
-    parse --> upsert
-    upsert -- "UPSERT ON CONFLICT (player_id)" --> table
-    table -- "SELECT" --> downstream
+    scheduler["proleague-scheduler"] -- "player_stats" --> topic[("Kafka topic player_stats")]
+    topic --> ingest["proleague-ingest"]
+    ingest --> table[("raw_data.player_stats")]
+    table --> frontend["frontend-app"]
+    table --> scraper["proleague-scraper"]
 ```
 
-## How to run (at a glance)
+## Prerequisites / dependencies
 
-| | |
+| Dependency | Why it matters |
 | --- | --- |
-| **Recommended** | **`docker compose up -d`** from the repo root — the **`proleague-ingest`** service runs this consumer. See [`../../docker/README.md`](../../docker/README.md). |
-| **Host `uv`** | Not a supported operator path — use Compose. |
+| `broker` | `proleague-ingest` consumes from Kafka inside the Compose network. |
+| `kafka-init-scraper` | Creates the `player_stats` topic before the consumer subscribes. |
+| `postgres` | `proleague-ingest` writes the latest player snapshot into the shared database. |
+| `proleague-scheduler` | Supplies the player messages this service persists. |
 
-## How to run it
+## Key environment variables
+
+| Variable | Override when | Notes |
+| --- | --- | --- |
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka lives somewhere other than `broker:29092` | Compose default is already correct for the local stack. |
+| `SCRAPER_KAFKA_TOPIC` | You want a different topic name | Must stay aligned with `proleague-scheduler`. |
+| `SCRAPER_KAFKA_CONSUMER_GROUP` | You want a different consumer-group identity | Default is `scraper-ingest-local`. |
+| `DATABASE_URL` | Postgres host, port, database, or password changes | Must point to a write-capable Postgres role. |
+
+## Operator check
 
 ```bash
-docker compose up -d proleague-scheduler proleague-ingest
 docker compose logs -f proleague-ingest
 ```
 
-Verify rows landed in Postgres:
+## Related runbooks
 
-```bash
-docker compose exec postgres sh -lc \
-  'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT player_id, name, scraped_at FROM raw_data.player_stats ORDER BY name LIMIT 5;"'
-```
-
-## Environment variables
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `KAFKA_BOOTSTRAP_SERVERS` | `broker:29092` | Kafka bootstrap address inside Compose |
-| `SCRAPER_KAFKA_TOPIC` | `player_stats` | Topic to subscribe to |
-| `SCRAPER_KAFKA_CONSUMER_GROUP` | `scraper-ingest-local` | Consumer group id |
-| `DATABASE_URL` | unset | Required write-access Postgres DSN |
-| `LOG_LEVEL` | `INFO` | Log verbosity (`DEBUG`, `INFO`, `WARNING`) |
-
-## Kafka message shape (v1)
-
-Each message represents one player:
-
-```json
-{
-  "_schema_version": 1,
-  "event_type": "player_stats_scraped",
-  "source_url": "https://www.proleague.be/teams/club-brugge-kv-182/squad",
-  "scraped_at": "2026-04-13T21:00:00Z",
-  "player": {
-    "player_id": "3219",
-    "slug": "simon-mignolet-3219",
-    "name": "Simon Mignolet",
-    "position": "Goalkeeper",
-    "shirt_number": 1,
-    "image_url": "https://imagecache.proleague.be/...",
-    "profile": { "...": "..." },
-    "stats": [{ "key": "savesMade", "label": "Saves", "value": 72 }]
-  }
-}
-```
-
-The Kafka key is `player_id` bytes for deterministic partition routing. Duplicate deliveries are safe because the Postgres write path is an upsert.
-
-> **Note:** the upsert is performed by `proleague_scraper.db.upsert_players` (shared with the scraper package). The consumer commits Kafka offsets only after a successful upsert.
-
-## Postgres table
-
-`raw_data.player_stats` is created by [`docker/postgres/init/003_player_stats.sql`](../../docker/postgres/init/003_player_stats.sql).
-
-| Column | Type | Notes |
-| --- | --- | --- |
-| `player_id` | `TEXT` primary key | Pro League numeric ID |
-| `slug` | `TEXT` | URL slug |
-| `name` | `TEXT` | Display name |
-| `position` / `field_position` | `TEXT` | Position labels |
-| `shirt_number` | `INTEGER` | Squad number |
-| `image_url` | `TEXT` | Player image CDN URL |
-| `profile` | `JSONB` | Structured player profile data |
-| `stats` | `JSONB` | Main-competition stat array |
-| `competition` | `TEXT` | Competition name |
-| `source_url` | `TEXT` | Squad page used for the scrape |
-| `scraped_at` | `TIMESTAMPTZ` | Last successful scrape time |
-
-The `llm_reader` role also has `SELECT` access on this table so `frontend_app` can query it.
-
-## Smoke checks
-
-```bash
-docker compose logs -f proleague-scheduler
-docker compose logs -f proleague-ingest
-curl -s http://localhost:8080/api/player-stats/squad
-```
-
-## Troubleshooting
-
-| Problem | What to check |
+| Area | README or spec |
 | --- | --- |
-| The consumer exits immediately | `DATABASE_URL` is required |
-| The consumer cannot reach Kafka | Inside Compose, use `broker:29092`, not `localhost:9092` |
-| Rows never appear in `player_stats` | Confirm `proleague-scheduler` is producing and the topic name matches `SCRAPER_KAFKA_TOPIC` |
-| Data looks stale | Restart `proleague-scheduler` to force a fresh scrape |
-
-## Related docs
-
-- [`../../README.md`](../../README.md) - repo-level overview
-- [`../proleague_scraper/README.md`](../proleague_scraper/README.md) - scheduler and internal HTTP layer
-- [`../frontend_app/README.md`](../frontend_app/README.md) - host-facing API that reads `player_stats`
-- [`../../docker/README.md`](../../docker/README.md) - Compose services and operator commands
+| Stack entry point | [`../../README.md`](../../README.md) |
+| Compose service runbook | [`../../docker/README.md`](../../docker/README.md) |
+| Upstream scheduler and HTTP layer | [`../proleague_scraper/README.md`](../proleague_scraper/README.md) |
+| Host-facing UI | [`../frontend_app/README.md`](../frontend_app/README.md) |

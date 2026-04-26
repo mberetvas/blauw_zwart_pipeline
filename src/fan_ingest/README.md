@@ -1,80 +1,55 @@
 # fan_ingest
 
-Kafka consumer that ingests synthetic fan events into Postgres.
+This module consumes synthetic `fan_events` from Kafka and stores them in Postgres so dbt and the UI have durable raw data to work from.
 
-## High-level flow
+Start the stack from [`../../README.md`](../../README.md); this runbook covers the `ingest` service that Compose starts for you.
+
+## Compose service mapping
+
+| Compose service | Role |
+| --- | --- |
+| `ingest` | Consumes `fan_events` and writes raw rows into Postgres |
+
+## How this module fits the stack
 
 ```mermaid
 flowchart LR
-    producer["fan_events producer<br/><i>NDJSON over Kafka</i>"]
-    subgraph kafka ["Kafka"]
-        topic[("fan_events topic")]
-    end
-    subgraph svc ["fan_ingest"]
-        consumer["Consumer<br/><i>group: fan-ingest-local</i>"]
-        runtime["Async runtime<br/><i>parse + insert</i>"]
-    end
-    subgraph pg ["Postgres"]
-        table[("raw_data.fan_events_ingested")]
-    end
-
-    producer -- "publish" --> topic
-    topic -- "poll" --> consumer
-    consumer --> runtime
-    runtime -- "INSERT (idempotent on Kafka coord)" --> table
+    producer["producer"] -- "fan_events" --> topic[("Kafka topic fan_events")]
+    topic --> ingest["ingest"]
+    ingest --> table[("raw_data.fan_events_ingested")]
+    table --> dbt["dbt-scheduler"]
+    dbt --> frontend["frontend-app"]
 ```
 
-## How to run (at a glance)
+## Prerequisites / dependencies
 
-| | |
+| Dependency | Why it matters |
 | --- | --- |
-| **Recommended** | Start the stack from the repo root: **`docker compose up -d`** — the **`ingest`** service runs this package inside Compose. See [`../../docker/README.md`](../../docker/README.md). |
-| **Host `uv` (optional)** | **`uv run fan_ingest …`** only for **debugging** or advanced setups against a stack that is already up — not the primary way to run the MVP. |
+| `broker` | `ingest` consumes from Kafka inside the Compose network. |
+| `kafka-init` | Creates the `fan_events` topic before the consumer subscribes. |
+| `postgres` | `ingest` writes durable raw rows into the shared database. |
+| `producer` | Supplies the default synthetic event stream. |
 
-## Install (host debugging only)
+## Key environment variables
 
-```bash
-uv sync --extra ingest
-uv run fan_ingest --help
-```
-
-## Optional: run on the host against a local stack
-
-The Compose **`ingest`** service uses Compose-oriented defaults (`broker:29092`, topic `fan_events`, consumer group `fan-ingest-local`). From your machine, point at the **external** Kafka listener and published Postgres port:
-
-```bash
-uv run fan_ingest \
-  --kafka-bootstrap-servers localhost:9092 \
-  --kafka-topic fan_events \
-  --database-url postgresql://postgres:changeme@localhost:5432/fan_pipeline
-```
-
-## Flags and environment variables
-
-CLI flags take precedence over environment variables.
-
-| Flag / variable | Default | Notes |
+| Variable | Override when | Notes |
 | --- | --- | --- |
-| `--kafka-bootstrap-servers` / `KAFKA_BOOTSTRAP_SERVERS` | `broker:29092` | Use `localhost:9092` from the host; use `broker:29092` inside Compose |
-| `--kafka-topic` / `KAFKA_TOPIC` | `fan_events` | Kafka topic to subscribe to |
-| `--kafka-consumer-group` / `KAFKA_CONSUMER_GROUP` | `fan-ingest-local` | Local consumer group id |
-| `--database-url` / `DATABASE_URL` | unset | Required Postgres DSN |
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka lives somewhere other than `broker:29092` | Compose default is already correct for the local stack. |
+| `KAFKA_TOPIC` | You want a different topic name | Must stay aligned with `producer` and `kafka-init`. |
+| `KAFKA_CONSUMER_GROUP` | You want a different consumer-group identity | Default is `fan-ingest-local`. |
+| `DATABASE_URL` | Postgres host, port, database, or password changes | Must point to a write-capable Postgres role. |
 
-## What it writes
+## Operator check
 
-Rows land in **`raw_data.fan_events_ingested`** (created on startup if missing — same DDL as `docker/postgres/init/001_fan_events_ingested.sql`). Inserts are idempotent: a unique constraint on the Kafka coordinate (topic, partition, offset) means re-consumed messages are silently skipped.
+```bash
+docker compose logs -f ingest
+```
 
-## Troubleshooting
+## Related runbooks
 
-| Problem | What to check |
+| Area | README or spec |
 | --- | --- |
-| The process exits immediately | `DATABASE_URL` is required; pass `--database-url` or export it first |
-| Host ingest cannot connect to Kafka | Use `localhost:9092`, not `broker:29092` |
-| Compose ingest cannot connect to Kafka | Use `broker:29092`, not `localhost:9092` |
-| Host ingest cannot connect to Postgres | Use `localhost:<POSTGRES_PORT>` from `.env`, not `postgres:5432` |
-
-## Related docs
-
-- [`../../README.md`](../../README.md) - repo-level overview
-- [`../fan_events/README.md`](../fan_events/README.md) - producer-side docs for the `fan_events` topic
-- [`../../docker/README.md`](../../docker/README.md) - full stack, logs, and operator commands
+| Stack entry point | [`../../README.md`](../../README.md) |
+| Compose service runbook | [`../../docker/README.md`](../../docker/README.md) |
+| Upstream synthetic producer | [`../fan_events/README.md`](../fan_events/README.md) |
+| dbt scheduler | [`../../dbt/README.md`](../../dbt/README.md) |
