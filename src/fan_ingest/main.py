@@ -1,4 +1,9 @@
-"""CLI entry: consume Kafka NDJSON → Postgres (local Compose)."""
+"""Run the local fan-event Kafka-to-Postgres ingestion service.
+
+This module provides the ``fan_ingest`` CLI entrypoint. It wires together the
+Kafka consumer, asyncpg connection pool, OS signal handling, and the threaded
+runtime that polls Kafka while handing inserts off to asyncio workers.
+"""
 
 from __future__ import annotations
 
@@ -18,11 +23,17 @@ log = get_logger(__name__)
 
 
 def _env_or_default(name: str, default: str) -> str:
+    """Return an environment variable value or a fallback default."""
     v = os.environ.get(name)
     return v if v is not None and v != "" else default
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser for the ingestion service.
+
+    Returns:
+        Argument parser configured with Kafka and Postgres connection flags.
+    """
     p = argparse.ArgumentParser(description="Ingest fan-events NDJSON from Kafka into Postgres.")
     p.add_argument(
         "--kafka-bootstrap-servers",
@@ -48,6 +59,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 
 def _consumer_config(args: argparse.Namespace) -> dict:
+    """Translate parsed CLI args into ``confluent_kafka.Consumer`` settings."""
     return {
         "bootstrap.servers": args.kafka_bootstrap_servers,
         "group.id": args.kafka_consumer_group,
@@ -57,9 +69,19 @@ def _consumer_config(args: argparse.Namespace) -> dict:
 
 
 async def _async_main(args: argparse.Namespace) -> None:
+    """Run the async portion of the ingestion service lifecycle.
+
+    Args:
+        args: Parsed CLI namespace.
+
+    Raises:
+        SystemExit: If required database configuration is missing.
+        KafkaException: If the consumer cannot subscribe to the configured topic.
+    """
     if not args.database_url:
         raise SystemExit("DATABASE_URL is required (or pass --database-url)")
 
+    # Establish shared resources before starting the background consumer thread.
     pool = await create_pool(args.database_url)
     consumer = Consumer(_consumer_config(args))
     try:
@@ -74,6 +96,8 @@ async def _async_main(args: argparse.Namespace) -> None:
     def request_stop() -> None:
         stop.set()
 
+    # Prefer asyncio-native signal handlers, but keep a Windows-friendly
+    # fallback for event loops that do not implement add_signal_handler().
     try:
         loop.add_signal_handler(signal.SIGINT, request_stop)
         loop.add_signal_handler(signal.SIGTERM, request_stop)
@@ -96,6 +120,9 @@ async def _async_main(args: argparse.Namespace) -> None:
 
     await stop.wait()
     log.info("ingest_shutting_down")
+
+    # Stop the poll thread first so no new work is enqueued while we drain the
+    # remaining partition workers and then close the pool.
     runtime.stop()
     runtime.join(timeout=120.0)
 
@@ -103,6 +130,10 @@ async def _async_main(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
+    """Parse CLI arguments and run the ingestion service.
+
+    Exits with code ``130`` when interrupted by the user.
+    """
     configure_logging(level=os.environ.get("LOG_LEVEL", "INFO"))
     args = _build_arg_parser().parse_args()
     try:

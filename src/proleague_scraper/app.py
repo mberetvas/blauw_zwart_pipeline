@@ -40,15 +40,26 @@ log = get_logger(__name__)
 
 
 def _db_load_squad(source_url: str) -> dict:
-    """Read all players from Postgres ``player_stats``. Returns empty squad on any failure."""
+    """Load the cached squad snapshot from Postgres.
+
+    Args:
+        source_url: Squad source URL echoed back in the API response.
+
+    Returns:
+        Cached squad payload. When the DB is unavailable or empty, the function
+        returns an empty cached response instead of raising.
+    """
     try:
         from .db import count_players, get_connection, get_players
 
         conn = get_connection()
         try:
+            # Treat an empty table as a normal "pipeline has not run yet" state.
             if count_players(conn) == 0:
                 return {"source_url": source_url, "fetched_at": None, "cached": True, "players": []}
             players = get_players(conn)
+            # Surface the freshest scrape timestamp so the frontend can show when
+            # the cached snapshot was last refreshed.
             latest = max(
                 (p["scraped_at"] for p in players if p.get("scraped_at")),
                 default=None,
@@ -68,6 +79,7 @@ def _db_load_squad(source_url: str) -> dict:
 
 @app.get("/health")
 def health():
+    """Return a lightweight readiness payload for the scraper service."""
     return jsonify({"status": "ok"})
 
 

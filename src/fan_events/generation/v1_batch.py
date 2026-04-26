@@ -1,4 +1,10 @@
-"""Rolling-window (v1) synthetic fan event batch generation."""
+"""Generate legacy rolling-window synthetic fan events.
+
+The v1 generator produces ticket-scan and merch-purchase records inside a
+sliding window ending at ``now_utc``. It exists primarily for backward
+compatibility and therefore preserves the historical RNG draw order used by the
+ earliest fixtures and golden files.
+"""
 
 from __future__ import annotations
 
@@ -20,6 +26,16 @@ FIXED_NOW_UTC = datetime(2026, 4, 1, 15, 0, 0, tzinfo=timezone.utc)
 
 
 def make_ticket_scan(fan_id: str, location: str, timestamp: str) -> dict[str, Any]:
+    """Build one v1 ticket-scan record.
+
+    Args:
+        fan_id: Synthetic fan identifier.
+        location: Ticket-scan location label.
+        timestamp: UTC timestamp string in ``YYYY-MM-DDTHH:MM:SSZ`` format.
+
+    Returns:
+        Dictionary in the closed v1 ticket-scan schema.
+    """
     return {
         "event": TICKET_SCAN,
         "fan_id": fan_id,
@@ -28,9 +44,18 @@ def make_ticket_scan(fan_id: str, location: str, timestamp: str) -> dict[str, An
     }
 
 
-def make_merch_purchase(
-    fan_id: str, item: str, amount: float, timestamp: str
-) -> dict[str, Any]:
+def make_merch_purchase(fan_id: str, item: str, amount: float, timestamp: str) -> dict[str, Any]:
+    """Build one v1 merch-purchase record.
+
+    Args:
+        fan_id: Synthetic purchaser identifier.
+        item: Merch catalog item name.
+        amount: Rounded purchase amount in EUR.
+        timestamp: UTC timestamp string in ``YYYY-MM-DDTHH:MM:SSZ`` format.
+
+    Returns:
+        Dictionary in the closed v1 merch-purchase schema.
+    """
     return {
         "amount": amount,
         "event": MERCH_PURCHASE,
@@ -41,12 +66,14 @@ def make_merch_purchase(
 
 
 def _utc_ts_string(rng: random.Random, start_ts: int, end_ts: int) -> str:
+    """Draw one UTC timestamp string uniformly from an inclusive epoch range."""
     sec = rng.randint(start_ts, end_ts)
     dt = datetime.fromtimestamp(sec, tz=timezone.utc)
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _fan_id(rng: random.Random, pool: int) -> str:
+    """Draw one synthetic fan ID from the inclusive ``1..pool`` range."""
     return f"fan_{rng.randint(1, pool):05d}"
 
 
@@ -58,9 +85,27 @@ def generate_batch(
     events_mode: str,
     now_utc: datetime,
 ) -> list[dict[str, Any]]:
+    """Generate a v1 rolling-window batch of synthetic fan events.
+
+    Args:
+        rng: Random generator controlling reproducible output.
+        count: Total number of events to emit.
+        days: Number of days included in the trailing simulation window.
+        events_mode: ``ticket_scan``, ``merch_purchase``, or ``both``.
+        now_utc: Inclusive upper bound for generated timestamps.
+
+    Returns:
+        List of v1 event dictionaries in legacy generation order.
+
+    Note:
+        When ``events_mode`` is ``both``, the generator emits one ticket scan and
+        one merch purchase before filling the remainder with a 50/50 split so the
+        output always contains both event types.
+    """
     if count == 0:
         return []
 
+    # Derive one inclusive UTC window used by all timestamp draws in this batch.
     window_start = now_utc - timedelta(days=days)
     start_ts = int(window_start.timestamp())
     end_ts = int(now_utc.timestamp())
@@ -91,6 +136,8 @@ def generate_batch(
 
     records: list[dict[str, Any]] = []
 
+    # Fast paths keep single-event-type modes simple and avoid the mixed-mode
+    # bootstrap logic below.
     if events_mode == TICKET_SCAN:
         for _ in range(count):
             records.append(one_ticket())
@@ -101,6 +148,7 @@ def generate_batch(
             records.append(one_merch())
         return records
 
+    # Mixed mode guarantees at least one record of each type before random fill.
     records.append(one_ticket())
     records.append(one_merch())
     for _ in range(count - 2):

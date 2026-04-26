@@ -1,4 +1,10 @@
-"""Match-day retail intensity factor F(t) for merged stream (feature 006)."""
+"""Build match-day retail intensity multipliers for merged event streams.
+
+The returned callable boosts retail traffic around home kickoffs and, when
+enabled, on away-only match days. It is pure computation: callers supply match
+contexts and the result can be reused anywhere synthetic retail timing needs to
+react to the football calendar.
+"""
 
 from __future__ import annotations
 
@@ -10,14 +16,14 @@ from fan_events.generation.v2_calendar import MatchContext, shift_match_context_
 
 
 def _shifted(ctx: MatchContext, k: int) -> MatchContext:
+    """Shift one template match context forward by ``k`` calendar years."""
     if k == 0:
         return ctx
     return shift_match_context_calendar_years(ctx, k)
 
 
-def _kickoff_window_utc(
-    hc: MatchContext, k: int, pre_td: timedelta, post_td: timedelta
-) -> tuple[datetime, datetime]:
+def _kickoff_window_utc(hc: MatchContext, k: int, pre_td: timedelta, post_td: timedelta) -> tuple[datetime, datetime]:
+    """Return the UTC kickoff window for one shifted home match context."""
     sk = _shifted(hc, k)
     ku = sk.kickoff_utc
     return (ku - pre_td, ku + post_td)
@@ -33,10 +39,29 @@ def build_retail_rate_factor_fn(
     away_match_day_enable: bool,
     away_match_day_multiplier: float,
 ) -> Callable[[datetime], float]:
-    """
-    Return ``f(t_utc) -> F`` with ``F >= 1`` per retail-intensity-006.
+    """Build the retail intensity multiplier function used by merged streams.
 
-    Kickoff windows use UTC; home/away **days** use each row's ``timezone`` local calendar date.
+    Args:
+        template_contexts: Match contexts that act as the repeating calendar
+            template for future seasons.
+        home_match_day_multiplier: Base multiplier applied on home-match days.
+        home_kickoff_pre_minutes: Minutes before kickoff that count as the home
+            kickoff window.
+        home_kickoff_post_minutes: Minutes after kickoff that remain inside the
+            home kickoff window.
+        home_kickoff_extra_multiplier: Additional multiplier layered on top of
+            the home-match-day multiplier during the kickoff window.
+        away_match_day_enable: Whether away-only local match days should receive
+            a separate multiplier.
+        away_match_day_multiplier: Multiplier used on away-only local dates when
+            enabled.
+
+    Returns:
+        Callable mapping a UTC datetime to a retail intensity factor ``F >= 1``.
+
+    Note:
+        Kickoff windows are evaluated in UTC, while broader home and away match
+        days are evaluated in each context row's local timezone.
     """
     if not template_contexts:
         return lambda _t: 1.0
@@ -69,7 +94,8 @@ def build_retail_rate_factor_fn(
     def factor_at(t: datetime) -> float:
         tu = t.astimezone(timezone.utc)
 
-        # 1) Inside any home kickoff window (UTC), any season pass
+        # Phase 1: kickoff windows take precedence because they represent the
+        # sharpest retail spike and should short-circuit broader day rules.
         for hc, _z in home_ctx_zones:
             for k in _approx_k_range(hc.kickoff_utc, tu):
                 w0, w1 = _kickoff_window_utc(hc, k, pre_td, post_td)
@@ -80,7 +106,8 @@ def build_retail_rate_factor_fn(
                 if w0 <= tu <= w1:
                     return max(1.0, H * E)
 
-        # 2) Home match day outside those windows
+        # Phase 2: if the instant lands on a local home-match date but outside
+        # the kickoff spike, apply the broader home-match-day uplift.
         for hc, z in home_ctx_zones:
             local_d = tu.astimezone(z).date()
             for k in _approx_k_range(hc.kickoff_utc, tu):
@@ -94,7 +121,8 @@ def build_retail_rate_factor_fn(
                         return max(1.0, H * E)
                     return max(1.0, H)
 
-        # 3) Away-only local day (per timezone), when enabled
+        # Phase 3: away-only local dates are a fallback so home fixtures always
+        # win when both types of match land on the same local day.
         if away_match_day_enable:
             for zn, z in zone_cache.items():
                 local_d = tu.astimezone(z).date()

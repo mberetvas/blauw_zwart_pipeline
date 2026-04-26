@@ -100,7 +100,20 @@ FAMILY_NAMES: tuple[str, ...] = (
 
 
 def derived_seed(global_seed: int | None, fan_id: str) -> int:
-    """Deterministic seed for profile RNG (stdlib ``hash`` is not used — PYTHONHASHSEED)."""
+    """Derive a deterministic RNG seed for one synthetic fan profile.
+
+    Args:
+        global_seed: Optional run-level seed that namespaces all derived fan
+            seeds. ``None`` still yields a deterministic per-fan value.
+        fan_id: Synthetic fan identifier such as ``fan_00042``.
+
+    Returns:
+        Stable integer seed suitable for ``random.Random``.
+
+    Note:
+        The implementation uses SHA-256 instead of Python's built-in ``hash`` so
+        results stay stable regardless of ``PYTHONHASHSEED``.
+    """
     if global_seed is not None:
         payload = f"{global_seed}\0{fan_id}".encode("utf-8")
     else:
@@ -110,12 +123,24 @@ def derived_seed(global_seed: int | None, fan_id: str) -> int:
 
 
 def _pick_w(rng: random.Random, values: tuple[str, ...], weights: tuple[float, ...]) -> str:
+    """Return one weighted choice from a tuple of literal profile values."""
     return rng.choices(list(values), weights=list(weights), k=1)[0]
 
 
 def synthetic_fan_profile(fan_id: str, *, global_seed: int | None) -> dict[str, Any]:
-    """Build one profile dict (fixed keys; suitable for ``dumps_canonical``)."""
+    """Build one deterministic synthetic fan profile.
+
+    Args:
+        fan_id: Synthetic fan identifier to embed in the profile document.
+        global_seed: Optional run-level seed that keeps an entire sidecar stable
+            across repeated runs.
+
+    Returns:
+        Canonical profile dictionary containing demographic buckets and a
+        synthetic full name.
+    """
     rng = random.Random(derived_seed(global_seed, fan_id))
+    # Draw fields in the documented order so fixture outputs remain stable.
     loyalty_tier = _pick_w(rng, LOYALTY_TIERS, LOYALTY_WEIGHTS)
     age_band = _pick_w(rng, AGE_BANDS, AGE_WEIGHTS)
     country_region = _pick_w(rng, COUNTRY_REGIONS, COUNTRY_REGION_WEIGHTS)
@@ -134,7 +159,18 @@ def synthetic_fan_profile(fan_id: str, *, global_seed: int | None) -> dict[str, 
 
 
 def build_fans_sidecar(fan_ids: Iterable[str], *, global_seed: int | None) -> dict[str, Any]:
-    """Top-level doc: ``schema_version``, ``rng_seed`` (int or None → JSON null), ``fans`` map."""
+    """Build the top-level sidecar document for a set of fan IDs.
+
+    Args:
+        fan_ids: Iterable of synthetic fan identifiers referenced by generated
+            events.
+        global_seed: Optional run-level seed recorded in the output document.
+
+    Returns:
+        Dictionary with ``schema_version``, ``rng_seed``, and a ``fans`` map of
+        per-fan profile documents.
+    """
+    # Deduplicate and sort so the sidecar is stable regardless of caller order.
     unique = sorted(set(fan_ids))
     fans = {fid: synthetic_fan_profile(fid, global_seed=global_seed) for fid in unique}
     return {
@@ -145,5 +181,12 @@ def build_fans_sidecar(fan_ids: Iterable[str], *, global_seed: int | None) -> di
 
 
 def format_fans_sidecar_json(doc: dict[str, Any]) -> str:
-    """UTF-8 canonical JSON plus a single trailing LF (POSIX text file)."""
+    """Serialize a fan-profile sidecar document as canonical JSON text.
+
+    Args:
+        doc: Sidecar document returned by :func:`build_fans_sidecar`.
+
+    Returns:
+        Canonical UTF-8 JSON text terminated by a single trailing newline.
+    """
     return dumps_canonical(doc) + "\n"

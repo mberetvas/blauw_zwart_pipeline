@@ -39,10 +39,17 @@ SUPPORTED_SCHEMA_VERSION = 1
 
 
 def parse_envelope(raw_value: bytes) -> dict[str, Any]:
-    """Decode and validate a player_stats Kafka message.
+    """Decode and validate a ``player_stats`` Kafka message.
 
-    Raises ``ValueError`` with a descriptive message on any validation failure so
-    the caller can log-and-skip bad messages without crashing the consumer loop.
+    Args:
+        raw_value: Raw Kafka message bytes.
+
+    Returns:
+        Decoded envelope dictionary.
+
+    Raises:
+        ValueError: If the payload is not valid UTF-8 JSON or does not match the
+            expected envelope schema.
     """
     try:
         obj = json.loads(raw_value.decode("utf-8"))
@@ -68,10 +75,13 @@ def run_consumer(
     consumer_group: str,
     database_url: str,
 ) -> None:
-    """Poll *topic* and upsert each player into ``raw_data.player_stats``.
+    """Poll Kafka and upsert each player into ``raw_data.player_stats``.
 
-    Runs until SIGINT/SIGTERM; commits offsets only after a successful upsert.
-    DB reconnects automatically on connection loss.
+    Args:
+        bootstrap_servers: Kafka broker list.
+        topic: Kafka topic carrying player envelopes.
+        consumer_group: Kafka consumer group ID.
+        database_url: Write-capable Postgres URL.
     """
     conf = {
         "bootstrap.servers": bootstrap_servers,
@@ -120,9 +130,10 @@ def run_consumer(
                 continue
 
             try:
+                # Phase 1: validate the Kafka envelope so bad messages can be
+                # logged and committed without killing the consumer loop.
                 log.debug(
-                    "task=parse_envelope previous=message_polled next=validate_message "
-                    "topic={} partition={} offset={}",
+                    "task=parse_envelope previous=message_polled next=validate_message topic={} partition={} offset={}",
                     msg.topic(),
                     msg.partition(),
                     msg.offset(),
@@ -145,7 +156,7 @@ def run_consumer(
             source_url = envelope.get("source_url", "")
             scraped_at = envelope.get("scraped_at", "")
 
-            # Lazy DB connect / reconnect.
+            # Phase 2: lazily connect to Postgres and reconnect after any DB error.
             if conn is None or conn.closed:
                 log.debug(
                     "task=db_connect previous=message_validated next=upsert_player player_id={}",
@@ -154,6 +165,8 @@ def run_consumer(
                 conn = _connect(database_url)
 
             try:
+                # Phase 3: only commit the Kafka offset after the DB upsert
+                # succeeds so at-least-once delivery remains safe.
                 log.debug(
                     "task=upsert_player previous=db_connection_ready next=commit_offset "
                     "player_id={} topic={} partition={} offset={}",
@@ -207,5 +220,5 @@ def run_consumer(
 
 
 def _connect(database_url: str):  # noqa: ANN001
-    """Open a psycopg2 connection from an explicit URL (bypasses DATABASE_URL env var)."""
+    """Open a psycopg2 connection from an explicit URL."""
     return psycopg2.connect(database_url)

@@ -314,13 +314,24 @@ def _fetch_leaderboard_rows_bounded(
     window_end: datetime,
     limit: int = LEADERBOARD_LIMIT,
 ) -> list[dict[str, Any]]:
-    """Top fans for [window_start, window_end) using live fact tables (UTC bounds)."""
+    """Return leaderboard rows for a bounded UTC window using live fact tables.
+
+    Args:
+        window_start: Inclusive UTC lower bound.
+        window_end: Exclusive UTC upper bound.
+        limit: Maximum number of ranked rows to return.
+
+    Returns:
+        Ranked leaderboard rows built from live match, merch, and retail facts.
+    """
     points_sql = _leaderboard_points_sql("loy")
     order_sql = _leaderboard_order_sql("leaderboard")
     sql = f"""
         WITH bounds AS (
             SELECT %s::timestamptz AS t0, %s::timestamptz AS t1
         ),
+        -- Attendance, merch, and retail are aggregated separately so each fact
+        -- table can keep its own filtering logic and timestamp column choice.
         att AS (
             SELECT
                 me.fan_id,
@@ -363,6 +374,8 @@ def _fetch_leaderboard_rows_bounded(
             UNION
             SELECT fan_id FROM retail
         ),
+        -- Join the per-fact aggregates into one loyalty-style row set before
+        -- applying the shared points formula and ranking rules.
         lo AS (
             SELECT
                 f.fan_id,
@@ -503,7 +516,12 @@ def _fetch_last_purchased_item(fan_id: str) -> str | None:
 
 
 def _fetch_fan_of_the_month() -> dict[str, Any] | None:
-    """Return the current UTC month fan based on ticket scans, with points tie-breakers."""
+    """Return the current month leader based on ticket scans plus tie-breakers.
+
+    Returns:
+        Row dictionary for the highest-ranked fan this month, or ``None`` when
+        no qualifying scan exists in the current UTC month.
+    """
     month_start, next_month_start = _leaderboard_month_bounds_utc()
     points_sql = _leaderboard_points_sql("loyalty")
     sql = f"""
@@ -529,6 +547,8 @@ def _fetch_fan_of_the_month() -> dict[str, Any] | None:
             GROUP BY fan_id
         ),
         ranked AS (
+            -- Rank first by current-month scans, then fall back to the same
+            -- loyalty metrics used by the main leaderboard.
             SELECT
                 month_scans.fan_id,
                 month_scans.month_ticket_scans,
@@ -570,7 +590,15 @@ def _fetch_fan_of_the_month() -> dict[str, Any] | None:
 def _fan_of_the_month_payload(
     month_row: dict[str, Any] | None, fallback_row: dict[str, Any] | None
 ) -> dict[str, Any] | None:
-    """Return the public fan-of-the-month payload with a fallback to rank 1 overall."""
+    """Build the public fan-of-the-month payload with a graceful fallback.
+
+    Args:
+        month_row: Current-month winner row, when one exists.
+        fallback_row: Overall podium leader used when the month has no scans.
+
+    Returns:
+        Public payload dictionary, or ``None`` when neither source exists.
+    """
     source = month_row or fallback_row
     if source is None:
         return None
@@ -615,12 +643,23 @@ def _fan_of_the_month_payload(
 
 
 def _build_leaderboard_payload(window: str) -> dict[str, Any]:
-    """Build the public leaderboard payload for the supported window."""
+    """Build the public leaderboard payload for one supported time window.
+
+    Args:
+        window: One of ``all``, ``month``, or ``season``.
+
+    Returns:
+        JSON-ready leaderboard payload for the requested window.
+
+    Raises:
+        ValueError: If ``window`` is unsupported.
+    """
     if window not in LEADERBOARD_SUPPORTED_WINDOWS:
         raise ValueError(
             f"Unsupported leaderboard window '{window}'. Valid values: {sorted(LEADERBOARD_SUPPORTED_WINDOWS)}"
         )
 
+    # Choose the correct backing query family for the requested time window.
     if window == "all":
         rankings = [_leaderboard_entry_from_row(row) for row in _fetch_leaderboard_rows()]
         as_of_dt = _fetch_leaderboard_as_of()
@@ -769,27 +808,14 @@ def _phase_to_status(phase: str) -> int:
 def _build_request_or_error(
     body: dict[str, Any],
 ) -> AgentRequest | tuple[dict[str, Any], int]:
-    """
-    Validate and process an incoming JSON request body for the LLM agent API.
+    """Validate the incoming ask request body.
 
-    This function either returns a valid AgentRequest object (for further processing)
-    or an error response (as a tuple with an error message and HTTP status code).
-
-    Steps performed:
-    1. Extracts and validates the 'question' field from the request body. Returns a 400 error if missing or empty.
-    2. Validates and normalizes the 'history' field using _normalise_conversation_history. Returns a 400 error if invalid.
-    3. Extracts and validates the 'provider' field (defaults to 'openrouter'). Returns a 400 error if unsupported or unknown.
-    4. Checks for the required OpenRouter API key in settings. Returns a 503 error if missing.
-    5. Handles per-request model overrides, supporting both legacy and new fields.
-    6. If all checks pass, returns an AgentRequest object with the question, conversation context, turn count, and model overrides.
+    Args:
+        body: Parsed JSON request body from the Flask route.
 
     Returns:
-        AgentRequest: On success, a fully validated request object for downstream processing.
-        tuple[dict[str, Any], int]: On error, a tuple of error dictionary and HTTP status code.
-
-    This function centralizes all validation and normalization for incoming LLM agent requests,
-    ensuring only well-formed, authorized, and supported requests are processed. It provides
-    clear error messages for clients, making debugging and integration easier.
+        Either a validated :class:`AgentRequest` or a ``(payload, status)``
+        tuple ready to return from the route on validation failure.
     """
     question: str = (body.get("question") or "").strip()
     if not question:
@@ -899,31 +925,37 @@ def _format_sse(event: str, data: dict[str, Any]) -> str:
 
 @app.get("/")
 def index() -> Any:
+    """Serve the main chat frontend page."""
     return send_from_directory(app.static_folder, "index.html")
 
 
 @app.get("/leaderboard")
 def leaderboard() -> Any:
+    """Serve the leaderboard page shell."""
     return send_from_directory(app.static_folder, "leaderboard.html")
 
 
 @app.get("/player-stats")
 def player_stats() -> Any:
+    """Serve the player-stats page shell."""
     return send_from_directory(app.static_folder, "player-stats.html")
 
 
 @app.get("/settings")
 def settings_page() -> Any:
+    """Serve the LLM settings page shell."""
     return send_from_directory(app.static_folder, "settings.html")
 
 
 @app.get("/api/llm-config")
 def llm_config_get() -> Any:
+    """Return the current client-safe LLM runtime configuration."""
     return jsonify(to_public_config())
 
 
 @app.put("/api/llm-config")
 def llm_config_put() -> Any:
+    """Validate, persist, and return updated LLM runtime configuration."""
     body: dict[str, Any] = request.get_json(force=True) or {}
     try:
         return jsonify(apply_llm_config_update(body))
@@ -936,6 +968,7 @@ def llm_config_put() -> Any:
 
 @app.get("/health")
 def health() -> Any:
+    """Return a lightweight readiness payload for local health checks."""
     return jsonify({"status": "ok"})
 
 
@@ -1095,6 +1128,7 @@ def player_stats_image() -> Any:
 
 @app.get("/api/leaderboard")
 def leaderboard_api() -> Any:
+    """Return leaderboard data for the requested ``window`` query parameter."""
     window = (request.args.get("window") or "all").strip().lower()
     try:
         payload = _build_leaderboard_payload(window)
@@ -1114,6 +1148,7 @@ def leaderboard_api() -> Any:
 
 @app.post("/api/ask")
 def ask() -> Any:
+    """Handle the synchronous ask endpoint for the text-to-SQL agent."""
     req_id = new_request_id()
     token = set_request_id(req_id)
     try:
@@ -1155,11 +1190,11 @@ def ask() -> Any:
 
 @app.post("/api/ask/stream")
 def ask_stream() -> Any:
-    """Stream a question through the agent pipeline, emitting SSE events for each phase.
-    - If the _build_request_or_error function returns an error tuple,
-      we return that immediately as JSON (no streaming).
-    - If it returns a valid AgentRequest, we proceed to run the ask stream pipeline,
-      yielding SSE events for each significant step, and handling any exceptions that occur.
+    """Handle the streaming ask endpoint and emit SSE progress plus answer events.
+
+    Returns:
+        Immediate JSON error response when request validation fails, otherwise a
+        streaming ``text/event-stream`` response backed by ``run_ask_stream``.
     """
     req_id = new_request_id()
     body: dict[str, Any] = request.get_json(force=True) or {}

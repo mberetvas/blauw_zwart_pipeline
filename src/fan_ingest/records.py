@@ -1,4 +1,10 @@
-"""NDJSON message bytes → row dict for fan_events_ingested (v1)."""
+"""Parse Kafka message payloads into database-ready ingestion rows.
+
+The consumer stores the original JSON payload plus a few extracted fields that
+support indexing and debugging. These helpers perform tolerant timestamp
+parsing, classify malformed messages, and translate valid NDJSON events into the
+row shape expected by :mod:`fan_ingest.db`.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +20,14 @@ class ParseError(ValueError):
 
 
 def parse_event_time_utc(value: Any) -> datetime | None:
-    """Parse synthetic `timestamp` field (ISO-8601, optional Z) to aware UTC; else None."""
+    """Parse an event timestamp into an aware UTC datetime.
+
+    Args:
+        value: Candidate timestamp value from the JSON payload.
+
+    Returns:
+        UTC datetime when parsing succeeds, otherwise ``None``.
+    """
     if not isinstance(value, str) or not value.strip():
         return None
     s = value.strip()
@@ -36,15 +49,25 @@ def kafka_message_to_row(
     kafka_offset: int,
     value: bytes | None,
 ) -> dict[str, Any]:
-    """Return a row dict for insert, or raise :class:`ParseError` (FR-012).
+    """Convert one Kafka message payload into the DB row shape.
 
-    Raises on: missing/empty body, UTF-8 decode error, JSON parse error, or non-object JSON.
-    On success: event_type from top-level string ``event``, else ``unknown``; event_time from
-    ``timestamp`` when parseable, else NULL in DB.
+    Args:
+        kafka_topic: Topic name used for idempotent uniqueness and logging.
+        kafka_partition: Kafka partition number.
+        kafka_offset: Kafka offset inside the partition.
+        value: Raw message bytes from Kafka.
+
+    Returns:
+        Row dictionary ready for :func:`fan_ingest.db.insert_fan_event_row`.
+
+    Raises:
+        ParseError: If the body is missing, not UTF-8, invalid JSON, or not a
+            JSON object.
     """
     if not value:
         raise ParseError("empty or missing message body")
     try:
+        # Decode and parse before we trust any payload fields.
         text = value.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise ParseError(f"UTF-8 decode error: {exc}") from exc
@@ -55,6 +78,8 @@ def kafka_message_to_row(
     if not isinstance(obj, dict):
         raise ParseError(f"expected JSON object, got {type(obj).__name__}")
 
+    # Event type is optional in the schema, so fall back to a sentinel rather
+    # than failing ingestion for otherwise valid payloads.
     ev = obj.get("event")
     if isinstance(ev, str) and ev:
         event_type = ev

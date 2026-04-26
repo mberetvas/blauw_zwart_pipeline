@@ -40,15 +40,13 @@ MAX_RETRIES = 3
 BACKOFF_FACTOR = 2.0
 
 # User-Agent identifies this bot clearly; do not impersonate a browser.
-USER_AGENT = (
-    "ClubBruggeAI-FanSim/1.0 "
-    "(fan data pipeline; https://github.com/your-org/blauw_zwart_fan_sim_pipeline)"
-)
+USER_AGENT = "ClubBruggeAI-FanSim/1.0 (fan data pipeline; https://github.com/your-org/blauw_zwart_fan_sim_pipeline)"
 
 _SESSION: requests.Session | None = None
 
 
 def _get_session() -> requests.Session:
+    """Return a shared requests session configured for polite scraping."""
     global _SESSION
     if _SESSION is None:
         _SESSION = requests.Session()
@@ -63,7 +61,17 @@ def _get_session() -> requests.Session:
 
 
 def _fetch_html(url: str) -> str:
-    """Fetch a URL with retries and polite backoff. Returns raw HTML text."""
+    """Fetch a URL with retries and polite backoff.
+
+    Args:
+        url: Absolute page URL to fetch.
+
+    Returns:
+        Raw HTML response body.
+
+    Raises:
+        RuntimeError: If all retry attempts fail.
+    """
     session = _get_session()
     delay = BACKOFF_FACTOR
     last_exc: Exception | None = None
@@ -90,9 +98,12 @@ def _fetch_html(url: str) -> str:
 def _extract_next_data(html: str) -> dict[str, Any] | None:
     """Parse the ``__NEXT_DATA__`` JSON injected by Next.js SSR/SSG.
 
-    This is the most reliable extraction method; the JSON is a first-class
-    contract of the framework and is independent of CSS-module hashes.
-    Returns None when the script tag is absent (e.g. non-Next.js page).
+    Args:
+        html: Raw HTML document.
+
+    Returns:
+        Parsed JSON object, or ``None`` when the page does not expose the
+        expected Next.js bootstrap payload.
     """
     soup = BeautifulSoup(html, "lxml")
     tag = soup.find("script", id="__NEXT_DATA__", type="application/json")
@@ -113,9 +124,12 @@ def _extract_next_data(html: str) -> dict[str, Any] | None:
 def _player_urls_from_html(html: str, base_url: str) -> list[str]:
     """Extract absolute player profile URLs from the squad listing HTML.
 
-    Strategy: find all ``<a>`` tags whose ``href`` contains ``/spillere/``.
-    This anchors on a stable URL-path pattern rather than hashed CSS classes.
-    De-duplicates while preserving order.
+    Args:
+        html: Raw squad listing HTML.
+        base_url: Base URL used to resolve relative player links.
+
+    Returns:
+        De-duplicated list of absolute player profile URLs.
     """
     soup = BeautifulSoup(html, "lxml")
     seen: set[str] = set()
@@ -133,7 +147,7 @@ def _player_urls_from_html(html: str, base_url: str) -> list[str]:
 
 
 def _slug_and_id_from_url(url: str) -> tuple[str, str]:
-    """Return (slug, player_id) from a URL like /spillere/simon-mignolet-3219."""
+    """Return ``(slug, player_id)`` from a player profile URL."""
     path = urlparse(url).path.rstrip("/")
     slug = path.split("/")[-1]
     # The numeric suffix at the end of the slug is the Pro League player ID.
@@ -178,7 +192,7 @@ _STAT_LABELS: dict[str, str] = {
 
 
 def _normalise_stats(raw_stats: dict[str, Any]) -> list[dict[str, Any]]:
-    """Convert a raw stats dict into a list of {label, value, key} items."""
+    """Convert a raw stats mapping into labelled API-friendly items."""
     result: list[dict[str, Any]] = []
     for key, value in raw_stats.items():
         if value is None:
@@ -189,31 +203,40 @@ def _normalise_stats(raw_stats: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _parse_player_from_next_data(next_data: dict[str, Any], url: str) -> dict[str, Any]:
-    """Build a normalised player dict from the ``__NEXT_DATA__`` payload."""
+    """Build a normalised player dict from the ``__NEXT_DATA__`` payload.
+
+    Args:
+        next_data: Parsed Next.js bootstrap payload.
+        url: Player profile URL used for slug and id fallback parsing.
+
+    Returns:
+        Normalised player dictionary suitable for Kafka publishing and DB upsert.
+    """
     page_props = next_data.get("props", {}).get("pageProps", {})
     raw = page_props.get("data", {}).get("player", {})
 
     slug, player_id = _slug_and_id_from_url(url)
 
-    # Profile header facts — all from the stable JSON payload.
+    # Phase 1: extract the profile header facts from stable JSON fields.
     position_obj = raw.get("position") or {}
     position_name = position_obj.get("singularName") or position_obj.get("name", "")
     field_position = position_obj.get("fieldPosition", "")
     nationality_obj = raw.get("nationality") or {}
     foot_obj = raw.get("preferredFoot") or {}
 
-    # Shirt number comes from the squad entry for this player.
+    # Phase 2: enrich with squad-level attributes not duplicated everywhere.
     shirt_number: int | None = None
     squads = raw.get("squads") or []
     if squads:
         shirt_number = squads[0].get("shirtNumber")
 
-    # Player image URL (prefer xlarge thumbnail, fall back to original).
+    # Phase 3: prefer the highest-quality image URL exposed by the payload.
     image_obj = raw.get("image") or {}
     thumbnails = image_obj.get("thumbnails") or {}
     image_url = thumbnails.get("xlarge") or image_obj.get("url") or ""
 
-    # Statistics — prefer the main competition (``main: True``).
+    # Phase 4: choose the main competition stats when present; otherwise fall
+    # back to the first available stat bundle.
     stats_list: list[dict[str, Any]] = []
     competition_name: str = ""
     raw_stats_entries = raw.get("stats") or []
@@ -255,7 +278,15 @@ def _parse_player_from_next_data(next_data: dict[str, Any], url: str) -> dict[st
 def scrape_player(url: str) -> dict[str, Any]:
     """Fetch and parse a single player profile page.
 
-    Returns a normalised player dict.  Raises RuntimeError on fetch failure.
+    Args:
+        url: Absolute player profile URL.
+
+    Returns:
+        Normalised player dictionary.
+
+    Raises:
+        RuntimeError: If the page fetch fails after retries.
+        ValueError: If the page does not expose a usable ``__NEXT_DATA__`` payload.
     """
     html = _fetch_html(url)
     next_data = _extract_next_data(html)
@@ -271,14 +302,13 @@ def scrape_squad(
 ) -> dict[str, Any]:
     """Fetch the squad listing and all linked player profiles.
 
-    Parameters
-    ----------
-    squad_url:
-        Full URL of the squad listing page.
-    concurrency_delay:
-        Seconds to wait between consecutive player-page fetches (rate limit).
+    Args:
+        squad_url: Full URL of the squad listing page.
+        concurrency_delay: Seconds to wait between consecutive player-page
+            fetches as a polite rate limit.
 
-    Returns a dict ``{source_url, fetched_at, players: [...]}``.
+    Returns:
+        Dictionary with ``source_url``, ``fetched_at``, and ``players``.
     """
     import datetime
 
@@ -292,13 +322,13 @@ def scrape_squad(
     log.info("scrape_squad_urls_discovered count={}", len(player_urls))
 
     players: list[dict[str, Any]] = []
+    # Phase 2: walk each player profile sequentially so rate limiting stays explicit.
     for idx, player_url in enumerate(player_urls):
         if idx > 0:
             time.sleep(concurrency_delay)
         try:
             log.debug(
-                "task=scrape_player previous=player_url_discovered next=normalize_player_data "
-                "index={} total={} url={}",
+                "task=scrape_player previous=player_url_discovered next=normalize_player_data index={} total={} url={}",
                 idx + 1,
                 len(player_urls),
                 player_url,
@@ -324,6 +354,7 @@ def scrape_squad(
                 }
             )
 
+    # Phase 3: stamp the batch with one scrape timestamp for downstream Kafka and DB consumers.
     fetched_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
     log.info("scrape_squad_complete players_total={} source_url={}", len(players), squad_url)
     return {

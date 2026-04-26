@@ -19,7 +19,12 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class MerchItem:
-    """Catalog row: ``name`` is emitted verbatim on NDJSON lines."""
+    """Describe one merch catalog entry used by event generators.
+
+    Attributes:
+        name: Canonical item label emitted verbatim on NDJSON records.
+        price_eur: Base catalog price before synthetic jitter is applied.
+    """
 
     name: str
     price_eur: float
@@ -65,18 +70,28 @@ _RANDINT_AMOUNT_HIGH = SYNTHETIC_LINE_AMOUNT_RANDINT_HIGH
 
 
 def line_amount_eur_from_jitter_int(item_name: str, u: int) -> float:
-    """EUR line total from catalog ``item_name`` and jitter draw ``u``.
+    """Derive a deterministic EUR amount from a catalog item and jitter draw.
 
-    ``u`` must be in ``[1, 99999]`` (same domain as the legacy merch ``randint``).
-    Used by v1 ``one_merch`` so the draw happens **before** fan/item/timestamp,
-    matching historical RNG order.
+    Args:
+        item_name: Catalog item name present in :data:`MERCH_BY_NAME`.
+        u: Legacy ``randint`` draw in the inclusive range ``[1, 99999]``.
+
+    Returns:
+        Rounded line amount in EUR, clipped to at least ``0.01``.
+
+    Raises:
+        ValueError: If ``u`` falls outside the legacy jitter domain.
+
+    Note:
+        v1 uses this helper so the jitter draw happens before fan, item, and
+        timestamp selection, preserving the historical RNG order.
     """
     if u < _RANDINT_AMOUNT_LOW or u > _RANDINT_AMOUNT_HIGH:
-        raise ValueError(
-            f"jitter draw must be in [{_RANDINT_AMOUNT_LOW}, {_RANDINT_AMOUNT_HIGH}], got {u}"
-        )
+        raise ValueError(f"jitter draw must be in [{_RANDINT_AMOUNT_LOW}, {_RANDINT_AMOUNT_HIGH}], got {u}")
     item = MERCH_BY_NAME[item_name]
     span = _RANDINT_AMOUNT_HIGH - _RANDINT_AMOUNT_LOW
+    # Convert the legacy randint domain into a linear factor inside the jitter
+    # band so existing golden outputs stay byte-stable.
     t = (u - _RANDINT_AMOUNT_LOW) / span if span else 0.0
     factor = _AMOUNT_JITTER_LOW + t * (_AMOUNT_JITTER_HIGH - _AMOUNT_JITTER_LOW)
     raw = item.price_eur * factor
@@ -84,11 +99,19 @@ def line_amount_eur_from_jitter_int(item_name: str, u: int) -> float:
 
 
 def synthetic_line_amount_eur(item_name: str, rng: random.Random) -> float:
-    """EUR line total for merch/retail: catalog price with multiplicative jitter.
+    """Return a synthetic EUR amount for one merch or retail line item.
 
-    Uses exactly one ``rng.randint(1, 99999)``. v2/v3 call this **after** ``item``
-    is chosen (their historical order). v1 uses :func:`line_amount_eur_from_jitter_int`
-    with a draw taken **before** fan/item/timestamp.
+    Args:
+        item_name: Catalog item name present in :data:`MERCH_BY_NAME`.
+        rng: Random generator responsible for reproducible draw order.
+
+    Returns:
+        Rounded line amount in EUR after multiplicative jitter is applied.
+
+    Note:
+        This helper consumes exactly one ``rng.randint(1, 99999)`` draw. v2 and
+        v3 call it after the item choice; v1 preserves its older order by using
+        :func:`line_amount_eur_from_jitter_int` with a pre-drawn integer.
     """
     u = rng.randint(_RANDINT_AMOUNT_LOW, _RANDINT_AMOUNT_HIGH)
     return line_amount_eur_from_jitter_int(item_name, u)
@@ -99,6 +122,12 @@ def synthetic_line_amount_eur(item_name: str, rng: random.Random) -> float:
 
 @dataclass(frozen=True)
 class StadiumGate:
+    """Describe one stadium gate label used on ticket-scan events.
+
+    Attributes:
+        name: Human-readable gate or zone label emitted on scan records.
+    """
+
     name: str
 
 
@@ -117,6 +146,14 @@ LOCATIONS: tuple[str, ...] = tuple(g.name for g in STADIUM_GATES)
 
 @dataclass(frozen=True)
 class Shop:
+    """Describe one retail outlet used by v3 purchase generation.
+
+    Attributes:
+        id: Stable machine identifier written to NDJSON records.
+        display_name: Human-readable label used in docs and UI surfaces.
+        default_weight: Default weighted-sampling share for this outlet.
+    """
+
     id: str
     display_name: str
     default_weight: float

@@ -91,9 +91,7 @@ _STR_KEYS = frozenset(
 )
 
 _LEGACY_OLLAMA_ENV_VARS = ("OLLAMA_URL", "OLLAMA_MODEL", "OLLAMA_TIMEOUT", "LLM_PROVIDER")
-_LEGACY_OLLAMA_JSON_KEYS = frozenset(
-    {"ollama_url", "ollama_model", "ollama_timeout", "default_provider"}
-)
+_LEGACY_OLLAMA_JSON_KEYS = frozenset({"ollama_url", "ollama_model", "ollama_timeout", "default_provider"})
 
 
 def _openrouter_models_from_env() -> list[str]:
@@ -172,18 +170,24 @@ def _coerce_optional_model(raw: Any, field: str) -> str:
 
 
 def config_path() -> Path:
-    """Resolved path to the persisted JSON file (default: beside this package)."""
+    """Return the resolved path to the persisted runtime config JSON file.
+
+    Returns:
+        Absolute path to the config file, defaulting to ``llm_config.json``
+        beside the frontend package when ``LLM_CONFIG_PATH`` is unset.
+    """
     global _CONFIG_PATH
     if _CONFIG_PATH is None:
         raw = os.environ.get("LLM_CONFIG_PATH", "").strip()
         if raw:
             _CONFIG_PATH = Path(raw).expanduser().resolve()
         else:
-            _CONFIG_PATH = (Path(__file__).resolve().parent.parent / "llm_config.json")
+            _CONFIG_PATH = Path(__file__).resolve().parent.parent / "llm_config.json"
     return _CONFIG_PATH
 
 
 def _warn_legacy_ollama_env() -> None:
+    """Log a one-time warning when removed Ollama env vars are still present."""
     global _DEPRECATION_LOGGED
     if _DEPRECATION_LOGGED:
         return
@@ -201,13 +205,8 @@ def _warn_legacy_ollama_env() -> None:
 def _defaults_from_env() -> dict[str, Any]:
     _warn_legacy_ollama_env()
     return {
-        "openrouter_base_url": os.environ.get(
-            "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
-        ).rstrip("/"),
-        "openrouter_model": (
-            os.environ.get("OPENROUTER_MODEL", "").strip()
-            or DEFAULT_OPENROUTER_MODELS[0]
-        ),
+        "openrouter_base_url": os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/"),
+        "openrouter_model": (os.environ.get("OPENROUTER_MODEL", "").strip() or DEFAULT_OPENROUTER_MODELS[0]),
         "openrouter_models": _openrouter_models_from_env(),
         "openrouter_timeout": int(os.environ.get("OPENROUTER_TIMEOUT", "120")),
         "openrouter_api_key": os.environ.get("OPENROUTER_API_KEY", "").strip(),
@@ -237,6 +236,7 @@ def _validate_state(s: dict[str, Any]) -> None:
 
 
 def _overlay_file(base: dict[str, Any], path: Path) -> dict[str, Any]:
+    """Overlay persisted JSON config values onto environment-derived defaults."""
     out = {**base}
     try:
         raw_text = path.read_text(encoding="utf-8")
@@ -252,10 +252,10 @@ def _overlay_file(base: dict[str, Any], path: Path) -> dict[str, Any]:
 
     legacy_present = sorted(k for k in _LEGACY_OLLAMA_JSON_KEYS if k in data)
     if legacy_present:
-        log.warning(
-            "Ignoring legacy Ollama keys in %s: %s", path, ", ".join(legacy_present)
-        )
+        log.warning("Ignoring legacy Ollama keys in %s: %s", path, ", ".join(legacy_present))
 
+    # Overlay only the supported persisted keys so unknown JSON fields do not
+    # silently leak into the runtime state.
     for key in _MERGE_KEYS:
         if key not in data or data[key] is None:
             continue
@@ -299,15 +299,25 @@ def init_llm_config() -> None:
 
 
 def get_llm_settings() -> dict[str, Any]:
-    """Copy of full settings including OpenRouter API key (server-side only)."""
+    """Return a shallow copy of the current server-side LLM settings.
+
+    Returns:
+        Settings dictionary including the raw OpenRouter API key. This helper is
+        intended for backend use only.
+    """
     with _lock:
         return {**_state}
 
 
 def resolve_agent_model(override: str | None = None) -> str:
-    """Return the model id to use for the agent role, resolved by precedence.
+    """Resolve the model ID used for the main agent stage.
 
-    Precedence: ``override`` > ``agent_model`` > legacy ``openrouter_model``.
+    Args:
+        override: Optional per-request override supplied by the caller.
+
+    Returns:
+        Model ID selected by precedence: ``override`` > ``agent_model`` >
+        legacy ``openrouter_model``.
     """
     s = get_llm_settings()
     if override and override.strip():
@@ -319,9 +329,14 @@ def resolve_agent_model(override: str | None = None) -> str:
 
 
 def resolve_repair_model(override: str | None = None) -> str:
-    """Return the model id to use for the repair role, resolved by precedence.
+    """Resolve the model ID used for the repair stage.
 
-    Precedence: ``override`` > ``repair_model`` > resolved agent model.
+    Args:
+        override: Optional per-request override supplied by the caller.
+
+    Returns:
+        Model ID selected by precedence: ``override`` > ``repair_model`` > the
+        resolved agent model.
     """
     if override and override.strip():
         return override.strip()
@@ -340,7 +355,12 @@ def _mask_key(key: str) -> tuple[bool, str]:
 
 
 def to_public_config() -> dict[str, Any]:
-    """Safe dict for JSON responses (masked API key, provider-grouped catalog)."""
+    """Return a client-safe view of the current runtime config.
+
+    Returns:
+        JSON-serializable config dictionary with masked credentials, resolved
+        model roles, and provider-grouped model catalogs for the settings UI.
+    """
     s = get_llm_settings()
     configured, masked = _mask_key(s.get("openrouter_api_key", ""))
 
@@ -382,6 +402,7 @@ def to_public_config() -> dict[str, Any]:
 
 
 def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
+    """Write JSON to a temp file and atomically replace the destination."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     text = json.dumps(data, indent=2, sort_keys=True) + "\n"
@@ -390,17 +411,27 @@ def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
 
 
 def apply_llm_config_update(body: dict[str, Any]) -> dict[str, Any]:
-    """Merge JSON body into state, validate, persist. Omit openrouter_api_key to keep."""
+    """Merge, validate, persist, and publish an updated runtime config.
+
+    Args:
+        body: JSON-like request payload from ``PUT /api/llm-config``.
+
+    Returns:
+        Client-safe config dictionary representing the updated state.
+
+    Raises:
+        ValueError: If the requested settings are invalid.
+        OSError: If the persisted config file cannot be written.
+    """
     global _state
     with _lock:
         merged = {**_state}
 
     legacy_present = sorted(k for k in _LEGACY_OLLAMA_JSON_KEYS if k in body)
     if legacy_present:
-        log.warning(
-            "Ignoring legacy Ollama keys in update body: %s", ", ".join(legacy_present)
-        )
+        log.warning("Ignoring legacy Ollama keys in update body: %s", ", ".join(legacy_present))
 
+    # Merge string-like fields first so later validation sees one coherent state.
     for key in _STR_KEYS:
         if key in body and body[key] is not None:
             val = str(body[key]).strip()
@@ -421,6 +452,7 @@ def apply_llm_config_update(body: dict[str, Any]) -> dict[str, Any]:
         else:
             merged["openrouter_api_key"] = str(raw).strip()
 
+    # Validate the merged state before touching the persisted JSON file.
     _validate_state(merged)
     path = config_path()
     try:

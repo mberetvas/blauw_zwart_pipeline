@@ -22,22 +22,33 @@ _REQUEST_ID: ContextVar[str] = ContextVar("_REQUEST_ID", default="-")
 
 
 def new_request_id() -> str:
-    """Generate a short random 8-hex-char request ID."""
+    """Generate a short random request ID for log correlation.
+
+    Returns:
+        Eight-character hexadecimal request identifier.
+    """
     return uuid.uuid4().hex[:8]
 
 
 def set_request_id(req_id: str) -> Token[str]:
-    """Set the request ID for the current context and return the reset token."""
+    """Set the active request ID for the current execution context.
+
+    Args:
+        req_id: Correlation ID to expose through logging helpers.
+
+    Returns:
+        ContextVar token that can later restore the previous value.
+    """
     return _REQUEST_ID.set(req_id)
 
 
 def get_request_id() -> str:
-    """Return the current request ID (``"-"`` if none has been set)."""
+    """Return the current request ID, or ``"-"`` when unset."""
     return _REQUEST_ID.get()
 
 
 def reset_request_id(token: Token[str]) -> None:
-    """Reset the request ID ContextVar to its previous value using the token."""
+    """Restore the previous request ID using a saved ContextVar token."""
     _REQUEST_ID.reset(token)
 
 
@@ -55,11 +66,11 @@ _TRUNCATE_OUTPUT = 80
 
 
 class AgentObservabilityHandler(BaseCallbackHandler):
-    """LangChain callback handler that emits INFO-level timing logs.
+    """LangChain callback handler for request-scoped timing and progress events.
 
-    Covers both chat models (``on_chat_model_start``) and legacy text LLMs
-    (``on_llm_start``), plus tool calls.  Stores per-``run_id`` metadata so
-    that ``on_*_end`` / ``on_*_error`` can emit complete log lines.
+    The handler records per-run timing for chat-model calls, legacy LLM calls,
+    and tool invocations. It logs structured timing data and can optionally push
+    lightweight progress payloads to an SSE stream.
     """
 
     def __init__(
@@ -68,6 +79,12 @@ class AgentObservabilityHandler(BaseCallbackHandler):
         progress_sink: Callable[[dict[str, Any]], None] | None = None,
         phase: str = "primary",
     ) -> None:
+        """Initialize the callback handler.
+
+        Args:
+            progress_sink: Optional callback that receives progress payloads.
+            phase: Pipeline phase label attached to emitted progress events.
+        """
         super().__init__()
         # run_id -> {"started_at": float, "name": str}
         self._runs: dict[UUID, dict[str, Any]] = {}
@@ -86,6 +103,7 @@ class AgentObservabilityHandler(BaseCallbackHandler):
         run_id: UUID,
         **kwargs: Any,
     ) -> None:
+        """Record the start of a chat-model invocation."""
         model = self._extract_model(serialized)
         self._runs[run_id] = {"started_at": time.perf_counter(), "name": model}
         self._emit_progress(
@@ -112,6 +130,7 @@ class AgentObservabilityHandler(BaseCallbackHandler):
         run_id: UUID,
         **kwargs: Any,
     ) -> None:
+        """Record the start of a legacy text-LLM invocation."""
         model = self._extract_model(serialized)
         self._runs[run_id] = {"started_at": time.perf_counter(), "name": model}
         self._emit_progress(
@@ -133,6 +152,7 @@ class AgentObservabilityHandler(BaseCallbackHandler):
         run_id: UUID,
         **kwargs: Any,
     ) -> None:
+        """Log completion details for an LLM invocation."""
         meta = self._pop_run(run_id)
         log.info(
             "llm_complete model={} elapsed_ms={:.0f}",
@@ -155,6 +175,7 @@ class AgentObservabilityHandler(BaseCallbackHandler):
         run_id: UUID,
         **kwargs: Any,
     ) -> None:
+        """Log failure details for an LLM invocation."""
         meta = self._pop_run(run_id)
         log.info(
             "llm_failed model={} elapsed_ms={:.0f} error={}",
@@ -184,6 +205,7 @@ class AgentObservabilityHandler(BaseCallbackHandler):
         run_id: UUID,
         **kwargs: Any,
     ) -> None:
+        """Record the start of a tool invocation."""
         name = serialized.get("name") or "unknown_tool"
         self._runs[run_id] = {"started_at": time.perf_counter(), "name": name}
         self._emit_progress(
@@ -207,6 +229,7 @@ class AgentObservabilityHandler(BaseCallbackHandler):
         run_id: UUID,
         **kwargs: Any,
     ) -> None:
+        """Log completion details for a tool invocation."""
         meta = self._pop_run(run_id)
         log.info(
             "tool_complete tool={} elapsed_ms={:.0f} output={}",
@@ -230,6 +253,7 @@ class AgentObservabilityHandler(BaseCallbackHandler):
         run_id: UUID,
         **kwargs: Any,
     ) -> None:
+        """Log failure details for a tool invocation."""
         meta = self._pop_run(run_id)
         log.info(
             "tool_failed tool={} elapsed_ms={:.0f} error={}",
@@ -253,19 +277,18 @@ class AgentObservabilityHandler(BaseCallbackHandler):
 
     @staticmethod
     def _extract_model(serialized: dict[str, Any]) -> str:
-        return (
-            (serialized.get("kwargs") or {}).get("model")
-            or serialized.get("name")
-            or "unknown"
-        )
+        """Extract a display-friendly model name from LangChain metadata."""
+        return (serialized.get("kwargs") or {}).get("model") or serialized.get("name") or "unknown"
 
     def _pop_run(self, run_id: UUID) -> dict[str, Any]:
+        """Remove a tracked run and compute its elapsed time in milliseconds."""
         meta = self._runs.pop(run_id, {})
         started_at = meta.get("started_at")
         elapsed_ms = (time.perf_counter() - started_at) * 1000 if started_at else 0.0
         return {"name": meta.get("name", "unknown"), "elapsed_ms": elapsed_ms}
 
     def _emit_progress(self, payload: dict[str, Any]) -> None:
+        """Forward one progress payload to the optional SSE sink."""
         if self._progress_sink is None:
             return
         event = dict(payload)

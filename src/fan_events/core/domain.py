@@ -1,4 +1,10 @@
-"""Domain constants for synthetic fan events."""
+"""Define shared domain constants for synthetic fan-event generation.
+
+This module re-exports the core catalogs from :mod:`fan_events.core.data` so
+the rest of the package can import one stable domain surface. It also defines
+event-type constants, default simulation anchors, and validation helpers used
+by the CLI and generation pipelines.
+"""
 
 from __future__ import annotations
 
@@ -29,7 +35,18 @@ DEFAULT_RETAIL_SIM_EPOCH_UTC = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc
 
 
 def validate_shop_weights(weights: Sequence[float]) -> None:
-    """Raise ValueError if weights are not three non-negative floats that sum to > 0."""
+    """Validate the three retail shop weights used by v3 generation.
+
+    Args:
+        weights: Sequence of weights whose positional order must match
+            :data:`SHOP_IDS`.
+
+    Raises:
+        ValueError: If the number of weights is wrong, any weight is negative,
+            or the sequence sums to zero.
+    """
+    # The CLI accepts bare numeric lists, so enforce the positional contract
+    # here before weighted sampling happens deeper in the generator.
     if len(weights) != len(SHOP_IDS):
         raise ValueError(f"shop weights must have length {len(SHOP_IDS)}, got {len(weights)}")
     for w in weights:

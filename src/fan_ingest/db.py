@@ -1,4 +1,9 @@
-"""asyncpg pool and idempotent inserts for fan_events_ingested."""
+"""Manage asyncpg connections and idempotent writes for ingested fan events.
+
+The ingestion service stores every Kafka message once per topic/partition/offset
+triple. This module ensures the target table exists, exposes the insert SQL used
+by partition workers, and provides structured logging helpers for DB failures.
+"""
 
 from __future__ import annotations
 
@@ -41,16 +46,30 @@ RETURNING id
 
 
 async def create_pool(dsn: str, *, min_size: int = 1, max_size: int = 10) -> asyncpg.Pool:
+    """Create an asyncpg pool and ensure the target table exists.
+
+    Args:
+        dsn: PostgreSQL connection string.
+        min_size: Minimum pool size.
+        max_size: Maximum pool size.
+
+    Returns:
+        Ready-to-use asyncpg pool.
+    """
     pool = await asyncpg.create_pool(dsn, min_size=min_size, max_size=max_size)
     await ensure_fan_events_table(pool)
     return pool
 
 
 async def ensure_fan_events_table(pool: asyncpg.Pool) -> None:
-    """Create ``raw_data.fan_events_ingested`` if missing (idempotent).
+    """Create ``raw_data.fan_events_ingested`` if it does not already exist.
 
-    Docker init only runs on an empty data directory; this covers upgraded volumes
-    that pre-date the ``raw_data`` schema move.
+    Args:
+        pool: Asyncpg pool used to execute the idempotent DDL.
+
+    Note:
+        Docker init scripts only run on empty data volumes, so runtime DDL keeps
+        upgraded local environments from needing a manual migration step.
     """
     async with pool.acquire() as conn:
         await conn.execute(_ENSURE_FAN_EVENTS_SQL)
@@ -58,7 +77,16 @@ async def ensure_fan_events_table(pool: asyncpg.Pool) -> None:
 
 
 async def insert_fan_event_row(pool: asyncpg.Pool, row: dict[str, Any]) -> bool:
-    """Insert one row; True if inserted, False on unique conflict (idempotent no-op)."""
+    """Insert one ingested Kafka message into Postgres.
+
+    Args:
+        pool: Asyncpg pool used for the insert.
+        row: Parsed ingestion row from :func:`fan_ingest.records.kafka_message_to_row`.
+
+    Returns:
+        ``True`` when a new row was inserted, or ``False`` when the unique
+        topic/partition/offset constraint turned it into an idempotent no-op.
+    """
     row_id = await pool.fetchval(
         INSERT_FAN_EVENT_SQL,
         row["kafka_topic"],
@@ -77,7 +105,13 @@ def log_write_error(
     kafka_partition: int,
     kafka_offset: int,
 ) -> None:
-    """Log a DB failure; call from an ``except`` block (uses ``exc_info=True``)."""
+    """Log a database write failure with Kafka coordinates attached.
+
+    Args:
+        kafka_topic: Topic name for the failed message.
+        kafka_partition: Partition number for the failed message.
+        kafka_offset: Offset for the failed message.
+    """
     logger.error(
         "ingest_db_error topic=%s partition=%s offset=%s",
         kafka_topic,
