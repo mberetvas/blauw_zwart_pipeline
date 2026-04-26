@@ -1,4 +1,4 @@
-﻿"""Flask Text-to-SQL API backed by Ollama or OpenRouter and Postgres dbt marts.
+"""Flask Text-to-SQL API backed by Ollama or OpenRouter and Postgres dbt marts.
 
 Flow
 ----
@@ -167,8 +167,7 @@ def _build_trace(
     if raw_sql is not None:
         if sql is not None and raw_sql.strip() != sql:
             notes.append(
-                "Normalized the model output by removing markdown wrappers or "
-                "trailing semicolons."
+                "Normalized the model output by removing markdown wrappers or trailing semicolons."
             )
         else:
             notes.append("The model returned SQL directly without extra formatting.")
@@ -176,15 +175,14 @@ def _build_trace(
         notes.append("Validated the SQL as read-only before sending it to Postgres.")
     if row_count is not None:
         notes.append(
-            f"Executed the query with a 10 second timeout and outer LIMIT 100, "
-            f"returning {row_count} row(s)."
+            f"Executed the query with a 10 second timeout and outer LIMIT 100,"
+            f" returning {row_count} row(s)."
         )
     elif sql is not None:
         notes.append("Tried to execute the validated SQL against Postgres.")
     if answered:
         notes.append(
-            "Used the returned rows as context for the natural-language answer "
-            "you see in chat."
+            "Used the returned rows as context for the natural-language answer you see in chat."
         )
     return {
         "provider": provider,
@@ -214,8 +212,8 @@ def _leaderboard_points_sql(alias: str) -> str:
 def _leaderboard_order_sql(alias: str) -> str:
     """Return the deterministic leaderboard sort order for the given alias."""
     return (
-        f"{alias}.points DESC, {alias}.matches_attended DESC, "
-        f"{alias}.total_spend DESC, {alias}.fan_id ASC"
+        f"{alias}.points DESC, {alias}.matches_attended DESC,"
+        f" {alias}.total_spend DESC, {alias}.fan_id ASC"
     )
 
 
@@ -668,8 +666,8 @@ def _build_leaderboard_payload(window: str) -> dict[str, Any]:
     """
     if window not in LEADERBOARD_SUPPORTED_WINDOWS:
         raise ValueError(
-            f"Unsupported leaderboard window '{window}'. Valid values: "
-            f"{sorted(LEADERBOARD_SUPPORTED_WINDOWS)}"
+            f"Unsupported leaderboard window '{window}'."
+            f" Valid values: {sorted(LEADERBOARD_SUPPORTED_WINDOWS)}"
         )
 
     # Choose the correct backing query family for the requested time window.
@@ -679,15 +677,13 @@ def _build_leaderboard_payload(window: str) -> dict[str, Any]:
     elif window == "month":
         t0, t1 = _leaderboard_month_bounds_utc()
         rankings = [
-            _leaderboard_entry_from_row(row)
-            for row in _fetch_leaderboard_rows_bounded(t0, t1)
+            _leaderboard_entry_from_row(row) for row in _fetch_leaderboard_rows_bounded(t0, t1)
         ]
         as_of_dt = _fetch_leaderboard_as_of_bounded(t0, t1)
     else:
         t0, t1 = _leaderboard_season_bounds_utc()
         rankings = [
-            _leaderboard_entry_from_row(row)
-            for row in _fetch_leaderboard_rows_bounded(t0, t1)
+            _leaderboard_entry_from_row(row) for row in _fetch_leaderboard_rows_bounded(t0, t1)
         ]
         as_of_dt = _fetch_leaderboard_as_of_bounded(t0, t1)
 
@@ -849,8 +845,7 @@ def _build_request_or_error(
         return (
             {
                 "error": (
-                    "Ollama is no longer supported. Use 'openrouter' "
-                    "(or omit 'provider' entirely)."
+                    "Ollama is no longer supported. Use 'openrouter' (or omit 'provider' entirely)."
                 )
             },
             400,
@@ -859,8 +854,7 @@ def _build_request_or_error(
         return (
             {
                 "error": (
-                    f"Unknown provider '{raw_provider}'. Valid values: "
-                    f"{sorted(KNOWN_PROVIDERS)}"
+                    f"Unknown provider '{raw_provider}'. Valid values: {sorted(KNOWN_PROVIDERS)}"
                 )
             },
             400,
@@ -1011,7 +1005,9 @@ def health() -> Any:
 
 #: Internal URL of the proleague-scraper Compose service.
 #: Used by the /api/player-stats/image route.
-PROLEAGUE_SCRAPER_URL = os.environ.get("PROLEAGUE_SCRAPER_URL", "http://proleague-scraper:8001").rstrip("/")
+PROLEAGUE_SCRAPER_URL = os.environ.get(
+    "PROLEAGUE_SCRAPER_URL", "http://proleague-scraper:8001"
+).rstrip("/")
 
 # SQL to read all player rows from the raw_data schema.
 # llm_reader has search_path=dbt_dev so the schema qualifier is explicit.
@@ -1191,8 +1187,7 @@ def ask() -> Any:
 
         log.info("api_ask_received")
         log.debug(
-            "task=ask_route previous=request_validated next=run_primary_agent "
-            "question_preview={}",
+            "task=ask_route previous=request_validated next=run_primary_agent question_preview={}",
             parsed.question[:80],
         )
         try:
@@ -1244,8 +1239,8 @@ def ask_stream() -> Any:
         try:
             log.info("api_ask_stream_received")
             log.debug(
-                "task=stream_route previous=request_validated next=run_stream_pipeline "
-                "question_preview={}",
+                "task=stream_route previous=request_validated"
+                " next=run_stream_pipeline question_preview={}",
                 parsed.question[:80],
             )
             for evt in run_ask_stream(parsed):

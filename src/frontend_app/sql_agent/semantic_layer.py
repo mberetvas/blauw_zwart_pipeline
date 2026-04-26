@@ -108,8 +108,7 @@ def _apply_max_chars(text: str, label: str) -> str:
         max_chars = int(max_raw)
     except ValueError as exc:
         raise ValueError(
-            f"SEMANTIC_CONTEXT_MAX_CHARS must be a non-negative integer or 0; "
-            f"got {max_raw!r}"
+            f"SEMANTIC_CONTEXT_MAX_CHARS must be a non-negative integer or 0; got {max_raw!r}"
         ) from exc
     if max_chars <= 0 or len(text) <= max_chars:
         return text

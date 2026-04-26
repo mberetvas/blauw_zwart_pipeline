@@ -90,9 +90,9 @@ class _InterceptHandler(logging.Handler):
             message = f"[{record.levelname}] {record.getMessage()}"
         else:
             message = record.getMessage()
-        logger.bind(source=record.name).opt(
-            exception=record.exc_info, depth=6
-        ).log(level_name, message)
+        logger.bind(source=record.name).opt(exception=record.exc_info, depth=6).log(
+            level_name, message
+        )
 
 
 def configure_logging(level: str | None = None, *, use_colors: bool = True) -> None:

@@ -433,8 +433,8 @@ def _run_stage(
     recursion_limit = max_iterations * 2 + 5
     model_name = getattr(chat_model, "model", None) or getattr(chat_model, "model_name", "unknown")
     log.debug(
-        "task=stage_invoke previous=model_resolved next=agent_invoke "
-        "stage={} model={} tools={} max_iter={}",
+        "task=stage_invoke previous=model_resolved next=agent_invoke"
+        " stage={} model={} tools={} max_iter={}",
         stage_name,
         model_name,
         len(tools),
@@ -587,9 +587,7 @@ def run_ask(
     except Exception as exc:
         log.info("semantic_layer_load_failed_non_fatal error={}", exc)
     answer_style_rules = (
-        ((layer.get("answer_style") or {}).get("rules") or [])
-        if isinstance(layer, dict)
-        else []
+        ((layer.get("answer_style") or {}).get("rules") or []) if isinstance(layer, dict) else []
     )
 
     # Build the final user-turn message combining the question, conversation
@@ -670,8 +668,7 @@ def run_ask(
         error=err,
     )
     notes.append(
-        f"Primary agent failed ({phase}); invoking repair pass with model "
-        f"{repair_model_id}."
+        f"Primary agent failed ({phase}); invoking repair pass with model {repair_model_id}."
     )
 
     # Build a targeted repair prompt that includes the failed SQL and the

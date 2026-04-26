@@ -207,10 +207,11 @@ def _warn_legacy_ollama_env() -> None:
 def _defaults_from_env() -> dict[str, Any]:
     _warn_legacy_ollama_env()
     return {
-        "openrouter_base_url": os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/"),
+        "openrouter_base_url": os.environ.get(
+            "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
+        ).rstrip("/"),
         "openrouter_model": (
-            os.environ.get("OPENROUTER_MODEL", "").strip()
-            or DEFAULT_OPENROUTER_MODELS[0]
+            os.environ.get("OPENROUTER_MODEL", "").strip() or DEFAULT_OPENROUTER_MODELS[0]
         ),
         "openrouter_models": _openrouter_models_from_env(),
         "openrouter_timeout": int(os.environ.get("OPENROUTER_TIMEOUT", "120")),

@@ -54,8 +54,7 @@ def _validate_sql_with_sqlglot(sql: str) -> None:
         raise ValueError("Generated SQL is empty after parsing.")
     if len(statements) > 1:
         raise ValueError(
-            "Generated SQL must contain exactly one statement; "
-            f"sqlglot parsed {len(statements)}."
+            f"Generated SQL must contain exactly one statement; sqlglot parsed {len(statements)}."
         )
 
     root = statements[0]
@@ -93,8 +92,7 @@ def _validate_sql(sql: str) -> None:
     starts_with = stripped.upper().lstrip("(\n\r\t ")
     if not (starts_with.startswith("SELECT") or starts_with.startswith("WITH")):
         raise ValueError(
-            "Generated SQL must begin with SELECT or WITH. "
-            f"Received: {stripped[:120]!r}"
+            f"Generated SQL must begin with SELECT or WITH. Received: {stripped[:120]!r}"
         )
 
     _validate_sql_with_sqlglot(stripped)
@@ -106,9 +104,7 @@ def _validate_sql(sql: str) -> None:
         )
     match = _MUTATING.search(stripped)
     if match:
-        raise ValueError(
-            f"Generated SQL contains forbidden keyword '{match.group()}'."
-        )
+        raise ValueError(f"Generated SQL contains forbidden keyword '{match.group()}'.")
 
 
 def _strip_fences(raw: str) -> str:

@@ -71,8 +71,8 @@ def _discover_dbt_models_dir(root: Path) -> list[Path]:
         rank, _ = _layer_rank_and_label(f)
         if rank == 99:
             log.warning(
-                "Schema file path has no staging/intermediate/marts segment; "
-                "layer will be 'unspecified': %s",
+                "Schema file path has no staging/intermediate/marts segment;"
+                " layer will be 'unspecified': %s",
                 f,
             )
         keyed.append((rank, str(f.resolve()), f))
@@ -139,8 +139,7 @@ def _apply_size_limit(text: str) -> str:
         max_chars = int(max_raw)
     except ValueError as exc:
         raise ValueError(
-            f"SCHEMA_CONTEXT_MAX_CHARS must be a non-negative integer or 0; "
-            f"got {max_raw!r}"
+            f"SCHEMA_CONTEXT_MAX_CHARS must be a non-negative integer or 0; got {max_raw!r}"
         ) from exc
     if max_chars <= 0:
         return text

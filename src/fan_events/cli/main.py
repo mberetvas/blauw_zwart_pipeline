@@ -91,8 +91,7 @@ SUBCOMMAND_STREAM = "stream"
 # Copy-paste examples (flags/paths align with README).
 # Epilog is styled by ColoredHelpFormatter.
 _HELP_DEV_NOTE = (
-    "Without install, prefix with uv run or uv run python -m fan_events "
-    "(same arguments).\n\n"
+    "Without install, prefix with uv run or uv run python -m fan_events (same arguments).\n\n"
 )
 
 _EX_HELP_ROOT = "fan_events --help"
@@ -102,18 +101,17 @@ _EX_HELP_STREAM = "fan_events stream --help"
 _EX_V1_ROLLING = "fan_events generate_events -s 1 -n 200 -d 90 -o out/v1.ndjson"
 _EX_V2_CAL_ALL = "fan_events generate_events -c my_calendar.json -s 42 -o out/v2.ndjson"
 _EX_V2_DATE_RANGE = (
-    "fan_events generate_events -c my_calendar.json --from-date 2026-09-01 "
-    "--to-date 2026-12-31 -s 42 -o out/v2.ndjson"
+    "fan_events generate_events -c my_calendar.json"
+    " --from-date 2026-09-01 --to-date 2026-12-31 -s 42 -o out/v2.ndjson"
 )
 _EX_V3_FILE = "fan_events generate_retail -o out/retail.ndjson -s 42"
 _EX_V3_STREAM = "fan_events generate_retail -t -s 42 -n 100"
 _EX_V3_STREAM_LIVE = (
-    "fan_events generate_retail -t -s 42 -n 50 --emit-wall-clock-min 0.5 "
-    "--emit-wall-clock-max 2.0"
+    "fan_events generate_retail -t -s 42 -n 50 --emit-wall-clock-min 0.5 --emit-wall-clock-max 2.0"
 )
 _EX_STREAM_MERGED = (
-    "fan_events stream -c my_calendar.json -s 42 -o out/mixed.ndjson "
-    "--retail-max-events 500 --max-events 1000"
+    "fan_events stream -c my_calendar.json -s 42 -o out/mixed.ndjson"
+    " --retail-max-events 500 --max-events 1000"
 )
 _EX_STREAM_RETAIL_ONLY = "fan_events stream -s 1 --retail-max-events 10"
 
@@ -147,8 +145,8 @@ _EX_KAFKA_ENV = (
     "fan_events stream -s 42 --retail-max-events 100 --max-events 50"
 )
 _EX_KAFKA_FLAGS = (
-    "fan_events stream --kafka-topic fan_events "
-    "--kafka-bootstrap-servers localhost:9092 --max-events 50"
+    "fan_events stream --kafka-topic fan_events"
+    " --kafka-bootstrap-servers localhost:9092 --max-events 50"
 )
 
 EPILOG_STREAM = (
@@ -179,9 +177,7 @@ EPILOG_STREAM = (
 
 EPILOG_GENERATE_EVENTS = (
     "Examples:\n\n"
-    + "\n".join(
-        (_EX_HELP_EVENTS, _EX_V1_ROLLING, _EX_V2_CAL_ALL, _EX_V2_DATE_RANGE)
-    )
+    + "\n".join((_EX_HELP_EVENTS, _EX_V1_ROLLING, _EX_V2_CAL_ALL, _EX_V2_DATE_RANGE))
     + "\n"
 )
 
@@ -299,8 +295,8 @@ def _validate_generate_retail(
     bad = _retail_forbidden_token(tok)
     if bad is not None:
         p.error(
-            f"{bad} cannot be used with generate_retail "
-            "(v1/v2 options belong under generate_events)"
+            f"{bad} cannot be used with generate_retail"
+            " (v1/v2 options belong under generate_events)"
         )
 
     # Validate numeric bounds before we derive generator kwargs from them.
@@ -349,13 +345,10 @@ def _validate_generate_retail(
         if ns.stream:
             if emit_min is None and ns.max_duration is None:
                 p.error(
-                    "--unlimited with --stream requires "
-                    "--emit-wall-clock-min/max or --max-duration"
+                    "--unlimited with --stream requires --emit-wall-clock-min/max or --max-duration"
                 )
         elif ns.max_duration is None:
-            p.error(
-                "--unlimited without --stream requires --max-duration"
-            )
+            p.error("--unlimited without --stream requires --max-duration")
 
 
 def _stream_retail_kwargs(ns: argparse.Namespace) -> dict[str, object]:
@@ -419,8 +412,8 @@ def _validate_stream(
     if ns.calendar:
         if (ns.from_date is None) != (ns.to_date is None):
             p.error(
-                "--from-date and --to-date must be given together, "
-                "or omit both to include all matches"
+                "--from-date and --to-date must be given together,"
+                " or omit both to include all matches"
             )
     else:
         if ns.from_date is not None or ns.to_date is not None:
@@ -664,8 +657,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=None,
         help=(
-            f"Ticket scan volume as fraction of stadium capacity "
-            f"(default: {DEFAULT_SCAN_FRACTION})"
+            f"Ticket scan volume as fraction of stadium capacity (default: {DEFAULT_SCAN_FRACTION})"
         ),
     )
     cal.add_argument(
@@ -742,8 +734,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=str,
         default=None,
         help=(
-            f"Start of simulated timeline, ISO-8601 UTC "
-            f"(default: {_DEFAULT_RETAIL_EPOCH_HELP_STR})"
+            f"Start of simulated timeline, ISO-8601 UTC (default: {_DEFAULT_RETAIL_EPOCH_HELP_STR})"
         ),
     )
     ret.add_argument(
@@ -753,8 +744,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar=("W1", "W2", "W3"),
         default=None,
         help=(
-            "Relative weights for 3 shops: jan_breydel_fan_shop, webshop, "
-            "bruges_city_shop (default: equal)"
+            "Relative weights for 3 shops: jan_breydel_fan_shop,"
+            " webshop, bruges_city_shop (default: equal)"
         ),
     )
     ret.add_argument(
@@ -768,8 +759,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=DEFAULT_RETAIL_POISSON_RATE,
         help=(
-            f"Arrival rate in events/second for poisson mode "
-            f"(default: {DEFAULT_RETAIL_POISSON_RATE})"
+            f"Arrival rate in events/second for poisson mode"
+            f" (default: {DEFAULT_RETAIL_POISSON_RATE})"
         ),
     )
     ret.add_argument(
@@ -777,8 +768,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=DEFAULT_RETAIL_FIXED_GAP_SECONDS,
         help=(
-            f"Gap in seconds between events for fixed mode "
-            f"(default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
+            "Gap in seconds between events for fixed mode"
+            f" (default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
         ),
     )
     ret.add_argument(
@@ -812,8 +803,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="SEC",
         dest="emit_wall_clock_min",
         help=(
-            "Min sleep in seconds between stdout lines; requires --stream "
-            "and --emit-wall-clock-max"
+            "Min sleep in seconds between stdout lines; requires --stream and --emit-wall-clock-max"
         ),
     )
     ret.add_argument(
@@ -823,8 +813,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="SEC",
         dest="emit_wall_clock_max",
         help=(
-            "Max sleep in seconds between stdout lines; requires --stream "
-            "and --emit-wall-clock-min"
+            "Max sleep in seconds between stdout lines; requires --stream and --emit-wall-clock-min"
         ),
     )
     ret.add_argument(
@@ -900,8 +889,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=None,
         help=(
-            f"Ticket scan volume as fraction of stadium capacity "
-            f"(default: {DEFAULT_SCAN_FRACTION})"
+            f"Ticket scan volume as fraction of stadium capacity (default: {DEFAULT_SCAN_FRACTION})"
         ),
     )
     cal_s.add_argument(
@@ -1042,8 +1030,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=str,
         default=None,
         help=(
-            f"Start of retail synthetic timeline, ISO-8601 UTC "
-            f"(default: {_DEFAULT_RETAIL_EPOCH_HELP_STR})"
+            "Start of retail synthetic timeline, ISO-8601 UTC"
+            f" (default: {_DEFAULT_RETAIL_EPOCH_HELP_STR})"
         ),
     )
     st.add_argument(
@@ -1053,8 +1041,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar=("W1", "W2", "W3"),
         default=None,
         help=(
-            "Weights for 3 retail shops: jan_breydel_fan_shop, webshop, "
-            "bruges_city_shop (default: equal)"
+            "Weights for 3 retail shops: jan_breydel_fan_shop,"
+            " webshop, bruges_city_shop (default: equal)"
         ),
     )
     st.add_argument(
@@ -1068,8 +1056,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=DEFAULT_RETAIL_POISSON_RATE,
         help=(
-            f"Arrival rate in events/second for poisson mode "
-            f"(default: {DEFAULT_RETAIL_POISSON_RATE})"
+            f"Arrival rate in events/second for poisson mode"
+            f" (default: {DEFAULT_RETAIL_POISSON_RATE})"
         ),
     )
     st.add_argument(
@@ -1077,8 +1065,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=DEFAULT_RETAIL_FIXED_GAP_SECONDS,
         help=(
-            f"Gap in seconds between retail events for fixed mode "
-            f"(default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
+            "Gap in seconds between retail events for fixed mode"
+            f" (default: {DEFAULT_RETAIL_FIXED_GAP_SECONDS:g})"
         ),
     )
     st.add_argument(
@@ -1191,14 +1179,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     if ns.calendar:
         if _explicit_v1_rolling_flags_in_tokens(raw):
-            p.error(
-                "-n / --count / -d / --days cannot be used with --calendar "
-                "(v2 calendar mode)"
-            )
+            p.error("-n / --count / -d / --days cannot be used with --calendar (v2 calendar mode)")
         if (ns.from_date is None) != (ns.to_date is None):
             p.error(
-                "--from-date and --to-date must be given together, "
-                "or omit both to include all matches"
+                "--from-date and --to-date must be given together,"
+                " or omit both to include all matches"
             )
     else:
         if ns.from_date is not None or ns.to_date is not None:
@@ -1285,9 +1270,7 @@ def run_v3(args: argparse.Namespace) -> None:
             for line in iter_retail_ndjson_lines(rng, fan_ids=fan_ids, **kw):
                 if not first:
                     time.sleep(
-                        pacing_rng.uniform(
-                            args.emit_wall_clock_min, args.emit_wall_clock_max
-                        )
+                        pacing_rng.uniform(args.emit_wall_clock_min, args.emit_wall_clock_max)
                     )
                 sys.stdout.write(line)
                 sys.stdout.flush()
@@ -1337,9 +1320,7 @@ def _stream_t0_anchor_and_retail_epoch(
         duration semantics match the actual master-clock start.
     """
     retail_epoch_cli = (
-        _parse_epoch_utc(args.epoch)
-        if args.epoch is not None
-        else DEFAULT_RETAIL_SIM_EPOCH_UTC
+        _parse_epoch_utc(args.epoch) if args.epoch is not None else DEFAULT_RETAIL_SIM_EPOCH_UTC
     )
     retail_epoch_cli = retail_epoch_cli.astimezone(timezone.utc)
     earliest_v2: datetime | None = None
@@ -1397,9 +1378,7 @@ def run_stream(args: argparse.Namespace) -> None:
     unified: int | None = None
     if include_v2 and include_retail:
         unified = (
-            args.fan_pool
-            if args.fan_pool is not None
-            else default_unified_fan_pool_max(contexts)
+            args.fan_pool if args.fan_pool is not None else default_unified_fan_pool_max(contexts)
         )
 
     sf = DEFAULT_SCAN_FRACTION if args.scan_fraction is None else args.scan_fraction
@@ -1567,8 +1546,8 @@ def _run_stream_kafka(
         summarize_bootstrap_for_log(cfg.bootstrap_servers),
     )
     kafka_logger.debug(
-        "task=kafka_bootstrap_resolved previous=config_loaded next=create_producer "
-        "full_bootstrap=%s",
+        "task=kafka_bootstrap_resolved previous=config_loaded"
+        " next=create_producer full_bootstrap=%s",
         cfg.bootstrap_servers,
     )
 
