@@ -105,5 +105,5 @@ exclude = [".agents", ".cursor", ".git", ".specify", ".venv", "venv"]
 [tool.ruff.format]
 
 [tool.ruff.lint]
-exclude = ["*.ipynb"]
+exclude = ["*.ipynb","*.md"]
 select = ["E", "F", "I", "W"]
