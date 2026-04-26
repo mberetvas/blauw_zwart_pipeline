@@ -769,7 +769,28 @@ def _phase_to_status(phase: str) -> int:
 def _build_request_or_error(
     body: dict[str, Any],
 ) -> AgentRequest | tuple[dict[str, Any], int]:
-    """Validate the inbound JSON body and translate it into an :class:`AgentRequest`."""
+    """
+    Validate and process an incoming JSON request body for the LLM agent API.
+
+    This function either returns a valid AgentRequest object (for further processing)
+    or an error response (as a tuple with an error message and HTTP status code).
+
+    Steps performed:
+    1. Extracts and validates the 'question' field from the request body. Returns a 400 error if missing or empty.
+    2. Validates and normalizes the 'history' field using _normalise_conversation_history. Returns a 400 error if invalid.
+    3. Extracts and validates the 'provider' field (defaults to 'openrouter'). Returns a 400 error if unsupported or unknown.
+    4. Checks for the required OpenRouter API key in settings. Returns a 503 error if missing.
+    5. Handles per-request model overrides, supporting both legacy and new fields.
+    6. If all checks pass, returns an AgentRequest object with the question, conversation context, turn count, and model overrides.
+
+    Returns:
+        AgentRequest: On success, a fully validated request object for downstream processing.
+        tuple[dict[str, Any], int]: On error, a tuple of error dictionary and HTTP status code.
+
+    This function centralizes all validation and normalization for incoming LLM agent requests,
+    ensuring only well-formed, authorized, and supported requests are processed. It provides
+    clear error messages for clients, making debugging and integration easier.
+    """
     question: str = (body.get("question") or "").strip()
     if not question:
         return ({"error": "question is required"}, 400)
@@ -1134,6 +1155,12 @@ def ask() -> Any:
 
 @app.post("/api/ask/stream")
 def ask_stream() -> Any:
+    """Stream a question through the agent pipeline, emitting SSE events for each phase.
+    - If the _build_request_or_error function returns an error tuple,
+      we return that immediately as JSON (no streaming).
+    - If it returns a valid AgentRequest, we proceed to run the ask stream pipeline,
+      yielding SSE events for each significant step, and handling any exceptions that occur.
+    """
     req_id = new_request_id()
     body: dict[str, Any] = request.get_json(force=True) or {}
     parsed = _build_request_or_error(body)

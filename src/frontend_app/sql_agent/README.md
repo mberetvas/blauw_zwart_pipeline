@@ -128,7 +128,7 @@ flowchart TD
 
 ## How it works
 
-- **Two-stage pipeline.** A primary ReAct agent (using `agent_model`) gets the full 6-tool belt. If it fails to produce a successful `execute_select` result, a repair agent (using `repair_model`) is invoked with only `describe_table` + `execute_select`. At most one repair pass runs per request.
+- **Two-stage pipeline.** A primary ReAct agent (using `agent_model`) gets the full 6-tool belt. If it fails to produce a successful `execute_select` result, a repair agent (using `repair_model`) is invoked with only `describe_table` + `execute_select`. **Exactly one repair pass runs per request — it is never retried.** The repair agent itself may take several internal tool-call iterations (up to `max(3, AGENT_MAX_TOOL_ITERATIONS // 2)`) before giving up. Exhausting those internal iterations produces an `"iteration_cap"` error but does *not* trigger a second repair attempt.
 - **Dual SQL guardrail.** Every SQL string passed to `execute_select` is pre-processed (`_strip_fences` → `_rewrite_layer_schema_qualifiers`) then validated in two layers: (1) sqlglot parses the Postgres-dialect AST and rejects any mutating node type (`_MUTATING_AST_TYPES`: `Insert`, `Update`, `Delete`, `Drop`, `Create`, `Alter`, `AlterColumn`, `TruncateTable`, `Merge`, `Copy`, `Command`) or multi-statement input; (2) a regex (`_MUTATING`) rejects residual keywords (`INSERT`, `UPDATE`, `DELETE`, `DROP`, `GRANT`, `REVOKE`, `SET ROLE`, …) and stray semicolons. Rejection returns a structured JSON error (`{"error": "...", "phase": "validation", "sql": "..."}`) to the agent — not a hard exception — so the agent can fix the SQL and retry.
 - **Identifier whitelisting.** All tools that accept a `table` argument (`describe_table`, `sample_table`, `search_columns`, `list_tables` internally) validate the identifier format (`[A-Za-z_][A-Za-z0-9_]*`) and then check it against live `information_schema.tables` for the dbt schema via `_ensure_known_table` before any SQL is constructed.
 - **SQL post-processing.** `_execute_sql` wraps the validated SQL in `SELECT * FROM (\n{sql}\n) AS llm_query LIMIT 50` to hard-cap row count. The `data_preview` field returned to the caller is further capped at 10 rows (`_result_to_data_preview`).
@@ -168,11 +168,13 @@ flowchart TD
     - `"validation"` — guardrail rejected the SQL.
     - `"execution"` — Postgres runtime error or uncaught exception.
     - `"no_sql"` — agent finished without calling `execute_select`.
-    - `"iteration_cap"` — LangGraph raised `GraphRecursionError` (recursion limit exceeded).
+    - `"iteration_cap"` — LangGraph raised `GraphRecursionError` (recursion limit exceeded). Can occur in either the primary agent or the repair agent. In both cases the request fails immediately — no further repair is attempted.
 
 ### Iteration caps
 
-`AGENT_MAX_TOOL_ITERATIONS` (env var, default `8`, clamped to `1`–`25`) controls the primary agent. Its LangGraph `recursion_limit` is computed as `max_iter * 2 + 5`. The repair agent cap is `max(3, max_iter // 2)`.
+`AGENT_MAX_TOOL_ITERATIONS` (env var, default `8`, clamped to `1`–`25`) controls the internal tool-call step limit for the **primary agent**. Its LangGraph `recursion_limit` is computed as `max_iter * 2 + 5`.
+
+The **repair agent** has its own separate internal cap of `max(3, max_iter // 2)`. Both caps govern the number of reasoning/tool steps *within a single agent invocation* — they are not a count of repair passes. If either agent exhausts its cap, LangGraph raises `GraphRecursionError`, which surfaces as an `"iteration_cap"` phase error. **No second repair pass is ever started as a result — the request fails immediately.**
 
 ### Environment variables
 

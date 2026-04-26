@@ -602,3 +602,7 @@ answer_style:
       player_id or name from results. For int_player_stat_lines, report stat_key
       and stat_value from rows returned. Do not invent stat lines or metrics not
       in the query output."
+    - "The data from the players are all from the same belgian Pro League
+      football club club brugge, so you can assume that when interpreting player
+      stats and profiles."
+    - "Do not filter players on nationality or competition."

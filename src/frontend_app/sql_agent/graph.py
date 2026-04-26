@@ -14,7 +14,12 @@ A two-stage flow:
 2. **Repair pass** — when the primary agent did not call ``execute_select``
    successfully, a one-shot ``create_agent`` over the ``repair_model`` is
    invoked with a constrained toolset (``describe_table`` + ``execute_select``).
-   At most one repair pass per request.
+
+   **Exactly one repair pass is allowed per request — it is never retried.**
+   The repair agent itself may take several internal tool-call iterations
+   (bounded by ``max(3, AGENT_MAX_TOOL_ITERATIONS // 2)``). Exhausting those
+   internal iterations is what produces an "exceeded iteration cap (N
+   iterations)" error — it does *not* trigger a second repair pass.
 
 If the repair pass also fails, the request returns a 422-equivalent error to
 the host. Otherwise the result of whichever stage succeeded becomes the
@@ -78,6 +83,16 @@ log = get_logger(__name__)
 
 
 def _max_iterations() -> int:
+    """Return the maximum number of internal tool-call iterations for the primary agent.
+
+    This cap limits the number of reasoning/tool steps *within a single agent
+    invocation*. It is not the number of repair passes — the repair agent is
+    always invoked at most once, and uses ``max(3, _max_iterations() // 2)``
+    iterations internally.
+
+    Controlled by the ``AGENT_MAX_TOOL_ITERATIONS`` environment variable
+    (default 8, capped at 25).
+    """
     raw = os.environ.get("AGENT_MAX_TOOL_ITERATIONS", "8").strip()
     try:
         n = int(raw)
@@ -181,11 +196,7 @@ def _user_progress(raw: dict[str, Any]) -> dict[str, Any]:
         detail = "Preparing the model and semantic context."
     elif step == "llm_start":
         title = "Thinking through the strategy"
-        detail = (
-            f"Consulting the language model ({model})."
-            if model
-            else "Consulting the language model."
-        )
+        detail = f"Consulting the language model ({model})." if model else "Consulting the language model."
     elif step == "llm_done":
         title = "Got a planning update"
         detail = (
@@ -280,9 +291,7 @@ def _final_assistant_text(messages: list[BaseMessage]) -> str:
     return ""
 
 
-def _result_to_data_preview(
-    rows: list[dict[str, Any]], cap: int = 20
-) -> list[dict[str, Any]]:
+def _result_to_data_preview(rows: list[dict[str, Any]], cap: int = 20) -> list[dict[str, Any]]:
     if not rows:
         return []
     return json.loads(json.dumps(rows[:cap], default=_json_default))
@@ -305,12 +314,9 @@ def _run_stage(
 ) -> list[BaseMessage]:
     """Invoke a create_agent stage and return its full message history."""
     recursion_limit = max_iterations * 2 + 5
-    model_name = getattr(chat_model, "model", None) or getattr(
-        chat_model, "model_name", "unknown"
-    )
+    model_name = getattr(chat_model, "model", None) or getattr(chat_model, "model_name", "unknown")
     log.debug(
-        "task=stage_invoke previous=model_resolved next=agent_invoke "
-        "stage={} model={} tools={} max_iter={}",
+        "task=stage_invoke previous=model_resolved next=agent_invoke stage={} model={} tools={} max_iter={}",
         stage_name,
         model_name,
         len(tools),
@@ -360,17 +366,13 @@ def _classify_outcome(
     if parsed_result is None:
         return False, "no_sql", "Agent finished without calling execute_select."
     if "error" in parsed_result:
-        return False, str(parsed_result.get("phase") or "validation"), str(
-            parsed_result["error"]
-        )
+        return False, str(parsed_result.get("phase") or "validation"), str(parsed_result["error"])
     if "rows" in parsed_result:
         return True, "ok", None
     return False, "no_sql", "execute_select returned an unexpected payload."
 
 
-def run_ask(
-    request: AgentRequest, *, on_progress: ProgressSink | None = None
-) -> AgentResult | AgentFailure:
+def run_ask(request: AgentRequest, *, on_progress: ProgressSink | None = None) -> AgentResult | AgentFailure:
     """Run the primary agent + (if needed) one-shot repair. Synchronous."""
     log.debug(
         "task=run_ask_start previous=request_received next=resolve_models question_preview={}",
@@ -385,9 +387,7 @@ def run_ask(
         layer = load_semantic_layer()
     except Exception as exc:
         log.info("semantic_layer_load_failed_non_fatal error={}", exc)
-    answer_style_rules = (
-        ((layer.get("answer_style") or {}).get("rules") or []) if isinstance(layer, dict) else []
-    )
+    answer_style_rules = ((layer.get("answer_style") or {}).get("rules") or []) if isinstance(layer, dict) else []
 
     user_prompt = build_user_prompt(
         question=request.question,
@@ -461,9 +461,7 @@ def run_ask(
         phase="repair",
         error=err,
     )
-    notes.append(
-        f"Primary agent failed ({phase}); invoking repair pass with model {repair_model_id}."
-    )
+    notes.append(f"Primary agent failed ({phase}); invoking repair pass with model {repair_model_id}.")
     repair_user = build_repair_user_prompt(
         question=request.question,
         failed_sql=raw_sql or "",
@@ -471,6 +469,10 @@ def run_ask(
         failure_message=err or "(unknown)",
         conversation_section=request.conversation_section,
     )
+    # The repair agent is invoked exactly once per request — there is no outer
+    # retry loop. The iteration cap below only limits its internal tool-call
+    # steps. If those are exhausted, the request fails with an
+    # "iteration_cap" error and no further repair is attempted.
     repair_max_iter = max(3, max_iter // 2)
     try:
         repair_chat = build_chat_model(repair_model_id)
@@ -509,9 +511,11 @@ def run_ask(
     if success_r:
         rows = list(parsed_r["rows"])  # type: ignore[index]
         sql_used = parsed_r.get("sql") or raw_sql_r or ""
-        answer = _final_assistant_text(repair_msgs).strip() or _final_assistant_text(
-            primary_msgs
-        ).strip() or "_(No natural-language answer was produced.)_"
+        answer = (
+            _final_assistant_text(repair_msgs).strip()
+            or _final_assistant_text(primary_msgs).strip()
+            or "_(No natural-language answer was produced.)_"
+        )
         notes.append("Repair pass succeeded.")
         log.info("run_ask_complete repaired={} rows={}", True, len(rows))
         return AgentResult(

@@ -109,7 +109,7 @@ When the API runs on your machine against the Compose Postgres instance, use hos
 | `OPENROUTER_MODELS` | built-in defaults | Comma-separated suggestion list for the settings UI |
 | `OPENROUTER_MODELS_BY_PROVIDER` | built-in defaults | JSON object mapping provider group keys (`google`, `gpt`, `grok`, `mistral`, `claude`) to lists of OpenRouter model ids for the chat UI model dropdown |
 | `OPENROUTER_TIMEOUT` | `120` | OpenRouter request timeout in seconds |
-| `AGENT_MAX_TOOL_ITERATIONS` | `8` | Max tool-call iterations the primary agent may run before triggering the repair pass |
+| `AGENT_MAX_TOOL_ITERATIONS` | `8` | Max internal tool-call iterations per agent invocation (clamped 1–25). Applies separately to both the primary agent and the repair agent — it is not the number of repair passes. Primary agent uses this value directly; repair agent cap = `max(3, value // 2)`. |
 | `LLM_CONFIG_PATH` | `src/frontend_app/llm_config.json` or `/data/llm_config.json` in Compose | JSON file for persisted runtime config |
 | `PROLEAGUE_SCRAPER_URL` | `http://proleague-scraper:8001` | Internal scraper base URL for the image proxy route |
 | `PORT` | `8080` | Direct app port when running manually |
@@ -155,7 +155,7 @@ Current pipeline:
 3. The **primary agent** (LangGraph `create_react_agent` over OpenRouter) discovers schema and semantic-layer hints by calling read-only tools — `list_tables`, `describe_table`, `search_columns`, `sample_table`, `get_semantic_layer` — and finally calls `execute_select` with one PostgreSQL `SELECT` or `WITH ... SELECT` statement.
 4. `execute_select` strips fences, rewrites `marts.x` / `staging.x` / `intermediate.x` to the dbt schema, runs **sqlglot** (single-statement check + AST DDL/DML rejection + legacy regex), then executes the SQL as the `llm_reader` role.
 5. The agent reads back the rows from the tool result and produces a Markdown answer.
-6. If the primary agent never produced a successful `execute_select` (or hit the iteration cap), a **one-shot repair pass** runs on the configured `repair_model` with a smaller toolset (`describe_table` + `execute_select`). At most one repair attempt per request.
+6. If the primary agent never produced a successful `execute_select` (or hit the iteration cap), a **one-shot repair pass** runs on the configured `repair_model` with a smaller toolset (`describe_table` + `execute_select`). **Exactly one repair pass is allowed per request — it is never retried.** The repair agent itself may take several internal tool-call iterations (up to `max(3, AGENT_MAX_TOOL_ITERATIONS // 2)`); if those are exhausted the request fails with an `"iteration_cap"` error, not a second repair attempt.
 
 ### Guardrails
 
@@ -168,7 +168,7 @@ Current pipeline:
 | Identifier whitelist | `describe_table` / `sample_table` reject any table not present in `list_tables()` output |
 | Outer row cap | Execution is wrapped in an outer `LIMIT 100` |
 | Time limit | Every DB session sets `statement_timeout` to 10 seconds |
-| Bounded iterations | Primary agent capped by `AGENT_MAX_TOOL_ITERATIONS` (default 8); repair pass capped at half that |
+| Bounded iterations | Primary agent capped by `AGENT_MAX_TOOL_ITERATIONS` (default 8); repair agent has its own separate cap of `max(3, value // 2)`. Both caps limit internal tool-call steps within a single invocation — not the number of repair passes. Only one repair pass ever runs per request. |
 
 ### Streaming details
 
