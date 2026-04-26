@@ -129,7 +129,10 @@ def _ensure_known_table(table: str) -> str:
         raise ValueError(f"Invalid table identifier: {table!r}. Must match [A-Za-z_][A-Za-z0-9_]*.")
     known = {r["name"] for r in _list_relations()}
     if table not in known:
-        raise ValueError(f"Unknown table {table!r} in schema {_dbt_schema()!r}. Call list_tables to see valid options.")
+        raise ValueError(
+            f"Unknown table {table!r} in schema {_dbt_schema()!r}. "
+            f"Call list_tables to see valid options."
+        )
     return table
 
 
@@ -141,7 +144,10 @@ def _truncate(items: list[Any], cap: int, label: str) -> list[Any]:
     truncated.append(
         {
             "_truncated": True,
-            "_message": (f"{label} list truncated to {cap} of {len(items)} entries to bound prompt size."),
+            "_message": (
+                f"{label} list truncated to {cap} of {len(items)} entries "
+                f"to bound prompt size."
+            ),
         }
     )
     return truncated
@@ -236,7 +242,8 @@ def search_columns(pattern: str, limit: int = 20) -> str:
     Returns a JSON array of ``{table, column, data_type, description}``.
     """
     log.debug(
-        "task=search_columns previous=search_requested next=query_information_schema pattern={} limit={}",
+        "task=search_columns previous=search_requested "
+        "next=query_information_schema pattern={} limit={}",
         pattern,
         limit,
     )
@@ -262,7 +269,10 @@ def search_columns(pattern: str, limit: int = 20) -> str:
     yaml_idx = _yaml_models_index()
     out = []
     for r in rows:
-        yc = (yaml_idx.get(r["table_name"], {}).get("columns_by_name", {}) or {}).get(r["column_name"], {})
+        yc = (
+            (yaml_idx.get(r["table_name"], {}).get("columns_by_name", {}) or {})
+            .get(r["column_name"], {})
+        )
         out.append(
             {
                 "table": r["table_name"],
@@ -314,7 +324,10 @@ def get_semantic_layer() -> str:
     Returns a JSON object (the parsed semantic layer YAML), or ``{}`` when no
     semantic layer file is configured.
     """
-    log.debug("task=get_semantic_layer previous=agent_requested_domain_rules next=load_semantic_yaml")
+    log.debug(
+        "task=get_semantic_layer previous=agent_requested_domain_rules "
+        "next=load_semantic_yaml"
+    )
     try:
         data = load_semantic_layer()
     except Exception as exc:

@@ -113,7 +113,9 @@ class IngestRuntime:
             # Create the asyncio.Queue and schedule the Task on the event-loop thread.
             # Creating asyncio primitives from a non-event-loop thread is not thread-safe,
             # so we bootstrap via run_coroutine_threadsafe and block until done.
-            fut = asyncio.run_coroutine_threadsafe(self._start_partition_worker(partition), self._loop)
+            fut = asyncio.run_coroutine_threadsafe(
+                self._start_partition_worker(partition), self._loop
+            )
             fut.result(timeout=30.0)
 
     async def _start_partition_worker(self, partition: int) -> None:

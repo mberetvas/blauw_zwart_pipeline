@@ -87,7 +87,9 @@ def line_amount_eur_from_jitter_int(item_name: str, u: int) -> float:
         timestamp selection, preserving the historical RNG order.
     """
     if u < _RANDINT_AMOUNT_LOW or u > _RANDINT_AMOUNT_HIGH:
-        raise ValueError(f"jitter draw must be in [{_RANDINT_AMOUNT_LOW}, {_RANDINT_AMOUNT_HIGH}], got {u}")
+        raise ValueError(
+            f"jitter draw must be in [{_RANDINT_AMOUNT_LOW}, {_RANDINT_AMOUNT_HIGH}], got {u}"
+        )
     item = MERCH_BY_NAME[item_name]
     span = _RANDINT_AMOUNT_HIGH - _RANDINT_AMOUNT_LOW
     # Convert the legacy randint domain into a linear factor inside the jitter

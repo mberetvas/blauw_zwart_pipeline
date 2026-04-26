@@ -124,7 +124,11 @@ def write_merged_stream(
     count = 0
     t_anchor: datetime | None = None
     first_line = True
-    use_pacing = pacing_rng is not None and emit_wall_clock_min is not None and emit_wall_clock_max is not None
+    use_pacing = (
+        pacing_rng is not None
+        and emit_wall_clock_min is not None
+        and emit_wall_clock_max is not None
+    )
     for rec in merged:
         ts = parse_timestamp_utc_z(str(rec["timestamp"]))
         # Anchor the duration window once, either from the first record or from

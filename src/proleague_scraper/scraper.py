@@ -328,7 +328,8 @@ def scrape_squad(
             time.sleep(concurrency_delay)
         try:
             log.debug(
-                "task=scrape_player previous=player_url_discovered next=normalize_player_data index={} total={} url={}",
+                "task=scrape_player previous=player_url_discovered "
+                "next=normalize_player_data index={} total={} url={}",
                 idx + 1,
                 len(player_urls),
                 player_url,

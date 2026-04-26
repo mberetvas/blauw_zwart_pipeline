@@ -86,7 +86,9 @@ def load_semantic_layer() -> dict[str, Any]:
         raise SemanticLayerError(f"Semantic layer file {path} is not valid YAML: {exc}") from exc
 
     if not isinstance(data, dict):
-        raise SemanticLayerError(f"Semantic layer file {path} must contain a YAML mapping at the top level.")
+        raise SemanticLayerError(
+            f"Semantic layer file {path} must contain a YAML mapping at the top level."
+        )
 
     version = data.get("version")
     if version not in _SUPPORTED_VERSIONS:
@@ -105,7 +107,10 @@ def _apply_max_chars(text: str, label: str) -> str:
     try:
         max_chars = int(max_raw)
     except ValueError as exc:
-        raise ValueError(f"SEMANTIC_CONTEXT_MAX_CHARS must be a non-negative integer or 0; got {max_raw!r}") from exc
+        raise ValueError(
+            f"SEMANTIC_CONTEXT_MAX_CHARS must be a non-negative integer or 0; "
+            f"got {max_raw!r}"
+        ) from exc
     if max_chars <= 0 or len(text) <= max_chars:
         return text
     banner = f"[{label} TRUNCATED: original {len(text)} chars, limit {max_chars}]\n"

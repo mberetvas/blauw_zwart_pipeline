@@ -40,7 +40,9 @@ _V2_OPTIONAL_MATCH_FIELDS = frozenset(
 )
 
 
-def _validate_allowed_keys(*, rec: dict[str, Any], required: set[str], optional: set[str], label: str) -> None:
+def _validate_allowed_keys(
+    *, rec: dict[str, Any], required: set[str], optional: set[str], label: str
+) -> None:
     """Validate the closed-schema key set for one record variant."""
     keys = set(rec.keys())
     missing = required - keys

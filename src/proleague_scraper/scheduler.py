@@ -152,7 +152,8 @@ def run_once(
     for player in valid:
         try:
             log.debug(
-                "task=produce_player_event previous=validated_player next=enqueue_kafka_message player_id={} topic={}",
+                "task=produce_player_event previous=validated_player "
+                "next=enqueue_kafka_message player_id={} topic={}",
                 player["player_id"],
                 topic,
             )

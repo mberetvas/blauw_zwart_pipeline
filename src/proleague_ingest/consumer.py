@@ -133,7 +133,8 @@ def run_consumer(
                 # Phase 1: validate the Kafka envelope so bad messages can be
                 # logged and committed without killing the consumer loop.
                 log.debug(
-                    "task=parse_envelope previous=message_polled next=validate_message topic={} partition={} offset={}",
+                    "task=parse_envelope previous=message_polled "
+                    "next=validate_message topic={} partition={} offset={}",
                     msg.topic(),
                     msg.partition(),
                     msg.offset(),

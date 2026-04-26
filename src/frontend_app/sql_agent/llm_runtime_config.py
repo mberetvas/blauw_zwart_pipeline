@@ -91,7 +91,9 @@ _STR_KEYS = frozenset(
 )
 
 _LEGACY_OLLAMA_ENV_VARS = ("OLLAMA_URL", "OLLAMA_MODEL", "OLLAMA_TIMEOUT", "LLM_PROVIDER")
-_LEGACY_OLLAMA_JSON_KEYS = frozenset({"ollama_url", "ollama_model", "ollama_timeout", "default_provider"})
+_LEGACY_OLLAMA_JSON_KEYS = frozenset(
+    {"ollama_url", "ollama_model", "ollama_timeout", "default_provider"}
+)
 
 
 def _openrouter_models_from_env() -> list[str]:
@@ -206,7 +208,10 @@ def _defaults_from_env() -> dict[str, Any]:
     _warn_legacy_ollama_env()
     return {
         "openrouter_base_url": os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/"),
-        "openrouter_model": (os.environ.get("OPENROUTER_MODEL", "").strip() or DEFAULT_OPENROUTER_MODELS[0]),
+        "openrouter_model": (
+            os.environ.get("OPENROUTER_MODEL", "").strip()
+            or DEFAULT_OPENROUTER_MODELS[0]
+        ),
         "openrouter_models": _openrouter_models_from_env(),
         "openrouter_timeout": int(os.environ.get("OPENROUTER_TIMEOUT", "120")),
         "openrouter_api_key": os.environ.get("OPENROUTER_API_KEY", "").strip(),

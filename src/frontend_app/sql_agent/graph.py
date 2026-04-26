@@ -251,7 +251,11 @@ def _user_progress(raw: dict[str, Any]) -> dict[str, Any]:
         detail = "Preparing the model and semantic context."
     elif step == "llm_start":
         title = "Thinking through the strategy"
-        detail = f"Consulting the language model ({model})." if model else "Consulting the language model."
+        detail = (
+            f"Consulting the language model ({model})."
+            if model
+            else "Consulting the language model."
+        )
     elif step == "llm_done":
         title = "Got a planning update"
         detail = (
@@ -429,7 +433,8 @@ def _run_stage(
     recursion_limit = max_iterations * 2 + 5
     model_name = getattr(chat_model, "model", None) or getattr(chat_model, "model_name", "unknown")
     log.debug(
-        "task=stage_invoke previous=model_resolved next=agent_invoke stage={} model={} tools={} max_iter={}",
+        "task=stage_invoke previous=model_resolved next=agent_invoke "
+        "stage={} model={} tools={} max_iter={}",
         stage_name,
         model_name,
         len(tools),
@@ -524,7 +529,9 @@ def _classify_outcome(
     return False, "no_sql", "execute_select returned an unexpected payload."
 
 
-def run_ask(request: AgentRequest, *, on_progress: ProgressSink | None = None) -> AgentResult | AgentFailure:
+def run_ask(
+    request: AgentRequest, *, on_progress: ProgressSink | None = None
+) -> AgentResult | AgentFailure:
     """Run the primary agent and, if needed, one-shot repair pass synchronously.
 
     This is the main entrypoint called by ``POST /api/ask``. It executes two
@@ -579,7 +586,11 @@ def run_ask(request: AgentRequest, *, on_progress: ProgressSink | None = None) -
         layer = load_semantic_layer()
     except Exception as exc:
         log.info("semantic_layer_load_failed_non_fatal error={}", exc)
-    answer_style_rules = ((layer.get("answer_style") or {}).get("rules") or []) if isinstance(layer, dict) else []
+    answer_style_rules = (
+        ((layer.get("answer_style") or {}).get("rules") or [])
+        if isinstance(layer, dict)
+        else []
+    )
 
     # Build the final user-turn message combining the question, conversation
     # history, and any answer-style rules from the semantic layer.
@@ -658,7 +669,10 @@ def run_ask(request: AgentRequest, *, on_progress: ProgressSink | None = None) -
         phase="repair",
         error=err,
     )
-    notes.append(f"Primary agent failed ({phase}); invoking repair pass with model {repair_model_id}.")
+    notes.append(
+        f"Primary agent failed ({phase}); invoking repair pass with model "
+        f"{repair_model_id}."
+    )
 
     # Build a targeted repair prompt that includes the failed SQL and the
     # specific error so the repair model can focus on fixing the problem.

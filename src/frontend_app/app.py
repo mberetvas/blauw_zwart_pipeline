@@ -166,17 +166,26 @@ def _build_trace(
         )
     if raw_sql is not None:
         if sql is not None and raw_sql.strip() != sql:
-            notes.append("Normalized the model output by removing markdown wrappers or trailing semicolons.")
+            notes.append(
+                "Normalized the model output by removing markdown wrappers or "
+                "trailing semicolons."
+            )
         else:
             notes.append("The model returned SQL directly without extra formatting.")
     if sql is not None:
         notes.append("Validated the SQL as read-only before sending it to Postgres.")
     if row_count is not None:
-        notes.append(f"Executed the query with a 10 second timeout and outer LIMIT 100, returning {row_count} row(s).")
+        notes.append(
+            f"Executed the query with a 10 second timeout and outer LIMIT 100, "
+            f"returning {row_count} row(s)."
+        )
     elif sql is not None:
         notes.append("Tried to execute the validated SQL against Postgres.")
     if answered:
-        notes.append("Used the returned rows as context for the natural-language answer you see in chat.")
+        notes.append(
+            "Used the returned rows as context for the natural-language answer "
+            "you see in chat."
+        )
     return {
         "provider": provider,
         "provider_label": provider_label,
@@ -204,7 +213,10 @@ def _leaderboard_points_sql(alias: str) -> str:
 
 def _leaderboard_order_sql(alias: str) -> str:
     """Return the deterministic leaderboard sort order for the given alias."""
-    return f"{alias}.points DESC, {alias}.matches_attended DESC, {alias}.total_spend DESC, {alias}.fan_id ASC"
+    return (
+        f"{alias}.points DESC, {alias}.matches_attended DESC, "
+        f"{alias}.total_spend DESC, {alias}.fan_id ASC"
+    )
 
 
 def _leaderboard_month_bounds_utc(
@@ -656,7 +668,8 @@ def _build_leaderboard_payload(window: str) -> dict[str, Any]:
     """
     if window not in LEADERBOARD_SUPPORTED_WINDOWS:
         raise ValueError(
-            f"Unsupported leaderboard window '{window}'. Valid values: {sorted(LEADERBOARD_SUPPORTED_WINDOWS)}"
+            f"Unsupported leaderboard window '{window}'. Valid values: "
+            f"{sorted(LEADERBOARD_SUPPORTED_WINDOWS)}"
         )
 
     # Choose the correct backing query family for the requested time window.
@@ -665,11 +678,17 @@ def _build_leaderboard_payload(window: str) -> dict[str, Any]:
         as_of_dt = _fetch_leaderboard_as_of()
     elif window == "month":
         t0, t1 = _leaderboard_month_bounds_utc()
-        rankings = [_leaderboard_entry_from_row(row) for row in _fetch_leaderboard_rows_bounded(t0, t1)]
+        rankings = [
+            _leaderboard_entry_from_row(row)
+            for row in _fetch_leaderboard_rows_bounded(t0, t1)
+        ]
         as_of_dt = _fetch_leaderboard_as_of_bounded(t0, t1)
     else:
         t0, t1 = _leaderboard_season_bounds_utc()
-        rankings = [_leaderboard_entry_from_row(row) for row in _fetch_leaderboard_rows_bounded(t0, t1)]
+        rankings = [
+            _leaderboard_entry_from_row(row)
+            for row in _fetch_leaderboard_rows_bounded(t0, t1)
+        ]
         as_of_dt = _fetch_leaderboard_as_of_bounded(t0, t1)
 
     podium = rankings[:3]
@@ -828,12 +847,22 @@ def _build_request_or_error(
     raw_provider = (body.get("provider") or "openrouter").strip().lower()
     if raw_provider == "ollama":
         return (
-            {"error": ("Ollama is no longer supported. Use 'openrouter' (or omit 'provider' entirely).")},
+            {
+                "error": (
+                    "Ollama is no longer supported. Use 'openrouter' "
+                    "(or omit 'provider' entirely)."
+                )
+            },
             400,
         )
     if raw_provider not in KNOWN_PROVIDERS:
         return (
-            {"error": (f"Unknown provider '{raw_provider}'. Valid values: {sorted(KNOWN_PROVIDERS)}")},
+            {
+                "error": (
+                    f"Unknown provider '{raw_provider}'. Valid values: "
+                    f"{sorted(KNOWN_PROVIDERS)}"
+                )
+            },
             400,
         )
 
@@ -864,7 +893,9 @@ def _build_request_or_error(
     )
 
 
-def _agent_failure_to_response(failure: AgentFailure, conversation_turn_count: int) -> tuple[dict[str, Any], int]:
+def _agent_failure_to_response(
+    failure: AgentFailure, conversation_turn_count: int
+) -> tuple[dict[str, Any], int]:
     provider_label = _PROVIDER_DISPLAY["openrouter"]
     trace = _build_trace(
         "openrouter",
@@ -1160,7 +1191,8 @@ def ask() -> Any:
 
         log.info("api_ask_received")
         log.debug(
-            "task=ask_route previous=request_validated next=run_primary_agent question_preview={}",
+            "task=ask_route previous=request_validated next=run_primary_agent "
+            "question_preview={}",
             parsed.question[:80],
         )
         try:
@@ -1212,7 +1244,8 @@ def ask_stream() -> Any:
         try:
             log.info("api_ask_stream_received")
             log.debug(
-                "task=stream_route previous=request_validated next=run_stream_pipeline question_preview={}",
+                "task=stream_route previous=request_validated next=run_stream_pipeline "
+                "question_preview={}",
                 parsed.question[:80],
             )
             for evt in run_ask_stream(parsed):

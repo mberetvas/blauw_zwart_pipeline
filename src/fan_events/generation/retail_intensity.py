@@ -22,7 +22,9 @@ def _shifted(ctx: MatchContext, k: int) -> MatchContext:
     return shift_match_context_calendar_years(ctx, k)
 
 
-def _kickoff_window_utc(hc: MatchContext, k: int, pre_td: timedelta, post_td: timedelta) -> tuple[datetime, datetime]:
+def _kickoff_window_utc(
+    hc: MatchContext, k: int, pre_td: timedelta, post_td: timedelta
+) -> tuple[datetime, datetime]:
     """Return the UTC kickoff window for one shifted home match context."""
     sk = _shifted(hc, k)
     ku = sk.kickoff_utc
