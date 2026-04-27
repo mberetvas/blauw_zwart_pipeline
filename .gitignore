@@ -229,3 +229,5 @@ __marimo__/
 
 out/
 dbt_internal_packages/
+
+*.db
